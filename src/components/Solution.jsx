@@ -1,6 +1,13 @@
 import React from "react";
 import { motion } from "framer-motion";
-import { Map, CreditCard, Calendar, BarChart3, Check } from "lucide-react";
+import {
+  Map,
+  CreditCard,
+  Calendar,
+  BarChart3,
+  Check,
+  Sparkles,
+} from "lucide-react";
 
 const Solution = () => {
   const features = [
@@ -53,40 +60,54 @@ const Solution = () => {
   return (
     <section
       id="features"
-      className="py-24 md:py-32 bg-primary relative overflow-hidden"
+      className="py-28 md:py-36 bg-gradient-to-b from-[#0a0a0a] via-[#0f0f0f] to-[#0a0a0a] relative overflow-hidden"
     >
       {/* Background Gradient */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[600px] bg-accent/5 rounded-full blur-3xl"></div>
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[1200px] h-[800px] bg-gradient-to-br from-amber-500/5 via-transparent to-purple-500/5 rounded-full blur-3xl"></div>
 
-      <div className="section-container relative z-10">
+      <div className="max-w-7xl mx-auto px-6 lg:px-8 relative z-10">
         {/* Section Header */}
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           whileInView={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
+          transition={{ duration: 0.8 }}
           viewport={{ once: true }}
-          className="text-center mb-16 md:mb-24"
+          className="text-center mb-20 lg:mb-28"
         >
-          <span className="inline-block text-accent font-semibold text-sm tracking-widest uppercase mb-4">
-            The Solution
-          </span>
-          <h2 className="text-3xl md:text-5xl font-bold text-white mb-6 text-balance">
-            Everything you need to launch
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            whileInView={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.2 }}
+            viewport={{ once: true }}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/20 mb-6"
+          >
+            <Sparkles size={14} className="text-amber-400" />
+            <span className="text-amber-400/90 text-sm font-medium">
+              The Solution
+            </span>
+          </motion.div>
+
+          <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-6 tracking-tight">
+            One platform.
+            <br />
+            <span className="bg-gradient-to-r from-amber-400 via-orange-500 to-red-500 bg-clip-text text-transparent">
+              Complete control.
+            </span>
           </h2>
-          <p className="text-lg md:text-xl text-gray-400 max-w-2xl mx-auto">
-            Adspot gives you the power to plan, book, and manage outdoor
-            campaigns like a pro.
+          <p className="text-xl text-gray-400 max-w-2xl mx-auto font-light">
+            Adspot gives you everything you need to plan, book, and manage
+            outdoor campaigns like a pro.
           </p>
         </motion.div>
 
         {/* Feature Sections */}
-        <div className="space-y-24 md:space-y-32">
+        <div className="space-y-32 lg:space-y-48">
           {features.map((feature, index) => (
             <motion.div
               key={index}
               initial={{ opacity: 0, y: 60 }}
               whileInView={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.7 }}
+              transition={{ duration: 0.8 }}
               viewport={{ once: true, margin: "-100px" }}
               className={`flex flex-col ${
                 index % 2 === 0 ? "lg:flex-row" : "lg:flex-row-reverse"
@@ -95,39 +116,39 @@ const Solution = () => {
               {/* Content Side */}
               <div className="flex-1 text-center lg:text-left">
                 {/* Icon */}
-                <div className="inline-flex w-14 h-14 bg-accent rounded-xl items-center justify-center text-primary mb-6 shadow-lg shadow-accent/20">
+                <div className="inline-flex w-16 h-16 bg-gradient-to-br from-amber-400 to-orange-500 rounded-2xl items-center justify-center text-white mb-8 shadow-lg shadow-orange-500/25">
                   {feature.icon}
                 </div>
 
                 {/* Title & Description */}
-                <h3 className="text-2xl md:text-4xl font-bold text-white mb-4">
+                <h3 className="text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-6 tracking-tight">
                   {feature.title}
                 </h3>
-                <p className="text-gray-400 text-lg leading-relaxed mb-8 max-w-lg mx-auto lg:mx-0">
+                <p className="text-lg text-gray-400 leading-relaxed mb-10 max-w-lg mx-auto lg:mx-0 font-light">
                   {feature.description}
                 </p>
 
                 {/* Highlights List */}
-                <ul className="space-y-3">
+                <ul className="space-y-4">
                   {feature.highlights.map((item, i) => (
                     <li
                       key={i}
-                      className="flex items-center gap-3 justify-center lg:justify-start"
+                      className="flex items-center gap-4 justify-center lg:justify-start"
                     >
-                      <div className="w-5 h-5 rounded-full bg-accent/20 flex items-center justify-center">
-                        <Check size={12} className="text-accent" />
+                      <div className="w-6 h-6 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center flex-shrink-0">
+                        <Check size={14} className="text-white" />
                       </div>
-                      <span className="text-gray-300">{item}</span>
+                      <span className="text-gray-300 text-lg">{item}</span>
                     </li>
                   ))}
                 </ul>
               </div>
 
               {/* Image Side */}
-              <div className="flex-1 relative">
+              <div className="flex-1 relative w-full">
                 {/* Glow Effect */}
                 <div
-                  className={`absolute inset-0 bg-accent/10 blur-3xl rounded-full transform ${
+                  className={`absolute inset-0 bg-gradient-to-br from-amber-500/20 to-orange-500/10 blur-3xl rounded-full transform ${
                     index % 2 === 0 ? "translate-x-10" : "-translate-x-10"
                   }`}
                 ></div>
@@ -135,15 +156,19 @@ const Solution = () => {
                 {/* Image Container */}
                 <motion.div
                   whileHover={{ scale: 1.02 }}
-                  transition={{ duration: 0.4 }}
-                  className="relative glass-card p-3 rounded-2xl overflow-hidden"
+                  transition={{ duration: 0.5 }}
+                  className="relative"
                 >
-                  <img
-                    src={feature.image}
-                    alt={feature.title}
-                    className="w-full rounded-xl"
-                    loading="lazy"
-                  />
+                  <div className="bg-gradient-to-br from-white/10 to-white/5 p-1.5 rounded-3xl border border-white/10 shadow-2xl shadow-black/50 overflow-hidden">
+                    <div className="bg-[#1a1a1a] rounded-2xl overflow-hidden">
+                      <img
+                        src={feature.image}
+                        alt={feature.title}
+                        className="w-full rounded-2xl"
+                        loading="lazy"
+                      />
+                    </div>
+                  </div>
                 </motion.div>
               </div>
             </motion.div>

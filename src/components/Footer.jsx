@@ -6,8 +6,9 @@ import {
   Facebook,
   Mail,
   MapPin,
-  Phone,
+  ArrowRight,
 } from "lucide-react";
+import { Link } from "react-router-dom";
 
 const Footer = () => {
   const currentYear = new Date().getFullYear();
@@ -40,52 +41,46 @@ const Footer = () => {
   ];
 
   return (
-    <footer className="bg-primary border-t border-white/5">
-      <div className="section-container py-16 md:py-20">
+    <footer className="bg-[#050505] border-t border-white/5">
+      <div className="max-w-7xl mx-auto px-6 lg:px-8 py-20">
         {/* Main Footer Content */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-12 mb-12">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-12 mb-16">
           {/* Brand Column */}
           <div className="lg:col-span-2">
             {/* Logo */}
             <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 bg-gradient-to-br from-accent to-orange-500 rounded-xl flex items-center justify-center">
-                <span className="text-primary font-bold text-xl">A</span>
+              <div className="w-11 h-11 bg-gradient-to-br from-amber-400 via-orange-500 to-red-500 rounded-xl flex items-center justify-center shadow-lg">
+                <span className="text-white font-black text-xl">A</span>
               </div>
               <span className="text-white font-bold text-2xl tracking-tight">
                 Adspot
               </span>
             </div>
 
-            <p className="text-gray-400 mb-6 max-w-sm leading-relaxed">
-              The future of outdoor advertising. Discover, compare, and book
-              billboards instantly with complete transparency.
+            <p className="text-gray-400 mb-8 max-w-sm leading-relaxed font-light">
+              The future of outdoor advertising in Nigeria. Discover, compare,
+              and book billboards instantly with complete transparency.
             </p>
 
             {/* Contact Info */}
-            <div className="space-y-3 text-sm">
+            <div className="space-y-3 text-sm mb-8">
               <div className="flex items-center gap-3 text-gray-500">
-                <Mail size={16} className="text-accent" />
+                <Mail size={16} className="text-amber-400" />
                 <span>hello@adspot.ng</span>
               </div>
               <div className="flex items-center gap-3 text-gray-500">
-                <MapPin size={16} className="text-accent" />
+                <MapPin size={16} className="text-amber-400" />
                 <span>Lagos, Nigeria</span>
               </div>
             </div>
 
-            {/* Social Links */}
-            <div className="flex gap-3 mt-8">
-              {socialLinks.map((social, index) => (
-                <a
-                  key={index}
-                  href={social.href}
-                  aria-label={social.label}
-                  className="w-10 h-10 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 hover:text-accent hover:border-accent/30 hover:bg-accent/5 transition-all duration-300"
-                >
-                  {social.icon}
-                </a>
-              ))}
-            </div>
+            {/* Get Started CTA */}
+            <Link to="/login">
+              <button className="inline-flex items-center gap-2 bg-gradient-to-r from-amber-400 via-orange-500 to-red-500 text-white px-6 py-3 rounded-xl font-semibold text-sm shadow-lg shadow-orange-500/20 hover:shadow-orange-500/40 transition-shadow">
+                Get Started
+                <ArrowRight size={16} />
+              </button>
+            </Link>
           </div>
 
           {/* Link Columns */}
@@ -97,7 +92,7 @@ const Footer = () => {
                   <li key={linkIndex}>
                     <a
                       href={link.href}
-                      className="text-gray-400 hover:text-white text-sm transition-colors duration-300"
+                      className="text-gray-500 hover:text-white text-sm transition-colors duration-300"
                     >
                       {link.label}
                     </a>
@@ -105,6 +100,20 @@ const Footer = () => {
                 ))}
               </ul>
             </div>
+          ))}
+        </div>
+
+        {/* Social Links */}
+        <div className="flex flex-wrap gap-3 mb-12">
+          {socialLinks.map((social, index) => (
+            <a
+              key={index}
+              href={social.href}
+              aria-label={social.label}
+              className="w-11 h-11 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:border-amber-500/30 hover:bg-amber-500/10 transition-all duration-300"
+            >
+              {social.icon}
+            </a>
           ))}
         </div>
 

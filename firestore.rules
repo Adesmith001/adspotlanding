@@ -1,0 +1,101 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Helper function to check if user owns the resource
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Users collection
+    match /users/{userId} {
+      // Anyone can read user profiles (for displaying owner info, etc.)
+      allow read: if isAuthenticated();
+      // Users can only write to their own profile
+      allow write: if isOwner(userId);
+    }
+    
+    // Listings collection
+    match /listings/{listingId} {
+      // Anyone can read listings (public marketplace)
+      allow read: if true;
+      // Only authenticated users can create listings
+      // And the ownerId must match the authenticated user
+      allow create: if isAuthenticated() && 
+                      request.resource.data.ownerId == request.auth.uid;
+      // Only the owner can update or delete their listing
+      allow update, delete: if isAuthenticated() && 
+                              resource.data.ownerId == request.auth.uid;
+    }
+    
+    // Billboards collection (same rules as listings)
+    match /billboards/{billboardId} {
+      // Anyone can read billboards (public marketplace)
+      allow read: if true;
+      // Only authenticated users can create billboards
+      // And the ownerId must match the authenticated user
+      allow create: if isAuthenticated() && 
+                      request.resource.data.ownerId == request.auth.uid;
+      // Only the owner can update or delete their billboard
+      allow update, delete: if isAuthenticated() && 
+                              resource.data.ownerId == request.auth.uid;
+    }
+    
+    // Reviews collection
+    match /reviews/{reviewId} {
+      // Anyone can read reviews
+      allow read: if true;
+      // Only authenticated users can create reviews
+      allow create: if isAuthenticated() &&
+                      request.resource.data.advertiserId == request.auth.uid;
+      // Users can update/delete their own reviews
+      allow update, delete: if isAuthenticated() &&
+                              resource.data.advertiserId == request.auth.uid;
+    }
+    
+    // Favorites collection
+    match /favorites/{favoriteId} {
+      // Users can only read their own favorites
+      allow read: if isAuthenticated() &&
+                    resource.data.userId == request.auth.uid;
+      // Users can create/delete their own favorites
+      allow create, delete: if isAuthenticated() &&
+                              request.resource.data.userId == request.auth.uid;
+    }
+    
+    // Bookings collection
+    match /bookings/{bookingId} {
+      // Only involved parties (advertiser or owner) can read
+      allow read: if isAuthenticated() && 
+        (request.auth.uid == resource.data.advertiserId || 
+         request.auth.uid == resource.data.ownerId);
+      // Only authenticated users can create bookings
+      allow create: if isAuthenticated() &&
+                      request.resource.data.advertiserId == request.auth.uid;
+      // Both parties can update (for status changes, etc.)
+      allow update: if isAuthenticated() && 
+        (request.auth.uid == resource.data.advertiserId || 
+         request.auth.uid == resource.data.ownerId);
+      // Only the owner can delete bookings
+      allow delete: if isAuthenticated() && 
+                      request.auth.uid == resource.data.ownerId;
+    }
+
+    // Messages collection
+    match /messages/{messageId} {
+      // Only involved parties can read messages
+      allow read: if isAuthenticated() && 
+        (request.auth.uid == resource.data.senderId || 
+         request.auth.uid == resource.data.receiverId);
+      // Only authenticated users can send messages
+      allow create: if isAuthenticated() &&
+                      request.resource.data.senderId == request.auth.uid;
+      // No updates or deletes for messages (immutable)
+      allow update, delete: if false;
+    }
+  }
+}

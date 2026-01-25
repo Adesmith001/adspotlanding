@@ -1,0 +1,126 @@
+/**
+ * Cloudinary Image Upload Service
+ * Handles image uploads to Cloudinary using unsigned upload preset
+ */
+
+const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
+const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
+
+export interface CloudinaryUploadResponse {
+  secure_url: string;
+  public_id: string;
+  format: string;
+  width: number;
+  height: number;
+  bytes: number;
+  created_at: string;
+}
+
+export interface UploadProgress {
+  loaded: number;
+  total: number;
+  percentage: number;
+}
+
+/**
+ * Upload a single image to Cloudinary
+ */
+export const uploadImage = async (
+  file: File,
+  onProgress?: (progress: UploadProgress) => void,
+): Promise<string> => {
+  try {
+    if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_UPLOAD_PRESET) {
+      throw new Error(
+        "Cloudinary configuration missing. Please set VITE_CLOUDINARY_CLOUD_NAME and VITE_CLOUDINARY_UPLOAD_PRESET in your .env file",
+      );
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+    formData.append("folder", "billboards");
+
+    const xhr = new XMLHttpRequest();
+    const uploadUrl = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
+
+    return new Promise((resolve, reject) => {
+      // Track upload progress
+      if (onProgress) {
+        xhr.upload.addEventListener("progress", (event) => {
+          if (event.lengthComputable) {
+            onProgress({
+              loaded: event.loaded,
+              total: event.total,
+              percentage: Math.round((event.loaded / event.total) * 100),
+            });
+          }
+        });
+      }
+
+      // Handle completion
+      xhr.addEventListener("load", () => {
+        if (xhr.status === 200) {
+          const response: CloudinaryUploadResponse = JSON.parse(
+            xhr.responseText,
+          );
+          resolve(response.secure_url);
+        } else {
+          reject(new Error(`Upload failed with status ${xhr.status}`));
+        }
+      });
+
+      // Handle errors
+      xhr.addEventListener("error", () => {
+        reject(new Error("Network error during upload"));
+      });
+
+      xhr.addEventListener("abort", () => {
+        reject(new Error("Upload aborted"));
+      });
+
+      // Send request
+      xhr.open("POST", uploadUrl);
+      xhr.send(formData);
+    });
+  } catch (error) {
+    console.error("Error uploading image to Cloudinary:", error);
+    throw new Error("Failed to upload image");
+  }
+};
+
+/**
+ * Upload multiple images to Cloudinary
+ */
+export const uploadImages = async (
+  files: File[],
+  onProgress?: (fileIndex: number, progress: UploadProgress) => void,
+): Promise<string[]> => {
+  try {
+    const uploadPromises = files.map((file, index) =>
+      uploadImage(file, (progress) => {
+        if (onProgress) {
+          onProgress(index, progress);
+        }
+      }),
+    );
+
+    return await Promise.all(uploadPromises);
+  } catch (error) {
+    console.error("Error uploading images to Cloudinary:", error);
+    throw new Error("Failed to upload images");
+  }
+};
+
+/**
+ * Delete an image from Cloudinary (requires backend/signed request)
+ * Note: This is a placeholder. Deleting images requires a signed request
+ * which should be done from your backend for security.
+ */
+export const deleteImage = async (publicId: string): Promise<void> => {
+  console.warn(
+    "Image deletion requires backend implementation for security. Public ID:",
+    publicId,
+  );
+  // TODO: Implement backend endpoint for image deletion
+};

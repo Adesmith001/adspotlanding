@@ -1,0 +1,264 @@
+import {
+  collection,
+  addDoc,
+  query,
+  where,
+  orderBy,
+  onSnapshot,
+  serverTimestamp,
+  updateDoc,
+  doc,
+  getDoc,
+  getDocs,
+} from "firebase/firestore";
+import { db } from "./firebase";
+import type { Conversation, Message } from "@/types/billboard.types";
+import { createNotification } from "./notification.service";
+import { getUserProfile } from "./user.service";
+
+const CONVERSATIONS_COLLECTION = "conversations";
+const MESSAGES_COLLECTION = "messages";
+
+/**
+ * Start a new conversation or get existing one
+ */
+export const startConversation = async (
+  senderId: string,
+  receiverId: string,
+  initialMessage?: string,
+): Promise<string> => {
+  try {
+    // Check if conversation already exists
+    // Note: detailed query might be needed for perfect match,
+    // but for now we search for conversations containing sender
+    const q = query(
+      collection(db, CONVERSATIONS_COLLECTION),
+      where("participants", "array-contains", senderId),
+    );
+    const snapshot = await getDocs(q);
+    const existing = snapshot.docs.find((doc) => {
+      const data = doc.data();
+      return data.participants.includes(receiverId);
+    });
+
+    if (existing) {
+      if (initialMessage) {
+        await sendMessage(existing.id, senderId, initialMessage);
+      }
+      return existing.id;
+    }
+
+    // Get user details for participant info
+    const sender = await getUserProfile(senderId);
+    const receiver = await getUserProfile(receiverId);
+
+    const senderName = sender?.displayName || "User";
+    const receiverName = receiver?.displayName || "User";
+
+    // Create new conversation
+    const conversationData = {
+      participants: [senderId, receiverId],
+      participantDetails: {
+        [senderId]: {
+          name: senderName,
+          photo: sender?.photoURL,
+          role: sender?.role || "advertiser",
+        },
+        [receiverId]: {
+          name: receiverName,
+          photo: receiver?.photoURL,
+          role: receiver?.role || "owner",
+        },
+      },
+      lastMessage: initialMessage || "",
+      lastMessageSenderId: senderId,
+      lastMessageAt: serverTimestamp(),
+      unreadCount: {
+        [senderId]: 0,
+        [receiverId]: initialMessage ? 1 : 0,
+      },
+      createdAt: serverTimestamp(),
+    };
+
+    const docRef = await addDoc(
+      collection(db, CONVERSATIONS_COLLECTION),
+      conversationData,
+    );
+
+    // Add initial message to subcollection
+    if (initialMessage) {
+      await addDoc(
+        collection(
+          db,
+          CONVERSATIONS_COLLECTION,
+          docRef.id,
+          MESSAGES_COLLECTION,
+        ),
+        {
+          conversationId: docRef.id,
+          senderId,
+          senderName,
+          text: initialMessage,
+          read: false,
+          createdAt: serverTimestamp(),
+        },
+      );
+
+      // Notify receiver
+      await createNotification(
+        receiverId,
+        "new_message",
+        "New Message",
+        `${senderName} sent you a message`,
+        { conversationId: docRef.id },
+        "/dashboard/owner/messages", // dynamic path based on role could be better but this works for now
+      );
+    }
+
+    return docRef.id;
+  } catch (error) {
+    console.error("Error starting conversation:", error);
+    throw error;
+  }
+};
+
+/**
+ * Send a message
+ */
+export const sendMessage = async (
+  conversationId: string,
+  senderId: string,
+  text: string,
+): Promise<void> => {
+  try {
+    const sender = await getUserProfile(senderId);
+    const senderName = sender?.displayName || "User";
+
+    // 1. Add message
+    await addDoc(
+      collection(
+        db,
+        CONVERSATIONS_COLLECTION,
+        conversationId,
+        MESSAGES_COLLECTION,
+      ),
+      {
+        conversationId,
+        senderId,
+        senderName,
+        text,
+        read: false,
+        createdAt: serverTimestamp(),
+      },
+    );
+
+    // 2. Update conversation metadata
+    const convRef = doc(db, CONVERSATIONS_COLLECTION, conversationId);
+    const convSnap = await getDoc(convRef);
+    const convData = convSnap.data() as Conversation;
+
+    if (!convData) return;
+
+    // Calculate new unread counts
+    const otherUserId = convData.participants.find((id) => id !== senderId);
+    const unreadCount = { ...convData.unreadCount };
+    if (otherUserId) {
+      unreadCount[otherUserId] = (unreadCount[otherUserId] || 0) + 1;
+    }
+
+    await updateDoc(convRef, {
+      lastMessage: text,
+      lastMessageSenderId: senderId,
+      lastMessageAt: serverTimestamp(),
+      unreadCount,
+    });
+
+    // 3. Notify receiver
+    if (otherUserId) {
+      await createNotification(
+        otherUserId,
+        "new_message",
+        "New Message",
+        `${senderName}: ${text}`,
+        { conversationId },
+        "/messages",
+      );
+    }
+  } catch (error) {
+    console.error("Error sending message:", error);
+    throw error;
+  }
+};
+
+/**
+ * Subscribe to conversations list
+ */
+export const subscribeToConversations = (
+  userId: string,
+  callback: (conversations: Conversation[]) => void,
+) => {
+  const q = query(
+    collection(db, CONVERSATIONS_COLLECTION),
+    where("participants", "array-contains", userId),
+    orderBy("lastMessageAt", "desc"),
+  );
+
+  return onSnapshot(q, (snapshot) => {
+    const conversations = snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+      lastMessageAt: doc.data().lastMessageAt?.toDate() || new Date(),
+      createdAt: doc.data().createdAt?.toDate() || new Date(),
+    })) as Conversation[];
+    callback(conversations);
+  });
+};
+
+/**
+ * Subscribe to messages in a conversation
+ */
+export const subscribeToMessages = (
+  conversationId: string,
+  callback: (messages: Message[]) => void,
+) => {
+  const q = query(
+    collection(
+      db,
+      CONVERSATIONS_COLLECTION,
+      conversationId,
+      MESSAGES_COLLECTION,
+    ),
+    orderBy("createdAt", "asc"),
+  );
+
+  return onSnapshot(q, (snapshot) => {
+    const messages = snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+      createdAt: doc.data().createdAt?.toDate() || new Date(),
+    })) as Message[];
+    callback(messages);
+  });
+};
+
+/**
+ * Mark conversation as read
+ */
+export const markConversationAsRead = async (
+  conversationId: string,
+  userId: string,
+): Promise<void> => {
+  try {
+    const convRef = doc(db, CONVERSATIONS_COLLECTION, conversationId);
+
+    // We need to use updateDoc with dot notation for nested fields if we want atomic
+    // but since unreadCount is a map, we might need to read first or use specific key update
+    // Firestore map update: "unreadCount.userId": 0
+
+    await updateDoc(convRef, {
+      [`unreadCount.${userId}`]: 0,
+    });
+  } catch (error) {
+    console.error("Error marking conversation as read:", error);
+  }
+};

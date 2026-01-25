@@ -1,255 +1,69 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   STEVE JOBS DESIGN SYSTEM
-   - Simplicity is the ultimate sophistication
-   - Focus on what matters
-   - Every pixel has a purpose
-   ═══════════════════════════════════════════════════════════════════════════ */
-
-@theme {
-  /* Typography - Clean, Modern, Readable */
-  --font-sans: 'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+@layer base {
+  * {
+    @apply border-neutral-200;
+  }
   
-  /* Primary Colors - Deep, Sophisticated Dark */
-  --color-primary: #0a0a0f;
-  --color-primary-light: #18181f;
-  --color-primary-dark: #050508;
-  
-  /* Accent Colors - Warm, Inviting Gold */
-  --color-accent: #fbbf24;
-  --color-accent-light: #fcd34d;
-  --color-accent-dark: #f59e0b;
-  
-  /* Neutral Palette */
-  --color-surface: #ffffff;
-  --color-surface-dark: #f8fafc;
-  --color-text-primary: #0f172a;
-  --color-text-secondary: #64748b;
-  --color-text-muted: #94a3b8;
-  
-  /* Glass Effect Colors */
-  --color-glass: rgba(255, 255, 255, 0.05);
-  --color-glass-border: rgba(255, 255, 255, 0.1);
-  
-  /* Shadows */
-  --shadow-soft: 0 4px 60px rgba(0, 0, 0, 0.1);
-  --shadow-elevated: 0 25px 80px rgba(0, 0, 0, 0.15);
-  --shadow-glow: 0 0 60px rgba(251, 191, 36, 0.2);
-  
-  /* Border Radius */
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 20px;
-  --radius-xl: 32px;
-  --radius-full: 9999px;
-  
-  /* Spacing Scale */
-  --spacing-section: 120px;
-  --spacing-content: 80px;
-  
-  /* Animation Timing */
-  --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
-  --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
-}
+  body {
+    @apply bg-white text-neutral-900 antialiased;
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   BASE STYLES
-   ═══════════════════════════════════════════════════════════════════════════ */
-
-* {
-  box-sizing: border-box;
-}
-
-html {
-  scroll-behavior: smooth;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-body {
-  font-family: var(--font-sans);
-  background-color: var(--color-surface);
-  color: var(--color-text-primary);
-  line-height: 1.6;
-  overflow-x: hidden;
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   TYPOGRAPHY
-   ═══════════════════════════════════════════════════════════════════════════ */
-
-h1, h2, h3, h4, h5, h6 {
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.1;
-}
-
-.text-balance {
-  text-wrap: balance;
-}
-
-/* Gradient Text */
-.gradient-text {
-  background: linear-gradient(135deg, var(--color-accent) 0%, #f97316 50%, var(--color-accent-light) 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   COMPONENTS
-   ═══════════════════════════════════════════════════════════════════════════ */
-
-/* Glass Card */
-.glass-card {
-  background: var(--color-glass);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid var(--color-glass-border);
-  border-radius: var(--radius-lg);
-}
-
-/* Premium Button */
-.btn-primary {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 16px 32px;
-  background: var(--color-accent);
-  color: var(--color-primary);
-  font-weight: 600;
-  border-radius: var(--radius-full);
-  transition: all 0.3s var(--ease-smooth);
-  box-shadow: 0 4px 20px rgba(251, 191, 36, 0.3);
-}
-
-.btn-primary:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 30px rgba(251, 191, 36, 0.4);
-}
-
-.btn-secondary {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 16px 32px;
-  background: transparent;
-  color: white;
-  font-weight: 600;
-  border: 1px solid var(--color-glass-border);
-  border-radius: var(--radius-full);
-  transition: all 0.3s var(--ease-smooth);
-}
-
-.btn-secondary:hover {
-  background: var(--color-glass);
-  border-color: var(--color-accent);
-}
-
-/* Section Container */
-.section-container {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 0 24px;
-}
-
-@media (min-width: 768px) {
-  .section-container {
-    padding: 0 48px;
+  html {
+    scroll-behavior: smooth;
   }
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   ANIMATIONS
-   ═══════════════════════════════════════════════════════════════════════════ */
-
-@keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-20px); }
-}
-
-@keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 20px rgba(251, 191, 36, 0.3); }
-  50% { box-shadow: 0 0 40px rgba(251, 191, 36, 0.5); }
-}
-
-@keyframes fade-up {
-  from {
-    opacity: 0;
-    transform: translateY(30px);
+@layer components {
+  .container-custom {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
   }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+
+  .btn-primary {
+    @apply bg-primary-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-primary-700 transition-all duration-200 shadow-sm hover:shadow-md;
+  }
+
+  .btn-secondary {
+    @apply bg-white text-primary-600 border-2 border-primary-600 px-6 py-3 rounded-lg font-medium hover:bg-primary-50 transition-all duration-200;
+  }
+
+  .input-field {
+    @apply w-full px-4 py-3 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200;
+  }
+
+  .card {
+    @apply bg-white rounded-xl shadow-card hover:shadow-card-hover transition-shadow duration-300;
   }
 }
 
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+/* Custom animations */
 .animate-float {
   animation: float 6s ease-in-out infinite;
 }
 
-.animate-glow {
-  animation: pulse-glow 3s ease-in-out infinite;
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-20px);
+  }
 }
 
-.animate-fade-up {
-  animation: fade-up 0.8s var(--ease-smooth) forwards;
+/* Smooth hover transitions */
+.hover-lift {
+  @apply transition-transform duration-300;
 }
 
-/* Staggered animations */
-.stagger-1 { animation-delay: 0.1s; }
-.stagger-2 { animation-delay: 0.2s; }
-.stagger-3 { animation-delay: 0.3s; }
-.stagger-4 { animation-delay: 0.4s; }
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   UTILITY CLASSES
-   ═══════════════════════════════════════════════════════════════════════════ */
-
-/* Background Variants */
-.bg-dark {
-  background-color: var(--color-primary);
-}
-
-.bg-gradient-dark {
-  background: linear-gradient(180deg, var(--color-primary) 0%, var(--color-primary-light) 100%);
-}
-
-.bg-gradient-radial {
-  background: radial-gradient(ellipse at center top, rgba(251, 191, 36, 0.1) 0%, transparent 50%);
-}
-
-/* Focus States */
-input:focus, button:focus {
-  outline: none;
-}
-
-input:focus {
-  border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.1);
-}
-
-/* Selection */
-::selection {
-  background: var(--color-accent);
-  color: var(--color-primary);
-}
-
-/* Scrollbar */
-::-webkit-scrollbar {
-  width: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: var(--color-primary);
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--color-glass-border);
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--color-accent);
+.hover-lift:hover {
+  @apply -translate-y-1;
 }
