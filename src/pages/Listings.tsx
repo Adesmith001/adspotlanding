@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
     MdSearch,
     MdFilterList,
@@ -19,21 +20,34 @@ import type { SearchFilters, SortOption, BillboardType } from '@/types/billboard
 const Listings: React.FC = () => {
     const user = useAppSelector(selectUser);
     const isAuthenticated = useAppSelector(selectIsAuthenticated);
+    const [searchParams] = useSearchParams();
 
     const [showFilters, setShowFilters] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [favorites, setFavorites] = useState<Set<string>>(new Set());
     const [loadingFavorites, setLoadingFavorites] = useState(false);
 
-    // Filter states
-    const [selectedCity, setSelectedCity] = useState('');
+    // Filter states - Initialize from URL params
+    const [selectedCity, setSelectedCity] = useState(searchParams.get('city') || '');
     const [selectedTypes, setSelectedTypes] = useState<BillboardType[]>([]);
-    const [priceRange, setPriceRange] = useState<[number, number]>([0, 1000000]);
+    const [priceRange, setPriceRange] = useState<[number, number]>(() => {
+        const maxPrice = searchParams.get('maxPrice');
+        return [0, maxPrice ? parseInt(maxPrice) : 1000000];
+    });
     const [minTrafficScore, setMinTrafficScore] = useState(0);
     const [hasLighting, setHasLighting] = useState<boolean | undefined>(undefined);
     const [instantBookOnly, setInstantBookOnly] = useState(false);
     const [minRating, setMinRating] = useState(0);
     const [sortBy, setSortBy] = useState<SortOption>('newest');
+
+    // Initialize filters from URL on mount
+    useEffect(() => {
+        const city = searchParams.get('city');
+        const maxPrice = searchParams.get('maxPrice');
+        
+        if (city) setSelectedCity(city);
+        if (maxPrice) setPriceRange([0, parseInt(maxPrice)]);
+    }, [searchParams]);
 
     // Build filters object
     const filters: SearchFilters = useMemo(() => {

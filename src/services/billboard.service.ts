@@ -681,6 +681,32 @@ export const isBillboardFavorited = async (
 };
 
 /**
+ * Get available billboard locations
+ */
+export const getAvailableLocations = async (): Promise<string[]> => {
+  try {
+    const q = query(
+      collection(db, BILLBOARDS_COLLECTION),
+      where("status", "==", "active")
+    );
+    const snapshot = await getDocs(q);
+    
+    const cities = new Set<string>();
+    snapshot.docs.forEach((doc) => {
+      const data = doc.data();
+      if (data.location?.city) {
+        cities.add(data.location.city);
+      }
+    });
+    
+    return Array.from(cities).sort();
+  } catch (error) {
+    console.error("Error fetching locations:", error);
+    return [];
+  }
+};
+
+/**
  * Get user favorites
  */
 export const getUserFavorites = async (
@@ -712,3 +738,4 @@ export const getUserFavorites = async (
     throw error;
   }
 };
+
