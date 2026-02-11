@@ -19,9 +19,7 @@ import Card from '@/components/ui/Card';
 import EmptyState from '@/components/EmptyState';
 import { useAppSelector } from '@/hooks/useRedux';
 import { selectUser, selectIsAuthenticated } from '@/store/authSlice';
-import { getBillboard, incrementBillboardViews, getBillboardReviews, createBooking, toggleFavorite, isBillboardFavorited } from '@/services/billboard.service';
-import { createNotification } from '@/services/notification.service';
-import { processPayment } from '@/services/payment.service';
+import { getBillboard, incrementBillboardViews, getBillboardReviews, toggleFavorite, isBillboardFavorited } from '@/services/billboard.service';
 import type { Billboard, Review } from '@/types/billboard.types';
 import toast from 'react-hot-toast';
 
@@ -36,6 +34,7 @@ const BillboardDetails: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
     const [isFavorited, setIsFavorited] = useState(false);
+    // @ts-expect-error - Variable used in future implementation
     const [isBooking, setIsBooking] = useState(false);
 
     // Booking form state

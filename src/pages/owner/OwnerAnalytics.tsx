@@ -3,11 +3,8 @@ import { MdAnalytics, MdTrendingUp, MdAttachMoney, MdVisibility, MdCalendarToday
 import DashboardLayout from '@/components/DashboardLayout';
 import EmptyState from '@/components/EmptyState';
 import Card from '@/components/ui/Card';
-import { useAppSelector } from '@/hooks/useRedux';
-import { selectUser } from '@/store/authSlice';
 
 const OwnerAnalytics: React.FC = () => {
-    const user = useAppSelector(selectUser);
 
     // Since we don't have real analytics data yet, show empty state with helpful guidance
     const hasData = false; // This will be true once we have real booking data

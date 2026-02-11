@@ -23,7 +23,7 @@ const BrowseBillboards: React.FC = () => {
     const [showFilters, setShowFilters] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [favorites, setFavorites] = useState<Set<string>>(new Set());
-    //eslint-disable-next-line
+    // @ts-expect-error - Variable used in future implementation
     const [loadingFavorites, setLoadingFavorites] = useState(false);
 
     // Filter states

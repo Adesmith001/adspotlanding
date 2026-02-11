@@ -25,6 +25,7 @@ const Listings: React.FC = () => {
     const [showFilters, setShowFilters] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [favorites, setFavorites] = useState<Set<string>>(new Set());
+    // @ts-expect-error - Variable used in future implementation
     const [loadingFavorites, setLoadingFavorites] = useState(false);
 
     // Filter states - Initialize from URL params

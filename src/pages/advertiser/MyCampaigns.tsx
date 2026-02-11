@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { MdCampaign, MdLocationOn, MdCalendarToday, MdTrendingUp } from 'react-icons/md';
+import { MdCampaign, MdCalendarToday, MdTrendingUp } from 'react-icons/md';
 import DashboardLayout from '@/components/DashboardLayout';
 import EmptyState from '@/components/EmptyState';
 import Card from '@/components/ui/Card';
