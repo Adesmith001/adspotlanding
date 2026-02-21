@@ -104,14 +104,18 @@ export const startConversation = async (
         },
       );
 
-      // Notify receiver
+      // Notify receiver with dynamic path based on their role
+      const receiverProfile = await getUserProfile(receiverId);
+      const receiverRole = receiverProfile?.role || 'owner';
+      const messagesPath = `/dashboard/${receiverRole}/messages?conversation=${docRef.id}`;
+      
       await createNotification(
         receiverId,
         "new_message",
         "New Message",
         `${senderName} sent you a message`,
         { conversationId: docRef.id },
-        "/dashboard/owner/messages", // dynamic path based on role could be better but this works for now
+        messagesPath,
       );
     }
 
@@ -173,15 +177,19 @@ export const sendMessage = async (
       unreadCount,
     });
 
-    // 3. Notify receiver
+    // 3. Notify receiver with dynamic path based on their role
     if (otherUserId) {
+      const receiverProfile = await getUserProfile(otherUserId);
+      const receiverRole = receiverProfile?.role || 'owner';
+      const messagesPath = `/dashboard/${receiverRole}/messages?conversation=${conversationId}`;
+      
       await createNotification(
         otherUserId,
         "new_message",
         "New Message",
         `${senderName}: ${text}`,
         { conversationId },
-        "/messages",
+        messagesPath,
       );
     }
   } catch (error) {
@@ -203,15 +211,21 @@ export const subscribeToConversations = (
     orderBy("lastMessageAt", "desc"),
   );
 
-  return onSnapshot(q, (snapshot) => {
-    const conversations = snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-      lastMessageAt: doc.data().lastMessageAt?.toDate() || new Date(),
-      createdAt: doc.data().createdAt?.toDate() || new Date(),
-    })) as Conversation[];
-    callback(conversations);
-  });
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const conversations = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+        lastMessageAt: doc.data().lastMessageAt?.toDate() || new Date(),
+        createdAt: doc.data().createdAt?.toDate() || new Date(),
+      })) as Conversation[];
+      callback(conversations);
+    },
+    (error) => {
+      console.error("Error subscribing to conversations:", error);
+    },
+  );
 };
 
 /**
@@ -231,14 +245,20 @@ export const subscribeToMessages = (
     orderBy("createdAt", "asc"),
   );
 
-  return onSnapshot(q, (snapshot) => {
-    const messages = snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-      createdAt: doc.data().createdAt?.toDate() || new Date(),
-    })) as Message[];
-    callback(messages);
-  });
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const messages = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toDate() || new Date(),
+      })) as Message[];
+      callback(messages);
+    },
+    (error) => {
+      console.error("Error subscribing to messages:", error);
+    },
+  );
 };
 
 /**

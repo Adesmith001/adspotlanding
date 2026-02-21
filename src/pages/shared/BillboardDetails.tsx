@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import {
     MdArrowBack,
     MdLocationOn,
@@ -20,6 +21,8 @@ import EmptyState from '@/components/EmptyState';
 import { useAppSelector } from '@/hooks/useRedux';
 import { selectUser, selectIsAuthenticated } from '@/store/authSlice';
 import { getBillboard, incrementBillboardViews, getBillboardReviews, toggleFavorite, isBillboardFavorited } from '@/services/billboard.service';
+import { startConversation } from '@/services/message.service';
+import { syncUserProfile, getUserProfile } from '@/services/user.service';
 import type { Billboard, Review } from '@/types/billboard.types';
 import toast from 'react-hot-toast';
 
@@ -100,6 +103,54 @@ const BillboardDetails: React.FC = () => {
             }
         }
     }, [startDate, endDate, billboard]);
+
+    const handleContact = async () => {
+        if (!isAuthenticated || !user) {
+            toast.error('Please sign in to contact the owner');
+            navigate('/login');
+            return;
+        }
+
+        if (!billboard) return;
+
+        // Check if user is trying to contact themselves
+        if (user.uid === billboard.ownerId) {
+            toast.error('You cannot contact yourself');
+            return;
+        }
+
+        const loadingToast = toast.loading('Starting conversation...');
+
+        try {
+            // Ensure current user profile exists
+            await syncUserProfile(
+                user.uid,
+                user.email || '',
+                user.displayName || 'User',
+                'advertiser' // Default role for users browsing billboards
+            );
+
+            // Check if owner profile exists (read-only check, we cannot write to another user's profile)
+            await getUserProfile(billboard.ownerId);
+            // If owner profile doesn't exist, startConversation will fall back to billboard.ownerName
+
+            // Start a new conversation with the billboard owner
+            const conversationId = await startConversation(
+                user.uid,
+                billboard.ownerId,
+                `Hi, I'm interested in your "${billboard.title}" billboard.`
+            );
+
+            // Navigate directly to the conversation
+            toast.dismiss(loadingToast);
+            toast.success('Conversation started!');
+            navigate(`/dashboard/advertiser/messages?conversation=${conversationId}`);
+        } catch (error) {
+            console.error('Error starting conversation:', error);
+            toast.dismiss(loadingToast);
+            toast.error('Failed to start conversation. Please try again.');
+        }
+    };
 
     const handleBooking = async () => {
         if (!isAuthenticated || !user) {
@@ -243,19 +294,24 @@ const BillboardDetails: React.FC = () => {
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-neutral-50">
+            <div className="min-h-screen bg-gradient-to-br from-neutral-50 via-white to-primary-50">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                    <div className="animate-pulse space-y-8">
-                        <div className="h-8 bg-neutral-200 rounded w-32" />
-                        <div className="h-[500px] bg-neutral-200 rounded-2xl" />
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ duration: 0.3 }}
+                        className="space-y-8"
+                    >
+                        <div className="h-8 bg-gradient-to-r from-neutral-200 to-neutral-300 rounded w-32" />
+                        <div className="h-[500px] bg-gradient-to-br from-neutral-200 to-neutral-300 rounded-3xl shadow-soft" />
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                             <div className="lg:col-span-2 space-y-4">
-                                <div className="h-8 bg-neutral-200 rounded w-3/4" />
-                                <div className="h-4 bg-neutral-200 rounded w-1/2" />
+                                <div className="h-8 bg-gradient-to-r from-neutral-200 to-neutral-300 rounded w-3/4" />
+                                <div className="h-4 bg-gradient-to-r from-neutral-200 to-neutral-300 rounded w-1/2" />
                             </div>
-                            <div className="h-64 bg-neutral-200 rounded-2xl" />
+                            <div className="h-64 bg-gradient-to-br from-neutral-200 to-neutral-300 rounded-2xl shadow-soft" />
                         </div>
-                    </div>
+                    </motion.div>
                 </div>
             </div>
         );
@@ -263,88 +319,133 @@ const BillboardDetails: React.FC = () => {
 
     if (!billboard) {
         return (
-            <div className="min-h-screen bg-neutral-50 flex items-center justify-center">
-                <EmptyState
-                    icon={<MdLocationOn />}
-                    title="Billboard Not Found"
-                    description="The billboard you're looking for doesn't exist or has been removed."
-                    actionLabel="Browse Billboards"
-                    actionHref="/listings"
-                />
+            <div className="min-h-screen bg-gradient-to-br from-neutral-50 via-white to-primary-50 flex items-center justify-center">
+                <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.3 }}
+                    className="max-w-lg"
+                >
+                    <EmptyState
+                        icon={<MdLocationOn />}
+                        title="Billboard Not Found"
+                        description="The billboard you're looking for doesn't exist or has been removed."
+                        actionLabel="Browse Billboards"
+                        actionHref="/listings"
+                    />
+                </motion.div>
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-neutral-50">
+        <div className="min-h-screen bg-gradient-to-br from-neutral-50 via-white to-primary-50">
             {/* Header */}
-            <header className="bg-white border-b border-neutral-200 sticky top-0 z-40">
+            <motion.header
+                initial={{ y: -20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ duration: 0.4 }}
+                className="bg-white/80 backdrop-blur-xl border-b border-neutral-200/50 sticky top-0 z-40 shadow-soft"
+            >
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
                     <div className="flex items-center justify-between">
-                        <button
+                        <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
                             onClick={() => navigate(-1)}
-                            className="flex items-center gap-2 text-neutral-600 hover:text-neutral-900"
+                            className="flex items-center gap-2 text-neutral-600 hover:text-neutral-900 transition-colors px-3 py-2 rounded-lg hover:bg-neutral-100"
                         >
                             <MdArrowBack size={20} />
-                            <span>Back</span>
-                        </button>
+                            <span className="font-medium">Back</span>
+                        </motion.button>
 
-                        <div className="flex items-center gap-3">
-                            <button
+                        <div className="flex items-center gap-2">
+                            <motion.button
+                                whileHover={{ scale: 1.05 }}
+                                whileTap={{ scale: 0.95 }}
                                 onClick={handleToggleFavorite}
-                                className="p-2 rounded-full hover:bg-neutral-100 transition-colors"
+                                className="p-2.5 rounded-full hover:bg-neutral-100 transition-colors shadow-soft"
                             >
                                 {isFavorited ? (
                                     <MdFavorite size={24} className="text-red-500" />
                                 ) : (
                                     <MdFavoriteBorder size={24} className="text-neutral-600" />
                                 )}
-                            </button>
-                            <button className="p-2 rounded-full hover:bg-neutral-100 transition-colors">
+                            </motion.button>
+                            <motion.button
+                                whileHover={{ scale: 1.05 }}
+                                whileTap={{ scale: 0.95 }}
+                                className="p-2.5 rounded-full hover:bg-neutral-100 transition-colors shadow-soft"
+                            >
                                 <MdShare size={24} className="text-neutral-600" />
-                            </button>
+                            </motion.button>
                         </div>
                     </div>
                 </div>
-            </header>
+            </motion.header>
 
-            <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <motion.main
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.3, delay: 0.2 }}
+                className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8"
+            >
                 {/* Photo Gallery */}
-                <div className="relative h-[400px] md:h-[500px] rounded-2xl overflow-hidden mb-8 bg-neutral-200">
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5, delay: 0.3 }}
+                    className="relative h-[400px] md:h-[500px] rounded-3xl overflow-hidden mb-8 bg-gradient-to-br from-neutral-200 to-neutral-300 shadow-card"
+                >
                     {billboard.photos.length > 0 ? (
                         <>
-                            <img
+                            <motion.img
+                                key={currentPhotoIndex}
                                 src={billboard.photos[currentPhotoIndex]}
                                 alt={billboard.title}
                                 className="w-full h-full object-cover"
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                transition={{ duration: 0.3 }}
                             />
 
                             {billboard.photos.length > 1 && (
                                 <>
-                                    <button
+                                    <motion.button
+                                        whileHover={{ scale: 1.1 }}
+                                        whileTap={{ scale: 0.9 }}
                                         onClick={prevPhoto}
-                                        className="absolute left-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-white/90 rounded-full flex items-center justify-center hover:bg-white transition-colors shadow-lg"
+                                        className="absolute left-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-white/90 backdrop-blur-md rounded-full flex items-center justify-center hover:bg-white transition-colors shadow-lg"
                                     >
                                         <MdChevronLeft size={24} />
-                                    </button>
-                                    <button
+                                    </motion.button>
+                                    <motion.button
+                                        whileHover={{ scale: 1.1 }}
+                                        whileTap={{ scale: 0.9 }}
                                         onClick={nextPhoto}
-                                        className="absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-white/90 rounded-full flex items-center justify-center hover:bg-white transition-colors shadow-lg"
+                                        className="absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-white/90 backdrop-blur-md rounded-full flex items-center justify-center hover:bg-white transition-colors shadow-lg"
                                     >
                                         <MdChevronRight size={24} />
-                                    </button>
+                                    </motion.button>
 
                                     {/* Photo indicators */}
-                                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
+                                    <motion.div
+                                        initial={{ opacity: 0, y: 10 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ duration: 0.3, delay: 0.6 }}
+                                        className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2"
+                                    >
                                         {billboard.photos.map((_, index) => (
-                                            <button
+                                            <motion.button
                                                 key={index}
+                                                whileHover={{ scale: 1.2 }}
+                                                whileTap={{ scale: 0.9 }}
                                                 onClick={() => setCurrentPhotoIndex(index)}
-                                                className={`w-2 h-2 rounded-full transition-all ${index === currentPhotoIndex ? 'bg-white w-6' : 'bg-white/50'
+                                                className={`h-2 rounded-full transition-all ${index === currentPhotoIndex ? 'bg-white w-6 shadow-lg' : 'bg-white/50 hover:bg-white/70'
                                                     }`}
                                             />
                                         ))}
-                                    </div>
+                                    </motion.div>
                                 </>
                             )}
                         </>
@@ -353,44 +454,81 @@ const BillboardDetails: React.FC = () => {
                             <p className="text-neutral-500">No photos available</p>
                         </div>
                     )}
-                </div>
+                </motion.div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     {/* Main Content */}
                     <div className="lg:col-span-2 space-y-8">
                         {/* Title & Location */}
                         <div>
-                            <div className="flex items-center gap-3 mb-2">
-                                <span className="px-3 py-1 bg-primary-100 text-primary-700 rounded-full text-sm font-medium capitalize">
+                            <motion.div
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ duration: 0.5, delay: 0.4 }}
+                                className="flex items-center gap-3 mb-2 flex-wrap"
+                            >
+                                <motion.span
+                                    whileHover={{ scale: 1.05 }}
+                                    className="px-3 py-1 bg-gradient-to-r from-primary-50 to-primary-100 text-primary-700 rounded-full text-sm font-medium capitalize shadow-soft"
+                                >
                                     {billboard.type}
-                                </span>
+                                </motion.span>
                                 {billboard.hasLighting && (
-                                    <span className="px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-sm font-medium flex items-center gap-1">
+                                    <motion.span
+                                        initial={{ opacity: 0, scale: 0.9 }}
+                                        animate={{ opacity: 1, scale: 1 }}
+                                        transition={{ delay: 0.45 }}
+                                        whileHover={{ scale: 1.05 }}
+                                        className="px-3 py-1 bg-gradient-to-r from-amber-50 to-amber-100 text-amber-700 rounded-full text-sm font-medium flex items-center gap-1 shadow-soft"
+                                    >
                                         <MdLightMode size={14} />
                                         Lit
-                                    </span>
+                                    </motion.span>
                                 )}
                                 {billboard.bookingRules.instantBook && (
-                                    <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
+                                    <motion.span
+                                        initial={{ opacity: 0, scale: 0.9 }}
+                                        animate={{ opacity: 1, scale: 1 }}
+                                        transition={{ delay: 0.5 }}
+                                        whileHover={{ scale: 1.05 }}
+                                        className="px-3 py-1 bg-gradient-to-r from-green-50 to-green-100 text-green-700 rounded-full text-sm font-medium shadow-soft"
+                                    >
                                         Instant Book
-                                    </span>
+                                    </motion.span>
                                 )}
-                            </div>
+                            </motion.div>
 
-                            <h1 className="text-3xl font-bold text-neutral-900 mb-3">{billboard.title}</h1>
+                            <motion.h1
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ duration: 0.5, delay: 0.55 }}
+                                className="text-3xl font-bold text-neutral-900 mb-3 bg-gradient-to-r from-neutral-900 to-neutral-700 bg-clip-text text-transparent"
+                            >
+                                {billboard.title}
+                            </motion.h1>
 
-                            <div className="flex items-center gap-2 text-neutral-600">
-                                <MdLocationOn size={20} className="text-neutral-400" />
-                                <span>
+                            <motion.div
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ duration: 0.5, delay: 0.6 }}
+                                className="flex items-center gap-2 text-neutral-600 bg-gradient-to-r from-neutral-50 to-white px-4 py-2 rounded-xl shadow-soft"
+                            >
+                                <MdLocationOn size={20} className="text-primary-600" />
+                                <span className="font-medium">
                                     {billboard.location.address}, {billboard.location.city}, {billboard.location.state}
                                 </span>
-                            </div>
+                            </motion.div>
                         </div>
 
                         {/* Specifications */}
-                        <Card className="p-6">
-                            <h2 className="text-lg font-bold text-neutral-900 mb-4">Specifications</h2>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.5, delay: 0.65 }}
+                        >
+                            <Card className="p-6 shadow-soft bg-gradient-to-br from-white to-primary-50/50">
+                                <h2 className="text-lg font-bold text-neutral-900 mb-4">Specifications</h2>
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
                                 <div>
                                     <p className="text-sm text-neutral-500 mb-1">Dimensions</p>
                                     <p className="font-bold text-neutral-900">
@@ -416,18 +554,30 @@ const BillboardDetails: React.FC = () => {
                                     </p>
                                 </div>
                             </div>
-                        </Card>
+                            </Card>
+                        </motion.div>
 
                         {/* Description */}
-                        <Card className="p-6">
-                            <h2 className="text-lg font-bold text-neutral-900 mb-4">About This Billboard</h2>
-                            <p className="text-neutral-600 leading-relaxed">{billboard.description}</p>
-                        </Card>
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.5, delay: 0.7 }}
+                        >
+                            <Card className="p-6 shadow-soft bg-gradient-to-br from-white to-accent-50/50">
+                                <h2 className="text-lg font-bold text-neutral-900 mb-4">About This Billboard</h2>
+                                <p className="text-neutral-600 leading-relaxed text-justify">{billboard.description}</p>
+                            </Card>
+                        </motion.div>
 
                         {/* Owner Info */}
-                        <Card className="p-6">
-                            <h2 className="text-lg font-bold text-neutral-900 mb-4">Billboard Owner</h2>
-                            <div className="flex items-center justify-between">
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.5, delay: 0.75 }}
+                        >
+                            <Card className="p-6 shadow-soft bg-gradient-to-br from-white to-neutral-50/50">
+                                <h2 className="text-lg font-bold text-neutral-900 mb-4">Billboard Owner</h2>
+                                <div className="flex items-center justify-between gap-4">
                                 <div className="flex items-center gap-4">
                                     <div className="w-14 h-14 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white text-xl font-bold">
                                         {billboard.ownerName.charAt(0).toUpperCase()}
@@ -444,19 +594,30 @@ const BillboardDetails: React.FC = () => {
                                         </p>
                                     </div>
                                 </div>
-                                <Button variant="outline" icon={<MdMessage />}>
-                                    Contact
-                                </Button>
+                                <motion.div
+                                    whileHover={{ scale: 1.05 }}
+                                    whileTap={{ scale: 0.95 }}
+                                >
+                                    <Button variant="outline" icon={<MdMessage />} onClick={handleContact}>
+                                        Contact
+                                    </Button>
+                                </motion.div>
                             </div>
-                        </Card>
+                            </Card>
+                        </motion.div>
 
                         {/* Reviews */}
-                        <Card className="p-6">
-                            <h2 className="text-lg font-bold text-neutral-900 mb-4">
-                                Reviews ({reviews.length})
-                            </h2>
-                            {reviews.length === 0 ? (
-                                <p className="text-neutral-500 text-center py-8">
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.5, delay: 0.8 }}
+                        >
+                            <Card className="p-6 shadow-soft bg-gradient-to-br from-white to-neutral-50/50">
+                                <h2 className="text-lg font-bold text-neutral-900 mb-4">
+                                    Reviews ({reviews.length})
+                                </h2>
+                                {reviews.length === 0 ? (
+                                    <p className="text-neutral-500 text-center py-8">
                                     No reviews yet. Be the first to review after your campaign!
                                 </p>
                             ) : (
@@ -490,18 +651,29 @@ const BillboardDetails: React.FC = () => {
                                     ))}
                                 </div>
                             )}
-                        </Card>
+                            </Card>
+                        </motion.div>
                     </div>
 
                     {/* Booking Sidebar */}
-                    <div className="lg:col-span-1">
-                        <Card className="p-6 sticky top-24">
-                            <div className="mb-6">
-                                <p className="text-3xl font-bold text-neutral-900">
+                    <motion.div
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ duration: 0.5, delay: 0.85 }}
+                        className="lg:col-span-1"
+                    >
+                        <Card className="p-6 sticky top-24 shadow-card bg-gradient-to-br from-white to-primary-50/50">
+                            <motion.div
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ duration: 0.3, delay: 0.86 }}
+                                className="mb-6"
+                            >
+                                <p className="text-lg text-neutral-600 mb-1">Price per day</p>
+                                <p className="text-4xl font-bold text-transparent bg-gradient-to-r from-primary-600 to-accent-600 bg-clip-text">
                                     {formatPrice(billboard.pricing.daily)}
                                 </p>
-                                <p className="text-neutral-500">per day</p>
-                            </div>
+                            </motion.div>
 
                             <div className="space-y-4 mb-6">
                                 <div>
@@ -554,20 +726,25 @@ const BillboardDetails: React.FC = () => {
                             </p>
 
                             {/* Pricing Info */}
-                            <div className="mt-6 pt-6 border-t border-neutral-100 space-y-2 text-sm">
-                                <div className="flex justify-between text-neutral-600">
-                                    <span>Weekly rate</span>
-                                    <span className="font-medium">{formatPrice(billboard.pricing.weekly)}</span>
+                            <motion.div
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ duration: 0.3, delay: 0.88 }}
+                                className="mt-6 pt-6 border-t border-neutral-100 space-y-3 text-sm bg-gradient-to-br from-neutral-50 to-neutral-100 p-4 rounded-2xl"
+                            >
+                                <div className="flex justify-between items-center">
+                                    <span className="text-neutral-600 font-medium">Weekly rate</span>
+                                    <span className="font-bold text-primary-600">{formatPrice(billboard.pricing.weekly)}</span>
                                 </div>
-                                <div className="flex justify-between text-neutral-600">
-                                    <span>Monthly rate</span>
-                                    <span className="font-medium">{formatPrice(billboard.pricing.monthly)}</span>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-neutral-600 font-medium">Monthly rate</span>
+                                    <span className="font-bold text-primary-600">{formatPrice(billboard.pricing.monthly)}</span>
                                 </div>
-                            </div>
+                            </motion.div>
                         </Card>
-                    </div>
+                    </motion.div>
                 </div>
-            </main>
+            </motion.main>
         </div >
     );
 };
