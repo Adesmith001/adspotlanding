@@ -11,6 +11,8 @@ import Home from './pages/Home';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Listings from './pages/Listings';
+import TermsOfService from './pages/TermsOfService';
+import PrivacyPolicy from './pages/PrivacyPolicy';
 
 // Pages - Dashboards
 import OwnerDashboard from './pages/OwnerDashboard';
@@ -52,6 +54,8 @@ function AppContent() {
                 <Route path="/login" element={<Login />} />
                 <Route path="/signup" element={<Signup />} />
                 <Route path="/listings" element={<Listings />} />
+                <Route path="/terms-of-service" element={<TermsOfService />} />
+                <Route path="/privacy-policy" element={<PrivacyPolicy />} />
                 <Route path="/billboards/:id" element={<BillboardDetails />} />
 
                 {/* Owner Dashboard Routes */}

@@ -9,7 +9,7 @@ export interface Location {
   country: string;
   lat: number;
   lng: number;
-  landmark?: string;    
+  landmark?: string;
 }
 
 export interface Dimensions {
@@ -348,6 +348,8 @@ export interface CreateBillboardForm {
   maxDuration: number;
   cancellationPolicy: "flexible" | "moderate" | "strict";
   advanceNotice: number;
+  latitude?: number;
+  longitude?: number;
 }
 
 export interface BookingRequest {

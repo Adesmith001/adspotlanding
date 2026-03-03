@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useAppSelector, useAppDispatch } from '@/hooks/useRedux';
 import { selectUser, signOutUser } from '@/store/authSlice';
 import {
@@ -72,11 +73,14 @@ const Sidebar: React.FC<SidebarProps> = ({ userRole }) => {
     const SidebarContent = () => (
         <div className="flex flex-col h-full">
             {/* Logo */}
-            <div className="p-6 border-b border-neutral-800">
-                <Link to="/" className="text-2xl font-bold text-white">
-                    Adspot
+            <div className="p-6 border-b border-neutral-800/50">
+                <Link to="/" className="flex items-center gap-2">
+                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center">
+                        <span className="text-white font-bold text-lg">A</span>
+                    </div>
+                    <span className="text-2xl font-bold text-white">dspot</span>
                 </Link>
-                <p className="text-xs text-neutral-500 mt-1 capitalize">
+                <p className="text-xs text-neutral-500 mt-2 capitalize">
                     {userRole === 'owner' ? 'Billboard Owner' : 'Advertiser'}
                 </p>
             </div>
@@ -84,28 +88,38 @@ const Sidebar: React.FC<SidebarProps> = ({ userRole }) => {
             {/* Navigation */}
             <nav className="flex-1 px-4 py-6 overflow-y-auto">
                 <ul className="space-y-1">
-                    {navItems.map((item) => (
-                        <li key={item.href}>
-                            <Link
-                                to={item.href}
-                                onClick={() => setIsMobileOpen(false)}
-                                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${isActive(item.href)
-                                        ? 'bg-primary-600 text-white'
-                                        : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'
-                                    }`}
-                            >
-                                {item.icon}
-                                <span className="font-medium">{item.label}</span>
-                            </Link>
-                        </li>
-                    ))}
+                    {navItems.map((item) => {
+                        const active = isActive(item.href);
+                        return (
+                            <li key={item.href}>
+                                <Link
+                                    to={item.href}
+                                    onClick={() => setIsMobileOpen(false)}
+                                    className={`relative flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${active
+                                        ? 'text-white'
+                                        : 'text-neutral-400 hover:bg-neutral-800/50 hover:text-white'
+                                        }`}
+                                >
+                                    {active && (
+                                        <motion.div
+                                            layoutId="sidebar-active"
+                                            className="absolute inset-0 bg-gradient-to-r from-primary-600 to-primary-500 rounded-xl shadow-lg shadow-primary-500/20"
+                                            transition={{ type: 'spring', stiffness: 350, damping: 30 }}
+                                        />
+                                    )}
+                                    <span className="relative z-10">{item.icon}</span>
+                                    <span className="relative z-10 font-medium">{item.label}</span>
+                                </Link>
+                            </li>
+                        );
+                    })}
                 </ul>
             </nav>
 
             {/* User Section */}
-            <div className="p-4 border-t border-neutral-800">
+            <div className="p-4 border-t border-neutral-800/50">
                 <div className="flex items-center gap-3 px-4 py-3 mb-2">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white font-bold">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white font-bold ring-2 ring-neutral-700/50 ring-offset-2 ring-offset-neutral-900">
                         {user?.displayName?.charAt(0).toUpperCase() || 'U'}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -117,13 +131,15 @@ const Sidebar: React.FC<SidebarProps> = ({ userRole }) => {
                         </p>
                     </div>
                 </div>
-                <button
+                <motion.button
+                    whileHover={{ x: 4 }}
+                    whileTap={{ scale: 0.98 }}
                     onClick={handleSignOut}
                     className="flex items-center gap-3 w-full px-4 py-3 text-neutral-400 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-all duration-200"
                 >
                     <MdLogout size={20} />
                     <span className="font-medium">Sign Out</span>
-                </button>
+                </motion.button>
             </div>
         </div>
     );
@@ -131,34 +147,49 @@ const Sidebar: React.FC<SidebarProps> = ({ userRole }) => {
     return (
         <>
             {/* Mobile Menu Button */}
-            <button
+            <motion.button
+                whileTap={{ scale: 0.9 }}
                 onClick={() => setIsMobileOpen(true)}
-                className="fixed top-4 left-4 z-50 lg:hidden p-2 bg-neutral-900 text-white rounded-lg"
+                className="fixed top-4 left-4 z-50 lg:hidden p-2 bg-neutral-900 text-white rounded-lg shadow-lg"
             >
                 <MdMenu size={24} />
-            </button>
+            </motion.button>
 
             {/* Mobile Overlay */}
-            {isMobileOpen && (
-                <div
-                    className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-                    onClick={() => setIsMobileOpen(false)}
-                />
-            )}
+            <AnimatePresence>
+                {isMobileOpen && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden"
+                        onClick={() => setIsMobileOpen(false)}
+                    />
+                )}
+            </AnimatePresence>
 
             {/* Mobile Sidebar */}
-            <aside
-                className={`fixed inset-y-0 left-0 z-50 w-72 bg-neutral-900 transform transition-transform duration-300 lg:hidden ${isMobileOpen ? 'translate-x-0' : '-translate-x-full'
-                    }`}
-            >
-                <button
-                    onClick={() => setIsMobileOpen(false)}
-                    className="absolute top-4 right-4 p-2 text-neutral-400 hover:text-white"
-                >
-                    <MdClose size={24} />
-                </button>
-                <SidebarContent />
-            </aside>
+            <AnimatePresence>
+                {isMobileOpen && (
+                    <motion.aside
+                        initial={{ x: '-100%' }}
+                        animate={{ x: 0 }}
+                        exit={{ x: '-100%' }}
+                        transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                        className="fixed inset-y-0 left-0 z-50 w-72 bg-neutral-900 lg:hidden shadow-2xl"
+                    >
+                        <motion.button
+                            whileTap={{ scale: 0.9 }}
+                            onClick={() => setIsMobileOpen(false)}
+                            className="absolute top-4 right-4 p-2 text-neutral-400 hover:text-white"
+                        >
+                            <MdClose size={24} />
+                        </motion.button>
+                        <SidebarContent />
+                    </motion.aside>
+                )}
+            </AnimatePresence>
 
             {/* Desktop Sidebar */}
             <aside className="hidden lg:flex lg:flex-col lg:w-72 lg:min-h-screen bg-neutral-900 fixed left-0 top-0 bottom-0">

@@ -68,8 +68,8 @@ export const createBillboard = async (
         city: data.city,
         state: data.state,
         country: "Nigeria",
-        lat: 0, // Will be set by geocoding
-        lng: 0,
+        lat: data.latitude ?? 0,
+        lng: data.longitude ?? 0,
         landmark: data.landmark,
       },
       dimensions: {
@@ -687,10 +687,10 @@ export const getAvailableLocations = async (): Promise<string[]> => {
   try {
     const q = query(
       collection(db, BILLBOARDS_COLLECTION),
-      where("status", "==", "active")
+      where("status", "==", "active"),
     );
     const snapshot = await getDocs(q);
-    
+
     const cities = new Set<string>();
     snapshot.docs.forEach((doc) => {
       const data = doc.data();
@@ -698,7 +698,7 @@ export const getAvailableLocations = async (): Promise<string[]> => {
         cities.add(data.location.city);
       }
     });
-    
+
     return Array.from(cities).sort();
   } catch (error) {
     console.error("Error fetching locations:", error);
@@ -738,4 +738,3 @@ export const getUserFavorites = async (
     throw error;
   }
 };
-
