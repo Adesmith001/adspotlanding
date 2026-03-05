@@ -6,6 +6,9 @@ import {
   signOut,
   sendPasswordResetEmail,
   updateProfile,
+  updatePassword,
+  reauthenticateWithCredential,
+  EmailAuthProvider,
   User as FirebaseUser,
   RecaptchaVerifier,
   signInWithPhoneNumber,
@@ -230,6 +233,32 @@ export const resetPassword = async (email: string): Promise<void> => {
     await sendPasswordResetEmail(auth, email);
   } catch (error: any) {
     throw new Error(getAuthErrorMessage(error.code));
+  }
+};
+
+/**
+ * Change password for the currently signed-in user (requires re-authentication)
+ */
+export const changePassword = async (
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> => {
+  try {
+    const currentUser = auth.currentUser;
+    if (!currentUser || !currentUser.email) {
+      throw new Error("No authenticated user found.");
+    }
+    const credential = EmailAuthProvider.credential(
+      currentUser.email,
+      currentPassword,
+    );
+    await reauthenticateWithCredential(currentUser, credential);
+    await updatePassword(currentUser, newPassword);
+  } catch (error: any) {
+    const mapped = getAuthErrorMessage(error.code);
+    throw new Error(mapped !== "An error occurred. Please try again."
+      ? mapped
+      : error.message || mapped);
   }
 };
 

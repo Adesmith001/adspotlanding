@@ -9,7 +9,11 @@ import {
     MdCreditCard,
     MdHistory,
     MdEdit,
-    MdAdd
+    MdAdd,
+    MdDelete,
+    MdLock,
+    MdVisibility,
+    MdVisibilityOff,
 } from 'react-icons/md';
 import DashboardLayout from '@/components/DashboardLayout';
 import Card from '@/components/ui/Card';
@@ -17,9 +21,21 @@ import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import { useAppSelector } from '@/hooks/useRedux';
 import { selectUser } from '@/store/authSlice';
-import { getUserProfile, updateUserProfile, updateUserPreferences, syncUserProfile } from '@/services/user.service';
+import {
+    getUserProfile,
+    updateUserProfile,
+    updateUserPreferences,
+    syncUserProfile,
+    getSavedCards,
+    addSavedCard,
+    removeSavedCard,
+    setDefaultCard,
+} from '@/services/user.service';
+import type { SavedCard } from '@/services/user.service';
 import { getPaymentHistory } from '@/services/payment.service';
 import type { PaymentTransaction } from '@/services/payment.service';
+import { changePassword } from '@/services/auth.service';
+import { auth } from '@/services/firebase';
 import toast from 'react-hot-toast';
 
 interface SettingsProps {
@@ -55,6 +71,25 @@ const Settings: React.FC<SettingsProps> = ({ userRole }) => {
 
     // Payment History State
     const [payments, setPayments] = useState<PaymentTransaction[]>([]);
+
+    // Saved Cards State
+    const [savedCards, setSavedCards] = useState<SavedCard[]>([]);
+    const [cardsLoading, setCardsLoading] = useState(false);
+    const [showAddCardForm, setShowAddCardForm] = useState(false);
+    const [newCardNumber, setNewCardNumber] = useState('');
+    const [newCardMonth, setNewCardMonth] = useState('');
+    const [newCardYear, setNewCardYear] = useState('');
+    const [isAddingCard, setIsAddingCard] = useState(false);
+
+    // Password Change State
+    const [showPasswordForm, setShowPasswordForm] = useState(false);
+    const [currentPassword, setCurrentPassword] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [isChangingPassword, setIsChangingPassword] = useState(false);
+    const [showCurrentPwd, setShowCurrentPwd] = useState(false);
+    const [showNewPwd, setShowNewPwd] = useState(false);
+    const [showConfirmPwd, setShowConfirmPwd] = useState(false);
 
     // Fetch User Data
     useEffect(() => {
@@ -103,6 +138,115 @@ const Settings: React.FC<SettingsProps> = ({ userRole }) => {
 
         fetchData();
     }, [user, userRole]);
+
+    // Load saved cards when billing tab is opened
+    useEffect(() => {
+        if (activeTab !== 'billing' || !user || userRole !== 'advertiser') return;
+        const fetchCards = async () => {
+            setCardsLoading(true);
+            try {
+                const cards = await getSavedCards(user.uid);
+                setSavedCards(cards);
+            } catch (err) {
+                console.error('Error loading saved cards:', err);
+            } finally {
+                setCardsLoading(false);
+            }
+        };
+        fetchCards();
+    }, [activeTab, user, userRole]);
+
+    const handleChangePassword = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (newPassword !== confirmPassword) {
+            toast.error('New passwords do not match');
+            return;
+        }
+        if (newPassword.length < 6) {
+            toast.error('Password must be at least 6 characters');
+            return;
+        }
+        setIsChangingPassword(true);
+        try {
+            await changePassword(currentPassword, newPassword);
+            toast.success('Password updated successfully');
+            setShowPasswordForm(false);
+            setCurrentPassword('');
+            setNewPassword('');
+            setConfirmPassword('');
+        } catch (err: any) {
+            toast.error(err.message || 'Failed to update password');
+        } finally {
+            setIsChangingPassword(false);
+        }
+    };
+
+    const detectBrand = (number: string) => {
+        const n = number.replace(/\s/g, '');
+        if (/^4/.test(n)) return 'Visa';
+        if (/^5[1-5]/.test(n) || /^2[2-7]/.test(n)) return 'Mastercard';
+        if (/^3[47]/.test(n)) return 'Amex';
+        if (/^6/.test(n)) return 'Verve';
+        return 'Card';
+    };
+
+    const formatCardNum = (value: string) =>
+        value.replace(/\D/g, '').slice(0, 16).replace(/(.{4})/g, '$1 ').trim();
+
+    const handleAddCard = async () => {
+        if (!user) return;
+        const digits = newCardNumber.replace(/\s/g, '');
+        if (digits.length < 13) { toast.error('Enter a valid card number'); return; }
+        const month = parseInt(newCardMonth, 10);
+        if (!month || month < 1 || month > 12) { toast.error('Enter a valid expiry month'); return; }
+        if (!newCardYear || newCardYear.length < 2) { toast.error('Enter a valid expiry year'); return; }
+        setIsAddingCard(true);
+        try {
+            const card = {
+                last4: digits.slice(-4),
+                brand: detectBrand(digits),
+                expiryMonth: newCardMonth.padStart(2, '0'),
+                expiryYear: newCardYear.length === 2 ? `20${newCardYear}` : newCardYear,
+                isDefault: savedCards.length === 0,
+            };
+            const id = await addSavedCard(user.uid, card);
+            setSavedCards(prev => [
+                ...(card.isDefault ? prev.map(c => ({ ...c, isDefault: false })) : prev),
+                { id, ...card },
+            ]);
+            toast.success('Card added');
+            setShowAddCardForm(false);
+            setNewCardNumber('');
+            setNewCardMonth('');
+            setNewCardYear('');
+        } catch { toast.error('Failed to add card'); }
+        finally { setIsAddingCard(false); }
+    };
+
+    const handleRemoveCard = async (cardId: string) => {
+        if (!user) return;
+        if (savedCards.length === 1) { toast.error('Must keep at least one payment method'); return; }
+        try {
+            await removeSavedCard(user.uid, cardId);
+            const remaining = savedCards.filter(c => c.id !== cardId);
+            const removed = savedCards.find(c => c.id === cardId);
+            if (removed?.isDefault && remaining.length > 0) {
+                await setDefaultCard(user.uid, remaining[0].id);
+                remaining[0] = { ...remaining[0], isDefault: true };
+            }
+            setSavedCards(remaining);
+            toast.success('Card removed');
+        } catch { toast.error('Failed to remove card'); }
+    };
+
+    const handleSetDefaultCard = async (cardId: string) => {
+        if (!user) return;
+        try {
+            await setDefaultCard(user.uid, cardId);
+            setSavedCards(prev => prev.map(c => ({ ...c, isDefault: c.id === cardId })));
+            toast.success('Default card updated');
+        } catch { toast.error('Failed to update default card'); }
+    };
 
     const handleProfileUpdate = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -275,7 +419,26 @@ const Settings: React.FC<SettingsProps> = ({ userRole }) => {
                     </motion.div>
                 );
 
-            case 'security':
+            case 'security': {
+                const ua = navigator.userAgent;
+                let browser = 'Browser';
+                if (ua.includes('Edg')) browser = 'Edge';
+                else if (ua.includes('Chrome')) browser = 'Chrome';
+                else if (ua.includes('Firefox')) browser = 'Firefox';
+                else if (ua.includes('Safari')) browser = 'Safari';
+                let os = 'Device';
+                if (ua.includes('Windows')) os = 'Windows';
+                else if (ua.includes('Macintosh') || ua.includes('Mac OS')) os = 'macOS';
+                else if (ua.includes('Linux')) os = 'Linux';
+                else if (ua.includes('Android')) os = 'Android';
+                else if (ua.includes('iPhone') || ua.includes('iPad')) os = 'iOS';
+                const sessionInfo = `${os} • ${browser}`;
+                const lastSignIn = auth.currentUser?.metadata?.lastSignInTime
+                    ? new Date(auth.currentUser.metadata.lastSignInTime).toLocaleString('en-NG', {
+                        day: 'numeric', month: 'short', year: 'numeric',
+                        hour: '2-digit', minute: '2-digit',
+                    })
+                    : 'Active now';
                 return (
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
@@ -291,14 +454,116 @@ const Settings: React.FC<SettingsProps> = ({ userRole }) => {
                             transition={{ duration: 0.3, delay: 0.1 }}
                             className="p-6 border border-neutral-200 rounded-2xl bg-gradient-to-br from-neutral-50 to-neutral-100 mb-6 shadow-soft"
                         >
-                            <div className="flex justify-between items-center mb-6 pb-6 border-b border-neutral-200">
-                                <div>
-                                    <h4 className="font-bold text-neutral-900">Change Password</h4>
-                                    <p className="text-sm text-neutral-500 font-medium">Update your account password</p>
+                            <div className="mb-6 pb-6 border-b border-neutral-200">
+                                <div className="flex justify-between items-center">
+                                    <div>
+                                        <h4 className="font-bold text-neutral-900">Change Password</h4>
+                                        <p className="text-sm text-neutral-500 font-medium">Update your account password</p>
+                                    </div>
+                                    {!showPasswordForm && (
+                                        <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                icon={<MdLock size={16} />}
+                                                onClick={() => setShowPasswordForm(true)}
+                                            >
+                                                Update
+                                            </Button>
+                                        </motion.div>
+                                    )}
                                 </div>
-                                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                                    <Button variant="outline" size="sm">Update</Button>
-                                </motion.div>
+
+                                {showPasswordForm && (
+                                    <motion.form
+                                        initial={{ opacity: 0, y: -8 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ duration: 0.3 }}
+                                        onSubmit={handleChangePassword}
+                                        className="mt-5 space-y-4"
+                                    >
+                                        <div>
+                                            <label className="block text-sm font-medium text-neutral-700 mb-1.5">Current Password</label>
+                                            <div className="relative">
+                                                <Input
+                                                    type={showCurrentPwd ? 'text' : 'password'}
+                                                    placeholder="Enter current password"
+                                                    value={currentPassword}
+                                                    onChange={(e) => setCurrentPassword(e.target.value)}
+                                                    required
+                                                />
+                                                <button
+                                                    type="button"
+                                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600"
+                                                    onClick={() => setShowCurrentPwd(v => !v)}
+                                                >
+                                                    {showCurrentPwd ? <MdVisibilityOff size={20} /> : <MdVisibility size={20} />}
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-neutral-700 mb-1.5">New Password</label>
+                                            <div className="relative">
+                                                <Input
+                                                    type={showNewPwd ? 'text' : 'password'}
+                                                    placeholder="At least 6 characters"
+                                                    value={newPassword}
+                                                    onChange={(e) => setNewPassword(e.target.value)}
+                                                    required
+                                                />
+                                                <button
+                                                    type="button"
+                                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600"
+                                                    onClick={() => setShowNewPwd(v => !v)}
+                                                >
+                                                    {showNewPwd ? <MdVisibilityOff size={20} /> : <MdVisibility size={20} />}
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-neutral-700 mb-1.5">Confirm New Password</label>
+                                            <div className="relative">
+                                                <Input
+                                                    type={showConfirmPwd ? 'text' : 'password'}
+                                                    placeholder="Repeat new password"
+                                                    value={confirmPassword}
+                                                    onChange={(e) => setConfirmPassword(e.target.value)}
+                                                    required
+                                                />
+                                                <button
+                                                    type="button"
+                                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600"
+                                                    onClick={() => setShowConfirmPwd(v => !v)}
+                                                >
+                                                    {showConfirmPwd ? <MdVisibilityOff size={20} /> : <MdVisibility size={20} />}
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div className="flex gap-3 pt-2">
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => {
+                                                    setShowPasswordForm(false);
+                                                    setCurrentPassword('');
+                                                    setNewPassword('');
+                                                    setConfirmPassword('');
+                                                }}
+                                            >
+                                                Cancel
+                                            </Button>
+                                            <Button
+                                                type="submit"
+                                                size="sm"
+                                                disabled={isChangingPassword}
+                                                icon={<MdSave size={16} />}
+                                            >
+                                                {isChangingPassword ? 'Updating...' : 'Save Password'}
+                                            </Button>
+                                        </div>
+                                    </motion.form>
+                                )}
                             </div>
                             <div className="flex justify-between items-center">
                                 <div>
@@ -331,8 +596,10 @@ const Settings: React.FC<SettingsProps> = ({ userRole }) => {
                                         <MdSecurity size={20} />
                                     </motion.div>
                                     <div>
-                                        <p className="font-bold text-neutral-900">Windows PC • Chrome</p>
-                                        <p className="text-xs text-neutral-500 font-medium">Lagos, Nigeria • Active now</p>
+                                        <p className="font-bold text-neutral-900">{sessionInfo}</p>
+                                        <p className="text-xs text-neutral-500 font-medium">
+                                            Last sign-in: {lastSignIn}
+                                        </p>
                                     </div>
                                 </div>
                                 <motion.span
@@ -347,6 +614,7 @@ const Settings: React.FC<SettingsProps> = ({ userRole }) => {
                         </motion.div>
                     </motion.div>
                 );
+            }
 
             case 'notifications':
                 return (
@@ -422,25 +690,125 @@ const Settings: React.FC<SettingsProps> = ({ userRole }) => {
                             </>
                         ) : (
                             <>
-                                <h3 className="text-lg font-bold text-neutral-900 mb-4">Payment Methods</h3>
-                                <Card className="p-6 mb-6">
-                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                                        <div className="flex items-center gap-4">
-                                            <div className="w-12 h-12 bg-neutral-100 rounded-full flex items-center justify-center text-neutral-600">
-                                                <MdCreditCard size={24} />
+                                <div className="flex items-center justify-between mb-4">
+                                    <h3 className="text-lg font-bold text-neutral-900">Payment Methods</h3>
+                                    <Button
+                                        size="sm"
+                                        icon={<MdAdd />}
+                                        onClick={() => setShowAddCardForm(true)}
+                                    >
+                                        Add Card
+                                    </Button>
+                                </div>
+
+                                {showAddCardForm && (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: -8 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        className="mb-4 p-5 border border-primary-200 bg-primary-50/30 rounded-2xl space-y-3"
+                                    >
+                                        <div>
+                                            <label className="block text-sm font-medium text-neutral-700 mb-1">Card Number</label>
+                                            <Input
+                                                placeholder="0000 0000 0000 0000"
+                                                value={newCardNumber}
+                                                onChange={(e) => setNewCardNumber(formatCardNum(e.target.value))}
+                                                maxLength={19}
+                                            />
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="block text-sm font-medium text-neutral-700 mb-1">Month</label>
+                                                <Input
+                                                    placeholder="MM"
+                                                    value={newCardMonth}
+                                                    onChange={(e) => setNewCardMonth(e.target.value.replace(/\D/g, '').slice(0, 2))}
+                                                    maxLength={2}
+                                                />
                                             </div>
                                             <div>
-                                                <p className="font-medium text-neutral-900">Mastercard</p>
-                                                <p className="text-sm text-neutral-500">•••• 5678 | Exp 12/26</p>
+                                                <label className="block text-sm font-medium text-neutral-700 mb-1">Year</label>
+                                                <Input
+                                                    placeholder="YY"
+                                                    value={newCardYear}
+                                                    onChange={(e) => setNewCardYear(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                                                    maxLength={4}
+                                                />
                                             </div>
                                         </div>
-                                        <div className="flex gap-2">
-                                            <Button variant="outline" size="sm">Remove</Button>
+                                        <div className="flex gap-2 pt-1">
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => setShowAddCardForm(false)}
+                                            >
+                                                Cancel
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                onClick={handleAddCard}
+                                                disabled={isAddingCard}
+                                            >
+                                                {isAddingCard ? 'Saving...' : 'Save Card'}
+                                            </Button>
                                         </div>
-                                    </div>
-                                    <div className="mt-4 pt-4 border-t border-neutral-100">
-                                        <Button variant="ghost" size="sm" icon={<MdAdd />}>Add Payment Method</Button>
-                                    </div>
+                                    </motion.div>
+                                )}
+
+                                <Card className="p-4 mb-6">
+                                    {cardsLoading ? (
+                                        <div className="space-y-3">
+                                            {[1, 2].map(i => (
+                                                <div key={i} className="h-16 rounded-xl bg-neutral-100 animate-pulse" />
+                                            ))}
+                                        </div>
+                                    ) : savedCards.length === 0 ? (
+                                        <div className="text-center py-6 text-sm text-neutral-500">
+                                            <MdCreditCard size={28} className="mx-auto mb-2 text-neutral-300" />
+                                            No cards saved yet
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            {savedCards.map(card => (
+                                                <div
+                                                    key={card.id}
+                                                    className="flex items-center justify-between p-3 rounded-xl border border-neutral-200 hover:border-primary-300 transition-colors"
+                                                >
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-10 h-7 bg-gradient-to-br from-neutral-700 to-neutral-900 rounded-md flex items-center justify-center">
+                                                            <MdCreditCard className="text-white" size={16} />
+                                                        </div>
+                                                        <div>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-sm font-semibold text-neutral-900">{card.brand}</span>
+                                                                {card.isDefault && (
+                                                                    <span className="px-1.5 py-0.5 bg-primary-100 text-primary-700 text-xs font-medium rounded-full">Default</span>
+                                                                )}
+                                                            </div>
+                                                            <span className="text-xs text-neutral-500 font-mono">•••• {card.last4} | {card.expiryMonth}/{card.expiryYear}</span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex gap-1">
+                                                        {!card.isDefault && (
+                                                            <Button
+                                                                size="sm"
+                                                                variant="outline"
+                                                                onClick={() => handleSetDefaultCard(card.id)}
+                                                            >
+                                                                Set Default
+                                                            </Button>
+                                                        )}
+                                                        <button
+                                                            onClick={() => handleRemoveCard(card.id)}
+                                                            className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                                        >
+                                                            <MdDelete size={18} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </Card>
                             </>
                         )}

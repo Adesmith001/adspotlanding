@@ -4,6 +4,11 @@ import {
   setDoc,
   updateDoc,
   serverTimestamp,
+  collection,
+  addDoc,
+  getDocs,
+  deleteDoc,
+  writeBatch,
 } from "firebase/firestore";
 import { db } from "./firebase";
 
@@ -137,6 +142,128 @@ export const updateUserPreferences = async (
     }
   } catch (error) {
     console.error("Error updating user preferences:", error);
+    throw error;
+  }
+};
+
+// ─── Saved Cards ────────────────────────────────────────────────────────────
+const SAVED_CARDS_COLLECTION = "savedCards";
+
+export interface SavedCard {
+  id: string;
+  last4: string;
+  brand: string;
+  expiryMonth: string;
+  expiryYear: string;
+  isDefault: boolean;
+  createdAt?: any;
+}
+
+/**
+ * Fetch all saved cards for a user
+ */
+export const getSavedCards = async (uid: string): Promise<SavedCard[]> => {
+  try {
+    const cardsRef = collection(
+      db,
+      USERS_COLLECTION,
+      uid,
+      SAVED_CARDS_COLLECTION,
+    );
+    const snapshot = await getDocs(cardsRef);
+    return snapshot.docs.map((d) => ({
+      id: d.id,
+      ...d.data(),
+    })) as SavedCard[];
+  } catch (error) {
+    console.error("Error fetching saved cards:", error);
+    throw error;
+  }
+};
+
+/**
+ * Add a new saved card. Auto-sets as default if it's the first card.
+ */
+export const addSavedCard = async (
+  uid: string,
+  card: Omit<SavedCard, "id" | "createdAt">,
+): Promise<string> => {
+  try {
+    const cardsRef = collection(
+      db,
+      USERS_COLLECTION,
+      uid,
+      SAVED_CARDS_COLLECTION,
+    );
+    const existing = await getDocs(cardsRef);
+    const isFirstCard = existing.empty;
+    const shouldBeDefault = isFirstCard || card.isDefault;
+
+    // Clear existing defaults if this one becomes default
+    if (shouldBeDefault && !existing.empty) {
+      const batch = writeBatch(db);
+      existing.docs.forEach((ds) =>
+        batch.update(ds.ref, { isDefault: false }),
+      );
+      await batch.commit();
+    }
+
+    const docRef = await addDoc(cardsRef, {
+      ...card,
+      isDefault: shouldBeDefault,
+      createdAt: serverTimestamp(),
+    });
+    return docRef.id;
+  } catch (error) {
+    console.error("Error adding card:", error);
+    throw error;
+  }
+};
+
+/**
+ * Remove a saved card by ID
+ */
+export const removeSavedCard = async (
+  uid: string,
+  cardId: string,
+): Promise<void> => {
+  try {
+    const cardRef = doc(
+      db,
+      USERS_COLLECTION,
+      uid,
+      SAVED_CARDS_COLLECTION,
+      cardId,
+    );
+    await deleteDoc(cardRef);
+  } catch (error) {
+    console.error("Error removing card:", error);
+    throw error;
+  }
+};
+
+/**
+ * Set a card as default (clears default on all others)
+ */
+export const setDefaultCard = async (
+  uid: string,
+  cardId: string,
+): Promise<void> => {
+  try {
+    const cardsRef = collection(
+      db,
+      USERS_COLLECTION,
+      uid,
+      SAVED_CARDS_COLLECTION,
+    );
+    const snapshot = await getDocs(cardsRef);
+    const batch = writeBatch(db);
+    snapshot.docs.forEach((ds) =>
+      batch.update(ds.ref, { isDefault: ds.id === cardId }),
+    );
+    await batch.commit();
+  } catch (error) {
+    console.error("Error setting default card:", error);
     throw error;
   }
 };
