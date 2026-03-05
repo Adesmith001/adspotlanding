@@ -238,8 +238,8 @@ const BrowseBillboards: React.FC = () => {
             </div>
 
             {/* Filters Bar */}
-            <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-3">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
+                <div className="flex items-center gap-3 flex-wrap">
                     <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
                         <Button
                             variant="outline"
@@ -275,13 +275,13 @@ const BrowseBillboards: React.FC = () => {
                     </AnimatePresence>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full lg:w-auto">
                     {/* View Mode Toggle */}
-                    <div className="flex items-center bg-neutral-100 rounded-full p-1">
+                    <div className="flex items-center bg-neutral-100 rounded-full p-1 w-full sm:w-auto">
                         <motion.button
                             whileTap={{ scale: 0.95 }}
                             onClick={() => setViewMode('list')}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all ${viewMode === 'list'
+                            className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all ${viewMode === 'list'
                                 ? 'bg-white text-neutral-900 shadow-sm'
                                 : 'text-neutral-500 hover:text-neutral-700'
                                 }`}
@@ -292,7 +292,7 @@ const BrowseBillboards: React.FC = () => {
                         <motion.button
                             whileTap={{ scale: 0.95 }}
                             onClick={() => setViewMode('map')}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all ${viewMode === 'map'
+                            className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all ${viewMode === 'map'
                                 ? 'bg-white text-neutral-900 shadow-sm'
                                 : 'text-neutral-500 hover:text-neutral-700'
                                 }`}
@@ -303,12 +303,12 @@ const BrowseBillboards: React.FC = () => {
                     </div>
 
                     {/* Sort */}
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
                         <span className="text-sm text-neutral-500">Sort by:</span>
                         <select
                             value={sortBy}
                             onChange={(e) => setSortBy(e.target.value as SortOption)}
-                            className="px-4 py-2 bg-white border border-neutral-200 rounded-full text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary-500 cursor-pointer"
+                            className="px-4 py-2 bg-white border border-neutral-200 rounded-full text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary-500 cursor-pointer w-full sm:w-auto"
                         >
                             <option value="newest">Newest</option>
                             <option value="price-asc">Price: Low to High</option>
@@ -472,7 +472,8 @@ const BrowseBillboards: React.FC = () => {
                             center={mapCenterCalc}
                             zoom={12}
                             scrollWheelZoom={true}
-                            style={{ height: '600px', width: '100%' }}
+                            className="h-[420px] md:h-[600px]"
+                            style={{ width: '100%' }}
                         >
                             <TileLayer
                                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'

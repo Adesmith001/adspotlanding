@@ -45,7 +45,7 @@ const Listings: React.FC = () => {
     useEffect(() => {
         const city = searchParams.get('city');
         const maxPrice = searchParams.get('maxPrice');
-        
+
         if (city) setSelectedCity(city);
         if (maxPrice) setPriceRange([0, parseInt(maxPrice)]);
     }, [searchParams]);
@@ -171,8 +171,8 @@ const Listings: React.FC = () => {
             subtitle="Discover premium outdoor advertising spaces"
         >
             {/* Search Bar */}
-            <div className="mb-6">
-                <div className="relative max-w-2xl">
+            <div className="mb-4 sm:mb-6">
+                <div className="relative w-full max-w-2xl">
                     <MdSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-400" size={20} />
                     <input
                         type="text"
@@ -185,7 +185,7 @@ const Listings: React.FC = () => {
             </div>
 
             {/* Filters Bar */}
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
                 <div className="flex items-center gap-3">
                     <Button
                         variant="outline"
@@ -211,12 +211,12 @@ const Listings: React.FC = () => {
                 </div>
 
                 {/* Sort */}
-                <div className="flex items-center gap-2">
-                    <span className="text-sm text-neutral-600">Sort by:</span>
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <span className="text-sm text-neutral-600 whitespace-nowrap">Sort by:</span>
                     <select
                         value={sortBy}
                         onChange={(e) => setSortBy(e.target.value as SortOption)}
-                        className="px-4 py-2 bg-white border border-neutral-200 rounded-full text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        className="px-4 py-2 bg-white border border-neutral-200 rounded-full text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary-500 w-full sm:w-auto"
                     >
                         <option value="newest">Newest</option>
                         <option value="price-asc">Price: Low to High</option>

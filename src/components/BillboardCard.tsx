@@ -39,7 +39,7 @@ const BillboardCard: React.FC<BillboardCardProps> = ({ billboard, onFavorite, is
             className="group relative bg-white rounded-2xl overflow-hidden border border-neutral-200/80 hover:border-neutral-300 hover:shadow-xl transition-shadow duration-300"
         >
             {/* Image */}
-            <Link to={`/billboards/${billboard.id}`} className="block relative h-64 overflow-hidden bg-neutral-100">
+            <Link to={`/billboards/${billboard.id}`} className="block relative h-56 md:h-64 overflow-hidden bg-neutral-100">
                 {billboard.photos.length > 0 ? (
                     <>
                         {!isImageLoaded && (
@@ -98,6 +98,7 @@ const BillboardCard: React.FC<BillboardCardProps> = ({ billboard, onFavorite, is
                         whileTap={{ scale: 0.8 }}
                         onClick={(e) => {
                             e.preventDefault();
+                            e.stopPropagation();
                             onFavorite(billboard.id);
                         }}
                         className="absolute top-3 right-3 w-10 h-10 bg-white/95 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-white transition-colors shadow-lg"

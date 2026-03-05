@@ -9,7 +9,7 @@ export interface User {
   updatedAt: Date;
 }
 
-export type UserRole = "owner" | "advertiser";
+export type UserRole = "owner" | "advertiser" | "admin";
 
 export interface UserProfile extends User {
   firstName?: string;

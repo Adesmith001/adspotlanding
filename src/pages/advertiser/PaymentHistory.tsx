@@ -159,7 +159,7 @@ const PaymentHistory: React.FC = () => {
                         variants={containerVariants}
                         initial="hidden"
                         animate="visible"
-                        className="grid grid-cols-1 md:grid-cols-3 gap-6"
+                        className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6"
                     >
                         {summaryCards.map((card, index) => (
                             <motion.div key={index} variants={itemVariants}>
@@ -188,14 +188,14 @@ const PaymentHistory: React.FC = () => {
                     >
                         <Card className="overflow-hidden">
                             <div className="overflow-x-auto">
-                                <table className="w-full">
+                                <table className="w-full min-w-[780px]">
                                     <thead className="bg-neutral-50/80 border-b border-neutral-200">
                                         <tr>
-                                            <th className="text-left px-6 py-4 text-sm font-medium text-neutral-500">Transaction</th>
-                                            <th className="text-left px-6 py-4 text-sm font-medium text-neutral-500">Amount</th>
-                                            <th className="text-left px-6 py-4 text-sm font-medium text-neutral-500">Status</th>
-                                            <th className="text-left px-6 py-4 text-sm font-medium text-neutral-500">Date</th>
-                                            <th className="text-right px-6 py-4 text-sm font-medium text-neutral-500">Receipt</th>
+                                            <th className="text-left px-4 sm:px-6 py-4 text-sm font-medium text-neutral-500">Transaction</th>
+                                            <th className="text-left px-4 sm:px-6 py-4 text-sm font-medium text-neutral-500">Amount</th>
+                                            <th className="text-left px-4 sm:px-6 py-4 text-sm font-medium text-neutral-500">Status</th>
+                                            <th className="text-left px-4 sm:px-6 py-4 text-sm font-medium text-neutral-500">Date</th>
+                                            <th className="text-right px-4 sm:px-6 py-4 text-sm font-medium text-neutral-500">Receipt</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -207,7 +207,7 @@ const PaymentHistory: React.FC = () => {
                                                 transition={{ duration: 0.3, delay: 0.35 + index * 0.04 }}
                                                 className="border-b border-neutral-100 hover:bg-neutral-50/50 transition-colors group"
                                             >
-                                                <td className="px-6 py-4">
+                                                <td className="px-4 sm:px-6 py-4">
                                                     <div className="flex items-center gap-3">
                                                         {getStatusIcon(payment.status)}
                                                         <div>
@@ -216,10 +216,10 @@ const PaymentHistory: React.FC = () => {
                                                         </div>
                                                     </div>
                                                 </td>
-                                                <td className="px-6 py-4">
+                                                <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
                                                     <span className="font-bold text-neutral-900">{formatPrice(payment.amount)}</span>
                                                 </td>
-                                                <td className="px-6 py-4">
+                                                <td className="px-4 sm:px-6 py-4">
                                                     <span className={`px-3 py-1 rounded-full text-xs font-medium inline-flex items-center gap-1.5 ${getStatusLabel(payment.status).className}`}>
                                                         {payment.status === 'pending' && (
                                                             <span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-live-pulse" />
@@ -227,10 +227,10 @@ const PaymentHistory: React.FC = () => {
                                                         {getStatusLabel(payment.status).text}
                                                     </span>
                                                 </td>
-                                                <td className="px-6 py-4 text-sm text-neutral-600">
+                                                <td className="px-4 sm:px-6 py-4 text-sm text-neutral-600 whitespace-nowrap">
                                                     {formatDate(payment.createdAt)}
                                                 </td>
-                                                <td className="px-6 py-4 text-right">
+                                                <td className="px-4 sm:px-6 py-4 text-right">
                                                     {payment.status === 'paid' && (
                                                         <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                                                             <Button size="sm" variant="outline" icon={<MdDownload />}>

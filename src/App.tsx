@@ -35,6 +35,12 @@ import Messages from './pages/shared/Messages';
 import BillboardDetails from './pages/shared/BillboardDetails';
 import Settings from './pages/shared/Settings';
 
+// Pages - Admin
+import AdminDashboard from './pages/admin/AdminDashboard';
+import UserManagement from './pages/admin/UserManagement';
+import ListingVerification from './pages/admin/ListingVerification';
+import AdminTransactions from './pages/admin/AdminTransactions';
+
 // Components
 import ProtectedRoute from './components/auth/ProtectedRoute';
 
@@ -170,6 +176,48 @@ function AppContent() {
                     element={
                         <ProtectedRoute>
                             <Settings userRole="advertiser" />
+                        </ProtectedRoute>
+                    }
+                />
+
+                {/* Admin Dashboard Routes */}
+                <Route
+                    path="/dashboard/admin"
+                    element={
+                        <ProtectedRoute>
+                            <AdminDashboard />
+                        </ProtectedRoute>
+                    }
+                />
+                <Route
+                    path="/dashboard/admin/users"
+                    element={
+                        <ProtectedRoute>
+                            <UserManagement />
+                        </ProtectedRoute>
+                    }
+                />
+                <Route
+                    path="/dashboard/admin/listings"
+                    element={
+                        <ProtectedRoute>
+                            <ListingVerification />
+                        </ProtectedRoute>
+                    }
+                />
+                <Route
+                    path="/dashboard/admin/transactions"
+                    element={
+                        <ProtectedRoute>
+                            <AdminTransactions />
+                        </ProtectedRoute>
+                    }
+                />
+                <Route
+                    path="/dashboard/admin/settings"
+                    element={
+                        <ProtectedRoute>
+                            <Settings userRole="admin" />
                         </ProtectedRoute>
                     }
                 />

@@ -143,12 +143,12 @@ const Login: React.FC = () => {
             </motion.div>
 
             {/* Right Panel - Login Form */}
-            <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-white">
+            <div className="w-full lg:w-1/2 flex items-center justify-center p-4 sm:p-8 bg-white">
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5, delay: 0.2 }}
-                    className="max-w-md w-full"
+                    className="max-w-md w-full px-4 sm:px-0"
                 >
                     {/* Mobile Logo */}
                     <div className="lg:hidden text-center mb-8">

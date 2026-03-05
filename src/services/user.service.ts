@@ -27,7 +27,7 @@ export interface UserProfile {
   bio?: string;
   company?: string;
   website?: string;
-  role: "owner" | "advertiser";
+  role: "owner" | "advertiser" | "admin";
   preferences: UserPreferences;
   createdAt?: any;
   updatedAt?: any;
@@ -48,7 +48,7 @@ export const syncUserProfile = async (
   uid: string,
   email: string,
   displayName: string,
-  role: "owner" | "advertiser",
+  role: "owner" | "advertiser" | "admin",
 ): Promise<void> => {
   try {
     const userRef = doc(db, USERS_COLLECTION, uid);

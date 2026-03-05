@@ -152,6 +152,7 @@ const Favorites: React.FC = () => {
                                                 whileTap={{ scale: 0.8 }}
                                                 onClick={(e) => {
                                                     e.preventDefault();
+                                                    e.stopPropagation();
                                                     handleRemoveFavorite(billboard.id);
                                                 }}
                                                 className="absolute top-3 right-3 w-10 h-10 bg-white/95 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-red-50 transition-colors shadow-md"

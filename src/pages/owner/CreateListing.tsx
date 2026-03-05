@@ -459,7 +459,7 @@ const CreateListing: React.FC = () => {
             case 4:
                 return (
                     <div className="space-y-6">
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-sm font-medium text-neutral-700 mb-2">Width *</label>
                                 <Input type="number" placeholder="e.g., 20" value={formData.width || ''} onChange={(e) => updateFormData('width', Number(e.target.value))} />
@@ -482,7 +482,7 @@ const CreateListing: React.FC = () => {
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-neutral-700 mb-2">Billboard Type *</label>
-                            <div className="grid grid-cols-3 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                 {(['flex', 'digital', 'led'] as BillboardType[]).map((type) => (
                                     <motion.button key={type} type="button" onClick={() => updateFormData('type', type)} whileHover={{ y: -2 }} whileTap={{ scale: 0.97 }}
                                         className={`p-4 rounded-xl border-2 transition-all ${formData.type === type ? 'border-primary-600 bg-primary-50 shadow-soft' : 'border-neutral-200 hover:border-neutral-300'}`}>
@@ -556,7 +556,7 @@ const CreateListing: React.FC = () => {
                                 <p className="text-sm text-neutral-500">Advertisers can book immediately without approval</p>
                             </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-sm font-medium text-neutral-700 mb-2">Minimum Duration (days)</label>
                                 <Input type="number" min="1" value={formData.minDuration} onChange={(e) => updateFormData('minDuration', Number(e.target.value))} />
@@ -654,12 +654,13 @@ const CreateListing: React.FC = () => {
 
     return (
         <DashboardLayout userRole="owner" title="Create New Listing" subtitle="Add a new billboard to your inventory">
-            <div className="max-w-3xl mx-auto">
+            <div className="max-w-4xl mx-auto">
                 {/* Progress Steps */}
                 <div className="mb-10">
-                    <div className="flex items-center justify-between">
-                        {STEPS.map((step, index) => (
-                            <div key={step.id} className="flex items-center">
+                    <div className="overflow-x-auto pb-2">
+                        <div className="flex items-center justify-between min-w-[760px]">
+                            {STEPS.map((step, index) => (
+                                <div key={step.id} className="flex items-center">
                                 <motion.div
                                     initial={false}
                                     animate={{
@@ -672,18 +673,19 @@ const CreateListing: React.FC = () => {
                                 >
                                     {currentStep > step.id ? <MdCheck size={18} /> : step.id}
                                 </motion.div>
-                                {index < STEPS.length - 1 && (
-                                    <div className="hidden md:block w-12 lg:w-24 h-1 bg-neutral-200 relative overflow-hidden rounded-full">
-                                        <motion.div
-                                            initial={{ width: '0%' }}
-                                            animate={{ width: currentStep > step.id ? '100%' : '0%' }}
-                                            transition={{ duration: 0.5, ease: 'easeOut' }}
-                                            className="absolute inset-y-0 left-0 bg-green-500 rounded-full"
-                                        />
-                                    </div>
-                                )}
-                            </div>
-                        ))}
+                                    {index < STEPS.length - 1 && (
+                                        <div className="hidden md:block w-12 lg:w-24 h-1 bg-neutral-200 relative overflow-hidden rounded-full">
+                                            <motion.div
+                                                initial={{ width: '0%' }}
+                                                animate={{ width: currentStep > step.id ? '100%' : '0%' }}
+                                                transition={{ duration: 0.5, ease: 'easeOut' }}
+                                                className="absolute inset-y-0 left-0 bg-green-500 rounded-full"
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
                     </div>
                     <motion.div
                         key={currentStep}
@@ -712,13 +714,14 @@ const CreateListing: React.FC = () => {
                 </Card>
 
                 {/* Navigation */}
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-3">
                     <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
                         <Button
                             variant="outline"
                             onClick={() => setCurrentStep((prev) => Math.max(1, prev - 1))}
                             disabled={currentStep === 1}
                             icon={<MdArrowBack />}
+                            className="w-full sm:w-auto"
                         >
                             Previous
                         </Button>
@@ -726,11 +729,11 @@ const CreateListing: React.FC = () => {
 
                     <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
                         {currentStep < 7 ? (
-                            <Button onClick={() => setCurrentStep((prev) => Math.min(7, prev + 1))} disabled={!canProceed()} icon={<MdArrowForward />}>
+                            <Button onClick={() => setCurrentStep((prev) => Math.min(7, prev + 1))} disabled={!canProceed()} icon={<MdArrowForward />} className="w-full sm:w-auto">
                                 Next
                             </Button>
                         ) : (
-                            <Button onClick={handleSubmit} loading={isSubmitting} disabled={!canProceed() || isSubmitting}>
+                            <Button onClick={handleSubmit} loading={isSubmitting} disabled={!canProceed() || isSubmitting} className="w-full sm:w-auto">
                                 Submit Listing
                             </Button>
                         )}

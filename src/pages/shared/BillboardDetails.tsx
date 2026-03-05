@@ -1,5 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+
+// Fix for default Leaflet icon marker
+import markerIcon from 'leaflet/dist/images/marker-icon.png';
+import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
+import markerShadow from 'leaflet/dist/images/marker-shadow.png';
+
+// @ts-expect-error - Icon scaling fix
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+    iconUrl: markerIcon,
+    iconRetinaUrl: markerIcon2x,
+    shadowUrl: markerShadow,
+});
 import { motion } from 'framer-motion';
 import {
     MdArrowBack,
@@ -20,7 +36,9 @@ import Card from '@/components/ui/Card';
 import EmptyState from '@/components/EmptyState';
 import { useAppSelector } from '@/hooks/useRedux';
 import { selectUser, selectIsAuthenticated } from '@/store/authSlice';
-import { getBillboard, incrementBillboardViews, getBillboardReviews, toggleFavorite, isBillboardFavorited } from '@/services/billboard.service';
+import { getBillboard, createBooking, incrementBillboardViews, getBillboardReviews, toggleFavorite, isBillboardFavorited } from '@/services/billboard.service';
+import { processPayment } from '@/services/payment.service';
+import { createNotification } from '@/services/notification.service';
 import { startConversation } from '@/services/message.service';
 import { syncUserProfile, getUserProfile } from '@/services/user.service';
 import type { Billboard, Review } from '@/types/billboard.types';
@@ -37,7 +55,6 @@ const BillboardDetails: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
     const [isFavorited, setIsFavorited] = useState(false);
-    // @ts-expect-error - Variable used in future implementation
     const [isBooking, setIsBooking] = useState(false);
 
     // Booking form state
@@ -166,12 +183,6 @@ const BillboardDetails: React.FC = () => {
 
         if (!billboard) return;
 
-        // Temporarily disable booking processing
-        toast.error('Failed to process booking');
-        return;
-
-        // TODO: Re-enable after payment integration is complete
-        /*
         setIsBooking(true);
         const toastId = toast.loading('Processing booking request...');
 
@@ -188,16 +199,18 @@ const BillboardDetails: React.FC = () => {
                 }
             );
 
-            // 2. Mock Payment if Instant Book
+            // 2. Process Payment via KoraPay if Instant Book
             if (billboard.bookingRules.instantBook) {
-                toast.loading('Processing payment...', { id: toastId });
+                toast.loading('Launching payment...', { id: toastId });
                 await processPayment(
                     bookingId,
                     totalPrice,
-                    'card',
+                    'korapay',
                     user.uid,
                     billboard.ownerId,
-                    billboard.title
+                    billboard.title,
+                    user.displayName || 'Advertiser',
+                    user.email || '',
                 );
 
                 toast.success('Booking confirmed & paid!', { id: toastId });
@@ -218,13 +231,12 @@ const BillboardDetails: React.FC = () => {
             // Redirect to campaigns
             navigate('/dashboard/advertiser/campaigns');
 
-        } catch (error) {
+        } catch (error: any) {
             console.error('Booking failed:', error);
-            toast.error('Failed to process booking', { id: toastId });
+            toast.error(error.message || 'Failed to process booking', { id: toastId });
         } finally {
             setIsBooking(false);
         }
-        */
     };
 
     // Load initial favorite status
@@ -395,7 +407,7 @@ const BillboardDetails: React.FC = () => {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5, delay: 0.3 }}
-                    className="relative h-[400px] md:h-[500px] rounded-3xl overflow-hidden mb-8 bg-gradient-to-br from-neutral-200 to-neutral-300 shadow-card"
+                    className="relative h-[300px] sm:h-[400px] md:h-[500px] rounded-3xl overflow-hidden mb-8 bg-gradient-to-br from-neutral-200 to-neutral-300 shadow-card"
                 >
                     {billboard.photos.length > 0 ? (
                         <>
@@ -511,10 +523,10 @@ const BillboardDetails: React.FC = () => {
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ duration: 0.5, delay: 0.6 }}
-                                className="flex items-center gap-2 text-neutral-600 bg-gradient-to-r from-neutral-50 to-white px-4 py-2 rounded-xl shadow-soft"
+                                className="flex items-start sm:items-center gap-2 text-neutral-600 bg-gradient-to-r from-neutral-50 to-white px-4 py-2 rounded-xl shadow-soft"
                             >
                                 <MdLocationOn size={20} className="text-primary-600" />
-                                <span className="font-medium">
+                                <span className="font-medium break-words">
                                     {billboard.location.address}, {billboard.location.city}, {billboard.location.state}
                                 </span>
                             </motion.div>
@@ -529,31 +541,31 @@ const BillboardDetails: React.FC = () => {
                             <Card className="p-6 shadow-soft bg-gradient-to-br from-white to-primary-50/50">
                                 <h2 className="text-lg font-bold text-neutral-900 mb-4">Specifications</h2>
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                                <div>
-                                    <p className="text-sm text-neutral-500 mb-1">Dimensions</p>
-                                    <p className="font-bold text-neutral-900">
-                                        {billboard.dimensions.width}×{billboard.dimensions.height} {billboard.dimensions.unit}
-                                    </p>
+                                    <div>
+                                        <p className="text-sm text-neutral-500 mb-1">Dimensions</p>
+                                        <p className="font-bold text-neutral-900">
+                                            {billboard.dimensions.width}×{billboard.dimensions.height} {billboard.dimensions.unit}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm text-neutral-500 mb-1">Orientation</p>
+                                        <p className="font-bold text-neutral-900 capitalize">{billboard.orientation}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm text-neutral-500 mb-1">Traffic Score</p>
+                                        <p className="font-bold text-neutral-900 flex items-center gap-1">
+                                            <MdTrendingUp size={16} className="text-green-600" />
+                                            {billboard.trafficScore}/10
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm text-neutral-500 mb-1">Rating</p>
+                                        <p className="font-bold text-neutral-900 flex items-center gap-1">
+                                            <MdStar size={16} className="text-amber-500" />
+                                            {billboard.rating > 0 ? `${billboard.rating.toFixed(1)} (${billboard.reviewCount})` : 'New'}
+                                        </p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <p className="text-sm text-neutral-500 mb-1">Orientation</p>
-                                    <p className="font-bold text-neutral-900 capitalize">{billboard.orientation}</p>
-                                </div>
-                                <div>
-                                    <p className="text-sm text-neutral-500 mb-1">Traffic Score</p>
-                                    <p className="font-bold text-neutral-900 flex items-center gap-1">
-                                        <MdTrendingUp size={16} className="text-green-600" />
-                                        {billboard.trafficScore}/10
-                                    </p>
-                                </div>
-                                <div>
-                                    <p className="text-sm text-neutral-500 mb-1">Rating</p>
-                                    <p className="font-bold text-neutral-900 flex items-center gap-1">
-                                        <MdStar size={16} className="text-amber-500" />
-                                        {billboard.rating > 0 ? `${billboard.rating.toFixed(1)} (${billboard.reviewCount})` : 'New'}
-                                    </p>
-                                </div>
-                            </div>
                             </Card>
                         </motion.div>
 
@@ -569,6 +581,50 @@ const BillboardDetails: React.FC = () => {
                             </Card>
                         </motion.div>
 
+                        {/* Location Map */}
+                        {billboard.location.lat !== 0 && billboard.location.lng !== 0 && (
+                            <motion.div
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ duration: 0.5, delay: 0.72 }}
+                            >
+                                <Card className="p-6 shadow-soft bg-gradient-to-br from-white to-primary-50/50">
+                                    <h2 className="text-lg font-bold text-neutral-900 mb-4 flex items-center gap-2">
+                                        <MdLocationOn size={20} className="text-primary-600" />
+                                        Billboard Location
+                                    </h2>
+                                    <div className="rounded-2xl overflow-hidden border-2 border-neutral-200 shadow-soft relative z-0">
+                                        <MapContainer
+                                            center={[billboard.location.lat, billboard.location.lng]}
+                                            zoom={16}
+                                            scrollWheelZoom={false}
+                                            style={{ height: '350px', width: '100%' }}
+                                        >
+                                            <TileLayer
+                                                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                                                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                                            />
+                                            <Marker position={[billboard.location.lat, billboard.location.lng]}>
+                                                <Popup>
+                                                    <div className="max-w-[200px] p-0">
+                                                        <h4 className="font-bold text-sm text-neutral-900 mb-1 line-clamp-1">
+                                                            {billboard.title}
+                                                        </h4>
+                                                        <p className="text-xs text-neutral-500">
+                                                            {billboard.location.address}, {billboard.location.city}
+                                                        </p>
+                                                    </div>
+                                                </Popup>
+                                            </Marker>
+                                        </MapContainer>
+                                    </div>
+                                    <p className="text-xs text-neutral-400 mt-3 font-mono">
+                                        Lat: {billboard.location.lat.toFixed(6)} • Lng: {billboard.location.lng.toFixed(6)}
+                                    </p>
+                                </Card>
+                            </motion.div>
+                        )}
+
                         {/* Owner Info */}
                         <motion.div
                             initial={{ opacity: 0, y: 20 }}
@@ -577,32 +633,32 @@ const BillboardDetails: React.FC = () => {
                         >
                             <Card className="p-6 shadow-soft bg-gradient-to-br from-white to-neutral-50/50">
                                 <h2 className="text-lg font-bold text-neutral-900 mb-4">Billboard Owner</h2>
-                                <div className="flex items-center justify-between gap-4">
-                                <div className="flex items-center gap-4">
-                                    <div className="w-14 h-14 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white text-xl font-bold">
-                                        {billboard.ownerName.charAt(0).toUpperCase()}
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-14 h-14 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white text-xl font-bold">
+                                            {billboard.ownerName.charAt(0).toUpperCase()}
+                                        </div>
+                                        <div>
+                                            <p className="font-bold text-neutral-900 flex items-center gap-2">
+                                                {billboard.ownerName}
+                                                {billboard.ownerVerified && (
+                                                    <MdVerified size={18} className="text-green-600" />
+                                                )}
+                                            </p>
+                                            <p className="text-sm text-neutral-500">
+                                                {billboard.totalBookings} successful bookings
+                                            </p>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <p className="font-bold text-neutral-900 flex items-center gap-2">
-                                            {billboard.ownerName}
-                                            {billboard.ownerVerified && (
-                                                <MdVerified size={18} className="text-green-600" />
-                                            )}
-                                        </p>
-                                        <p className="text-sm text-neutral-500">
-                                            {billboard.totalBookings} successful bookings
-                                        </p>
-                                    </div>
+                                    <motion.div
+                                        whileHover={{ scale: 1.05 }}
+                                        whileTap={{ scale: 0.95 }}
+                                    >
+                                        <Button variant="outline" icon={<MdMessage />} onClick={handleContact}>
+                                            Contact
+                                        </Button>
+                                    </motion.div>
                                 </div>
-                                <motion.div
-                                    whileHover={{ scale: 1.05 }}
-                                    whileTap={{ scale: 0.95 }}
-                                >
-                                    <Button variant="outline" icon={<MdMessage />} onClick={handleContact}>
-                                        Contact
-                                    </Button>
-                                </motion.div>
-                            </div>
                             </Card>
                         </motion.div>
 
@@ -618,39 +674,39 @@ const BillboardDetails: React.FC = () => {
                                 </h2>
                                 {reviews.length === 0 ? (
                                     <p className="text-neutral-500 text-center py-8">
-                                    No reviews yet. Be the first to review after your campaign!
-                                </p>
-                            ) : (
-                                <div className="space-y-6">
-                                    {reviews.map((review) => (
-                                        <div key={review.id} className="border-b border-neutral-100 pb-6 last:border-0 last:pb-0">
-                                            <div className="flex items-center gap-3 mb-3">
-                                                <div className="w-10 h-10 rounded-full bg-neutral-100 flex items-center justify-center text-neutral-600 font-bold">
-                                                    {review.advertiserName.charAt(0).toUpperCase()}
-                                                </div>
-                                                <div>
-                                                    <p className="font-medium text-neutral-900">{review.advertiserName}</p>
-                                                    <div className="flex items-center gap-2">
-                                                        <div className="flex">
-                                                            {[1, 2, 3, 4, 5].map((star) => (
-                                                                <MdStar
-                                                                    key={star}
-                                                                    size={14}
-                                                                    className={star <= review.rating ? 'text-amber-500' : 'text-neutral-200'}
-                                                                />
-                                                            ))}
+                                        No reviews yet. Be the first to review after your campaign!
+                                    </p>
+                                ) : (
+                                    <div className="space-y-6">
+                                        {reviews.map((review) => (
+                                            <div key={review.id} className="border-b border-neutral-100 pb-6 last:border-0 last:pb-0">
+                                                <div className="flex items-center gap-3 mb-3">
+                                                    <div className="w-10 h-10 rounded-full bg-neutral-100 flex items-center justify-center text-neutral-600 font-bold">
+                                                        {review.advertiserName.charAt(0).toUpperCase()}
+                                                    </div>
+                                                    <div>
+                                                        <p className="font-medium text-neutral-900">{review.advertiserName}</p>
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="flex">
+                                                                {[1, 2, 3, 4, 5].map((star) => (
+                                                                    <MdStar
+                                                                        key={star}
+                                                                        size={14}
+                                                                        className={star <= review.rating ? 'text-amber-500' : 'text-neutral-200'}
+                                                                    />
+                                                                ))}
+                                                            </div>
+                                                            <span className="text-xs text-neutral-500">
+                                                                {formatDate(review.createdAt)}
+                                                            </span>
                                                         </div>
-                                                        <span className="text-xs text-neutral-500">
-                                                            {formatDate(review.createdAt)}
-                                                        </span>
                                                     </div>
                                                 </div>
+                                                <p className="text-neutral-600">{review.comment}</p>
                                             </div>
-                                            <p className="text-neutral-600">{review.comment}</p>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
+                                        ))}
+                                    </div>
+                                )}
                             </Card>
                         </motion.div>
                     </div>
@@ -660,9 +716,9 @@ const BillboardDetails: React.FC = () => {
                         initial={{ opacity: 0, x: 20 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ duration: 0.5, delay: 0.85 }}
-                        className="lg:col-span-1"
+                        className="lg:col-span-1 w-full mt-8 lg:mt-0"
                     >
-                        <Card className="p-6 sticky top-24 shadow-card bg-gradient-to-br from-white to-primary-50/50">
+                        <Card className="p-6 lg:sticky lg:top-24 shadow-card bg-gradient-to-br from-white to-primary-50/50">
                             <motion.div
                                 initial={{ opacity: 0, y: 10 }}
                                 animate={{ opacity: 1, y: 0 }}
@@ -670,7 +726,7 @@ const BillboardDetails: React.FC = () => {
                                 className="mb-6"
                             >
                                 <p className="text-lg text-neutral-600 mb-1">Price per day</p>
-                                <p className="text-4xl font-bold text-transparent bg-gradient-to-r from-primary-600 to-accent-600 bg-clip-text">
+                                <p className="text-3xl sm:text-4xl font-bold text-transparent bg-gradient-to-r from-primary-600 to-accent-600 bg-clip-text">
                                     {formatPrice(billboard.pricing.daily)}
                                 </p>
                             </motion.div>

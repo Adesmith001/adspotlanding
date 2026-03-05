@@ -23,7 +23,7 @@ import type { PaymentTransaction } from '@/services/payment.service';
 import toast from 'react-hot-toast';
 
 interface SettingsProps {
-    userRole: 'owner' | 'advertiser';
+    userRole: 'owner' | 'advertiser' | 'admin';
 }
 
 type SettingsTab = 'profile' | 'security' | 'notifications' | 'billing';
@@ -405,7 +405,7 @@ const Settings: React.FC<SettingsProps> = ({ userRole }) => {
                             <>
                                 <h3 className="text-lg font-bold text-neutral-900 mb-4">Payout Settings</h3>
                                 <Card className="p-6 mb-6">
-                                    <div className="flex items-center justify-between mb-4">
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
                                         <div className="flex items-center gap-4">
                                             <div className="w-12 h-12 bg-neutral-100 rounded-full flex items-center justify-center text-neutral-600">
                                                 <MdCreditCard size={24} />
@@ -424,7 +424,7 @@ const Settings: React.FC<SettingsProps> = ({ userRole }) => {
                             <>
                                 <h3 className="text-lg font-bold text-neutral-900 mb-4">Payment Methods</h3>
                                 <Card className="p-6 mb-6">
-                                    <div className="flex items-center justify-between">
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                                         <div className="flex items-center gap-4">
                                             <div className="w-12 h-12 bg-neutral-100 rounded-full flex items-center justify-center text-neutral-600">
                                                 <MdCreditCard size={24} />
@@ -447,33 +447,37 @@ const Settings: React.FC<SettingsProps> = ({ userRole }) => {
 
                         <h3 className="text-lg font-bold text-neutral-900 mb-4">Billing History</h3>
                         <div className="border border-neutral-200 rounded-xl overflow-hidden">
-                            <div className="p-4 bg-neutral-50 border-b border-neutral-200 font-medium text-sm text-neutral-500 grid grid-cols-4">
-                                <span>Date</span>
-                                <span>Description</span>
-                                <span>Reference</span>
-                                <span className="text-right">Amount</span>
-                            </div>
-                            {payments.length === 0 ? (
-                                <div className="p-8 text-center text-neutral-500 text-sm">
-                                    <div className="w-12 h-12 bg-neutral-100 rounded-full flex items-center justify-center mx-auto mb-3 text-neutral-400">
-                                        <MdHistory size={24} />
+                            <div className="overflow-x-auto">
+                                <div className="min-w-[640px]">
+                                    <div className="p-4 bg-neutral-50 border-b border-neutral-200 font-medium text-sm text-neutral-500 grid grid-cols-4">
+                                        <span>Date</span>
+                                        <span>Description</span>
+                                        <span>Reference</span>
+                                        <span className="text-right">Amount</span>
                                     </div>
-                                    No transaction history available yet.
-                                </div>
-                            ) : (
-                                <div>
-                                    {payments.map(payment => (
-                                        <div key={payment.id} className="p-4 border-b border-neutral-100 last:border-0 hover:bg-neutral-50 grid grid-cols-4 text-sm items-center">
-                                            <span className="text-neutral-600">{new Date(payment.createdAt).toLocaleDateString()}</span>
-                                            <span className="font-medium text-neutral-900">{payment.billboardTitle}</span>
-                                            <span className="font-mono text-xs text-neutral-500">{payment.reference}</span>
-                                            <span className="text-right font-bold text-neutral-900">
-                                                {new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(payment.amount)}
-                                            </span>
+                                    {payments.length === 0 ? (
+                                        <div className="p-8 text-center text-neutral-500 text-sm">
+                                            <div className="w-12 h-12 bg-neutral-100 rounded-full flex items-center justify-center mx-auto mb-3 text-neutral-400">
+                                                <MdHistory size={24} />
+                                            </div>
+                                            No transaction history available yet.
                                         </div>
-                                    ))}
+                                    ) : (
+                                        <div>
+                                            {payments.map(payment => (
+                                                <div key={payment.id} className="p-4 border-b border-neutral-100 last:border-0 hover:bg-neutral-50 grid grid-cols-4 text-sm items-center">
+                                                    <span className="text-neutral-600">{new Date(payment.createdAt).toLocaleDateString()}</span>
+                                                    <span className="font-medium text-neutral-900">{payment.billboardTitle}</span>
+                                                    <span className="font-mono text-xs text-neutral-500">{payment.reference}</span>
+                                                    <span className="text-right font-bold text-neutral-900">
+                                                        {new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(payment.amount)}
+                                                    </span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
-                            )}
+                            </div>
                         </div>
                     </div>
                 );
@@ -503,7 +507,7 @@ const Settings: React.FC<SettingsProps> = ({ userRole }) => {
                     className="w-full lg:w-64 flex-shrink-0"
                 >
                     <Card className="overflow-hidden shadow-card bg-gradient-to-br from-white to-neutral-50/50">
-                        <div className="flex flex-col">
+                        <div className="flex lg:flex-col overflow-x-auto lg:overflow-visible">
                             {tabs.map((tab, index) => (
                                 <motion.button
                                     key={tab.id}
@@ -513,7 +517,7 @@ const Settings: React.FC<SettingsProps> = ({ userRole }) => {
                                     whileHover={{ backgroundColor: activeTab === tab.id ? undefined : '#f9f7ff' }}
                                     whileTap={{ scale: 0.98 }}
                                     onClick={() => setActiveTab(tab.id)}
-                                    className={`flex items-center gap-3 px-6 py-4 text-sm font-medium transition-all border-l-4 ${activeTab === tab.id
+                                    className={`flex items-center gap-3 px-5 lg:px-6 py-4 text-sm font-medium transition-all border-b-2 lg:border-b-0 lg:border-l-4 whitespace-nowrap ${activeTab === tab.id
                                         ? 'border-primary-500 bg-gradient-to-r from-primary-50 to-primary-100/50 text-primary-700 shadow-soft'
                                         : 'border-transparent text-neutral-600'
                                         }`}

@@ -13,6 +13,37 @@ import { PaymentStatus } from "@/types/billboard.types";
 
 const PAYMENTS_COLLECTION = "payments";
 
+const KORAPAY_PUBLIC_KEY = import.meta.env.VITE_KORAPAY_PUBLIC_KEY || "";
+
+declare global {
+  interface Window {
+    Korapay: any;
+    KoraPay: any;
+  }
+}
+
+export interface KorapayConfig {
+  key: string;
+  reference: string;
+  amount: number;
+  currency: string;
+  customer: {
+    name: string;
+    email: string;
+  };
+  notification_url?: string;
+  onClose?: () => void;
+  onSuccess?: (data: KorapaySuccessData) => void;
+  onFailed?: (data: any) => void;
+}
+
+export interface KorapaySuccessData {
+  reference: string;
+  status: string;
+  amount: number;
+  [key: string]: any;
+}
+
 export interface PaymentTransaction {
   id: string;
   bookingId: string;
@@ -28,72 +59,128 @@ export interface PaymentTransaction {
 }
 
 /**
- * Process a mock payment
- * In a real app, this would integrate with Paystack/Stripe
+ * Generate a unique payment reference
+ */
+const generateReference = (): string => {
+  return `ADSPOT-${Date.now()}-${Math.random()
+    .toString(36)
+    .substr(2, 9)
+    .toUpperCase()}`;
+};
+
+/**
+ * Launch KoraPay checkout popup and process payment
  */
 export const processPayment = async (
   bookingId: string,
   amount: number,
-  paymentMethod: string,
+  _paymentMethod: string,
   advertiserId: string,
   ownerId: string,
   billboardTitle: string,
+  customerName: string,
+  customerEmail: string,
 ): Promise<{ success: boolean; reference: string }> => {
-  try {
-    // 1. Simulate payment processing delay
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+  return new Promise((resolve, reject) => {
+    const KoraSDK = window.Korapay || window.KoraPay;
 
-    // 2. Mock a transaction reference
-    const reference = `REF-${Date.now()}-${Math.random()
-      .toString(36)
-      .substr(2, 9)
-      .toUpperCase()}`;
+    if (!KoraSDK) {
+      reject(
+        new Error(
+          "KoraPay SDK not loaded. Please refresh the page and try again.",
+        ),
+      );
+      return;
+    }
 
-    // 3. Create payment record
-    const payment = {
-      bookingId,
-      billboardTitle,
-      advertiserId,
-      ownerId,
+    if (
+      !KORAPAY_PUBLIC_KEY ||
+      KORAPAY_PUBLIC_KEY === "your_korapay_public_key_here"
+    ) {
+      reject(new Error("KoraPay public key is not configured."));
+      return;
+    }
+
+    const reference = generateReference();
+
+    const config: KorapayConfig = {
+      key: KORAPAY_PUBLIC_KEY,
+      reference,
       amount,
       currency: "NGN",
-      status: "paid",
-      paymentMethod,
-      reference,
-      createdAt: serverTimestamp(),
+      customer: {
+        name: customerName,
+        email: customerEmail,
+      },
+      onSuccess: async (data: KorapaySuccessData) => {
+        try {
+          // 1. Create payment record in Firestore
+          const payment = {
+            bookingId,
+            billboardTitle,
+            advertiserId,
+            ownerId,
+            amount,
+            currency: "NGN",
+            status: "paid",
+            paymentMethod: "korapay",
+            reference: data.reference || reference,
+            korapayData: data,
+            createdAt: serverTimestamp(),
+          };
+
+          await addDoc(collection(db, PAYMENTS_COLLECTION), payment);
+
+          // 2. Update booking status
+          await updateBookingStatus(bookingId, "active");
+          await updatePaymentStatus(
+            bookingId,
+            "paid",
+            data.reference || reference,
+          );
+
+          // 3. Notify Owner
+          await createNotification(
+            ownerId,
+            "payment_received",
+            "Payment Received",
+            `You received ₦${amount.toLocaleString()} for booking on "${billboardTitle}"`,
+            { bookingId },
+            "/dashboard/owner/analytics",
+          );
+
+          // 4. Notify Advertiser
+          await createNotification(
+            advertiserId,
+            "booking_confirmed",
+            "Payment Successful",
+            `Your booking for "${billboardTitle}" is now active.`,
+            { bookingId },
+            "/dashboard/advertiser/campaigns",
+          );
+
+          resolve({ success: true, reference: data.reference || reference });
+        } catch (error) {
+          console.error(
+            "Error recording payment after KoraPay success:",
+            error,
+          );
+          // Payment was successful on KoraPay side, but we failed to update our records
+          // Still resolve with success so user knows payment went through
+          resolve({ success: true, reference: data.reference || reference });
+        }
+      },
+      onClose: () => {
+        reject(new Error("Payment was cancelled."));
+      },
+      onFailed: (data: any) => {
+        console.error("KoraPay payment failed:", data);
+        reject(new Error("Payment failed. Please try again."));
+      },
     };
 
-    await addDoc(collection(db, PAYMENTS_COLLECTION), payment);
-
-    // 4. Update booking status
-    await updateBookingStatus(bookingId, "active");
-    await updatePaymentStatus(bookingId, "paid", reference);
-
-    // 5. Notify Owner
-    await createNotification(
-      ownerId,
-      "payment_received",
-      "Payment Received",
-      `You received payment for booking on "${billboardTitle}"`,
-      { bookingId },
-      "/dashboard/owner/analytics",
-    );
-
-    // 6. Notify Advertiser
-    await createNotification(
-      advertiserId,
-      "booking_confirmed",
-      "Payment Successful",
-      `Your booking for "${billboardTitle}" is now active.`,
-      { bookingId },
-      "/dashboard/advertiser/campaigns",
-    );
-
-    return { success: true, reference };
-  } catch (error) {
-    console.error("Error processing payment:", error);
-    throw error;
-  }
+    KoraSDK.initialize(config);
+  });
 };
 
 /**
@@ -101,14 +188,13 @@ export const processPayment = async (
  */
 export const getPaymentHistory = async (
   userId: string,
-  role: "owner" | "advertiser",
+  role: "owner" | "advertiser" | "admin",
 ): Promise<PaymentTransaction[]> => {
   try {
     const field = role === "owner" ? "ownerId" : "advertiserId";
     const q = query(
       collection(db, PAYMENTS_COLLECTION),
       where(field, "==", userId),
-      // orderBy("createdAt", "desc"), // Removed to avoid index issues
     );
 
     const snapshot = await getDocs(q);

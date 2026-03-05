@@ -159,12 +159,12 @@ const MyCampaigns: React.FC = () => {
             }
         >
             {/* Tabs */}
-            <div className="flex gap-2 mb-8 relative">
+            <div className="flex gap-2 mb-8 relative overflow-x-auto pb-1">
                 {tabs.map((tab) => (
                     <button
                         key={tab.key}
                         onClick={() => setActiveTab(tab.key)}
-                        className={`relative px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-200 ${activeTab === tab.key
+                        className={`relative px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-200 whitespace-nowrap ${activeTab === tab.key
                             ? 'text-white'
                             : 'text-neutral-600 hover:bg-neutral-100 border border-neutral-200 bg-white'
                             }`}
@@ -224,9 +224,9 @@ const MyCampaigns: React.FC = () => {
                         {filteredBookings.map((booking) => (
                             <motion.div key={booking.id} variants={itemVariants}>
                                 <Card className="overflow-hidden hover:shadow-lg transition-shadow duration-300">
-                                    <div className="flex">
+                                    <div className="flex flex-col sm:flex-row">
                                         {/* Billboard Image */}
-                                        <div className="w-32 h-32 flex-shrink-0 bg-neutral-100 overflow-hidden">
+                                        <div className="w-full h-44 sm:w-32 sm:h-32 flex-shrink-0 bg-neutral-100 overflow-hidden">
                                             {booking.billboardPhoto ? (
                                                 <img
                                                     src={booking.billboardPhoto}

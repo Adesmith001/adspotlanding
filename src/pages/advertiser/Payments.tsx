@@ -76,7 +76,7 @@ const Payments: React.FC = () => {
             >
                 <Card className="mb-8">
                     <div className="p-6 md:p-8">
-                        <div className="flex items-center justify-between mb-8">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
                             <div>
                                 <h2 className="text-xl font-bold text-neutral-900">Payment Methods</h2>
                                 <p className="text-sm text-neutral-500 mt-1">
@@ -105,7 +105,7 @@ const Payments: React.FC = () => {
                                     key={card.id}
                                     variants={itemVariants}
                                     whileHover={{ y: -2 }}
-                                    className="flex items-center justify-between p-5 border border-neutral-200 rounded-2xl hover:border-primary-300 hover:shadow-soft transition-all duration-200"
+                                    className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-5 border border-neutral-200 rounded-2xl hover:border-primary-300 hover:shadow-soft transition-all duration-200"
                                 >
                                     <div className="flex items-center gap-4">
                                         <div className="w-14 h-10 bg-gradient-to-br from-neutral-800 to-neutral-900 rounded-xl flex items-center justify-center shadow-md">
@@ -136,7 +136,7 @@ const Payments: React.FC = () => {
                                         </div>
                                     </div>
 
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
                                         {!card.isDefault && (
                                             <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
                                                 <Button
