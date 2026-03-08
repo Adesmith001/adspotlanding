@@ -4,6 +4,7 @@ import {
   query,
   where,
   getDocs,
+  onSnapshot,
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "./firebase";
@@ -56,6 +57,13 @@ export interface PaymentTransaction {
   paymentMethod: string;
   reference: string;
   createdAt: any;
+}
+
+export interface PaidBookingInfo {
+  bookingId: string;
+  reference: string;
+  amount: number;
+  createdAt: Date;
 }
 
 /**
@@ -114,7 +122,13 @@ export const processPayment = async (
       },
       onSuccess: async (data: KorapaySuccessData) => {
         try {
-          // 1. Create payment record in Firestore
+          const paymentReference = data.reference || reference;
+
+          // 1. Update booking first so campaigns can render even if later writes fail
+          await updateBookingStatus(bookingId, "active");
+          await updatePaymentStatus(bookingId, "paid", paymentReference);
+
+          // 2. Create payment record in Firestore
           const payment = {
             bookingId,
             billboardTitle,
@@ -124,20 +138,12 @@ export const processPayment = async (
             currency: "NGN",
             status: "paid",
             paymentMethod: "korapay",
-            reference: data.reference || reference,
+            reference: paymentReference,
             korapayData: data,
             createdAt: serverTimestamp(),
           };
 
           await addDoc(collection(db, PAYMENTS_COLLECTION), payment);
-
-          // 2. Update booking status
-          await updateBookingStatus(bookingId, "active");
-          await updatePaymentStatus(
-            bookingId,
-            "paid",
-            data.reference || reference,
-          );
 
           // 3. Notify Owner
           await createNotification(
@@ -159,7 +165,7 @@ export const processPayment = async (
             "/dashboard/advertiser/campaigns",
           );
 
-          resolve({ success: true, reference: data.reference || reference });
+          resolve({ success: true, reference: paymentReference });
         } catch (error) {
           console.error(
             "Error recording payment after KoraPay success:",
@@ -181,6 +187,53 @@ export const processPayment = async (
 
     KoraSDK.initialize(config);
   });
+};
+
+/**
+ * Subscribe to successful advertiser payments keyed by booking ID.
+ */
+export const subscribeToAdvertiserPaidBookings = (
+  advertiserId: string,
+  callback: (paidBookings: Record<string, PaidBookingInfo>) => void,
+): (() => void) => {
+  const q = query(
+    collection(db, PAYMENTS_COLLECTION),
+    where("advertiserId", "==", advertiserId),
+  );
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const paidBookings = snapshot.docs.reduce<Record<string, PaidBookingInfo>>(
+        (acc, doc) => {
+          const data = doc.data();
+          if (data.status !== "paid" || !data.bookingId) {
+            return acc;
+          }
+
+          const createdAt = data.createdAt?.toDate?.() || new Date();
+          const existing = acc[data.bookingId];
+          if (!existing || existing.createdAt.getTime() < createdAt.getTime()) {
+            acc[data.bookingId] = {
+              bookingId: data.bookingId,
+              reference: data.reference || "",
+              amount: data.amount || 0,
+              createdAt,
+            };
+          }
+
+          return acc;
+        },
+        {},
+      );
+
+      callback(paidBookings);
+    },
+    (error) => {
+      console.error("Error subscribing to advertiser payments:", error);
+      callback({});
+    },
+  );
 };
 
 /**

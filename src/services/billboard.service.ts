@@ -14,6 +14,7 @@ import {
   QueryConstraint,
   DocumentSnapshot,
   serverTimestamp,
+  onSnapshot,
 } from "firebase/firestore";
 import { uploadImages } from "./cloudinary.service";
 import { db } from "./firebase";
@@ -444,14 +445,14 @@ export const getAdvertiserBookings = async (
   advertiserId: string,
 ): Promise<Booking[]> => {
   try {
+    // No server-side orderBy to avoid composite index requirement; sort client-side
     const q = query(
       collection(db, BOOKINGS_COLLECTION),
       where("advertiserId", "==", advertiserId),
-      orderBy("createdAt", "desc"),
     );
 
     const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map((doc) => {
+    const bookings = querySnapshot.docs.map((doc) => {
       const data = doc.data();
       return {
         id: doc.id,
@@ -462,10 +463,50 @@ export const getAdvertiserBookings = async (
         updatedAt: timestampToDate(data.updatedAt),
       } as Booking;
     });
+    return bookings.sort(
+      (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+    );
   } catch (error) {
     console.error("Error getting advertiser bookings:", error);
     throw new Error("Failed to fetch bookings");
   }
+};
+
+/**
+ * Real-time subscription to advertiser bookings
+ */
+export const subscribeToAdvertiserBookings = (
+  advertiserId: string,
+  callback: (bookings: Booking[]) => void,
+): (() => void) => {
+  const q = query(
+    collection(db, BOOKINGS_COLLECTION),
+    where("advertiserId", "==", advertiserId),
+  );
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const bookings = snapshot.docs.map((doc) => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          startDate: timestampToDate(data.startDate),
+          endDate: timestampToDate(data.endDate),
+          createdAt: timestampToDate(data.createdAt),
+          updatedAt: timestampToDate(data.updatedAt),
+        } as Booking;
+      });
+      const sorted = bookings.sort(
+        (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+      );
+      callback(sorted);
+    },
+    (error) => {
+      console.error("Error subscribing to advertiser bookings:", error);
+    },
+  );
 };
 
 /**

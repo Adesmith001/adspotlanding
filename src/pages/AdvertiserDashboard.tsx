@@ -42,8 +42,8 @@ const AdvertiserDashboard: React.FC = () => {
     }, [user]);
 
     const stats = {
-        activeCampaigns: bookings.filter(b => b.status === 'active').length,
-        upcomingCampaigns: bookings.filter(b => b.status === 'confirmed').length,
+        activeCampaigns: bookings.filter(b => b.status === 'active' || (b.status === 'confirmed' && b.paymentStatus === 'paid')).length,
+        upcomingCampaigns: bookings.filter(b => b.status === 'confirmed' && b.paymentStatus !== 'paid').length,
         completedCampaigns: bookings.filter(b => b.status === 'completed').length,
         totalSpend: bookings.filter(b => b.paymentStatus === 'paid').reduce((acc, b) => acc + b.totalAmount, 0),
     };
@@ -180,7 +180,7 @@ const AdvertiserDashboard: React.FC = () => {
                         ) : (
                             <div className="space-y-4">
                                 {bookings
-                                    .filter(b => b.status === 'active')
+                                    .filter(b => b.status === 'active' || (b.status === 'confirmed' && b.paymentStatus === 'paid'))
                                     .slice(0, 3)
                                     .map((booking) => (
                                         <div

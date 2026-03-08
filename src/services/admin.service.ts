@@ -1,5 +1,6 @@
 import {
   collection,
+  addDoc,
   getDocs,
   doc,
   updateDoc,
@@ -189,6 +190,88 @@ export const getAdminStats = async () => {
     };
   } catch (error) {
     console.error("Error fetching admin stats:", error);
+    throw error;
+  }
+};
+
+const REPORTS_COLLECTION = "reports";
+
+export type ReportCategory =
+  | "billing"
+  | "fraud"
+  | "service_issue"
+  | "content"
+  | "other";
+
+export interface Report {
+  id: string;
+  reporterId: string;
+  reporterName: string;
+  reporterEmail: string;
+  bookingId?: string;
+  billboardId?: string;
+  billboardTitle?: string;
+  ownerId?: string;
+  ownerName?: string;
+  category: ReportCategory;
+  subject: string;
+  description: string;
+  status: "open" | "reviewed" | "resolved";
+  createdAt: any;
+}
+
+/**
+ * Submit a report/complaint to admin
+ */
+export const submitReport = async (
+  reporterId: string,
+  reporterName: string,
+  reporterEmail: string,
+  data: {
+    bookingId?: string;
+    billboardId?: string;
+    billboardTitle?: string;
+    ownerId?: string;
+    ownerName?: string;
+    category: ReportCategory;
+    subject: string;
+    description: string;
+  },
+): Promise<string> => {
+  try {
+    const report = {
+      reporterId,
+      reporterName,
+      reporterEmail,
+      ...data,
+      status: "open",
+      createdAt: serverTimestamp(),
+    };
+    const docRef = await addDoc(collection(db, REPORTS_COLLECTION), report);
+    return docRef.id;
+  } catch (error) {
+    console.error("Error submitting report:", error);
+    throw error;
+  }
+};
+
+/**
+ * Get all reports (admin only)
+ */
+export const getAllReports = async (): Promise<Report[]> => {
+  try {
+    const q = query(
+      collection(db, REPORTS_COLLECTION),
+      orderBy("createdAt", "desc"),
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+      createdAt: doc.data().createdAt?.toDate() || new Date(),
+    })) as Report[];
+  } catch (error) {
+    console.error("Error fetching reports:", error);
     throw error;
   }
 };

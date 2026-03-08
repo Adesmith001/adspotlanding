@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { MdPeople, MdAdminPanelSettings, MdAttachMoney, MdVerifiedUser, MdTrendingUp, MdDashboard } from 'react-icons/md';
+import { MdPeople, MdAdminPanelSettings, MdAttachMoney, MdVerifiedUser, MdTrendingUp, MdDashboard, MdFlag } from 'react-icons/md';
 import DashboardLayout from '@/components/DashboardLayout';
 import Card from '@/components/ui/Card';
-import { getAdminStats } from '@/services/admin.service';
+import { getAdminStats, getAllReports, type Report } from '@/services/admin.service';
 
 const containerVariants = {
     hidden: { opacity: 0 },
@@ -20,13 +20,18 @@ const formatPrice = (price: number) =>
 
 const AdminDashboard: React.FC = () => {
     const [stats, setStats] = useState<any>(null);
+    const [reports, setReports] = useState<Report[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const fetchStats = async () => {
             try {
-                const data = await getAdminStats();
+                const [data, reportData] = await Promise.all([
+                    getAdminStats(),
+                    getAllReports(),
+                ]);
                 setStats(data);
+                setReports(reportData);
             } catch (error) {
                 console.error('Error fetching admin stats:', error);
             } finally {
@@ -109,6 +114,59 @@ const AdminDashboard: React.FC = () => {
                                 </div>
                             </a>
                         </div>
+                    </Card>
+                </motion.div>
+
+                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.5 }}>
+                    <Card className="p-6">
+                        <div className="flex items-center justify-between mb-6 gap-4">
+                            <div>
+                                <h3 className="text-lg font-bold text-neutral-900">Recent Reports</h3>
+                                <p className="text-sm text-neutral-500 mt-1">Issues submitted by advertisers for admin review</p>
+                            </div>
+                            <div className="px-3 py-1.5 rounded-full bg-red-50 text-red-700 text-sm font-semibold">
+                                {reports.filter((report) => report.status === 'open').length} open
+                            </div>
+                        </div>
+
+                        {reports.length === 0 ? (
+                            <div className="rounded-2xl border border-dashed border-neutral-200 p-8 text-center text-sm text-neutral-500">
+                                No reports submitted yet.
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                {reports.slice(0, 5).map((report) => (
+                                    <div key={report.id} className="rounded-2xl border border-neutral-200 p-4 flex items-start justify-between gap-4">
+                                        <div className="min-w-0">
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <span className="w-9 h-9 rounded-xl bg-red-50 text-red-600 flex items-center justify-center flex-shrink-0">
+                                                    <MdFlag size={18} />
+                                                </span>
+                                                <div className="min-w-0">
+                                                    <p className="font-semibold text-neutral-900 truncate">{report.subject}</p>
+                                                    <p className="text-xs text-neutral-500 truncate">
+                                                        {report.reporterName} • {report.billboardTitle || 'General report'}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <p className="text-sm text-neutral-600 line-clamp-2">{report.description}</p>
+                                        </div>
+                                        <div className="text-right flex-shrink-0">
+                                            <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${report.status === 'open' ? 'bg-red-50 text-red-700' : report.status === 'reviewed' ? 'bg-amber-50 text-amber-700' : 'bg-green-50 text-green-700'}`}>
+                                                {report.status}
+                                            </span>
+                                            <p className="text-xs text-neutral-400 mt-2">
+                                                {new Date(report.createdAt).toLocaleDateString('en-NG', {
+                                                    day: 'numeric',
+                                                    month: 'short',
+                                                    year: 'numeric',
+                                                })}
+                                            </p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </Card>
                 </motion.div>
             </div>

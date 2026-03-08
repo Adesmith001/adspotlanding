@@ -1,17 +1,46 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MdCampaign, MdCalendarToday, MdTrendingUp } from 'react-icons/md';
+import {
+    MdCampaign,
+    MdCalendarToday,
+    MdTrendingUp,
+    MdPerson,
+    MdVisibility,
+    MdMessage,
+    MdFlag,
+    MdTimer,
+    MdPayment,
+} from 'react-icons/md';
 import DashboardLayout from '@/components/DashboardLayout';
 import EmptyState from '@/components/EmptyState';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
+import Modal from '@/components/ui/Modal';
 import { useAppSelector } from '@/hooks/useRedux';
 import { selectUser } from '@/store/authSlice';
-import { getAdvertiserBookings } from '@/services/billboard.service';
+import { subscribeToAdvertiserBookings, getBillboard } from '@/services/billboard.service';
+import { subscribeToAdvertiserPaidBookings } from '@/services/payment.service';
+import { submitReport, type ReportCategory } from '@/services/admin.service';
+import { startConversation } from '@/services/message.service';
 import type { Booking } from '@/types/billboard.types';
+import toast from 'react-hot-toast';
 
 type TabType = 'active' | 'upcoming' | 'completed';
+
+interface ReportForm {
+    category: ReportCategory;
+    subject: string;
+    description: string;
+}
+
+const REPORT_CATEGORIES: { value: ReportCategory; label: string }[] = [
+    { value: 'billing', label: 'Billing / Payment Issue' },
+    { value: 'fraud', label: 'Fraud / Scam' },
+    { value: 'service_issue', label: 'Service / Quality Issue' },
+    { value: 'content', label: 'Inappropriate Content' },
+    { value: 'other', label: 'Other' },
+];
 
 const containerVariants = {
     hidden: { opacity: 0 },
@@ -25,36 +54,86 @@ const itemVariants = {
 
 const MyCampaigns: React.FC = () => {
     const user = useAppSelector(selectUser);
+    const navigate = useNavigate();
     const [bookings, setBookings] = useState<Booking[]>([]);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<TabType>('active');
+    const [billboardViews, setBillboardViews] = useState<Record<string, number>>({});
+    const [paidBookingsById, setPaidBookingsById] = useState<Record<string, { reference: string }>>({});
+
+    // Report modal state
+    const [reportBooking, setReportBooking] = useState<Booking | null>(null);
+    const [reportForm, setReportForm] = useState<ReportForm>({
+        category: 'billing',
+        subject: '',
+        description: '',
+    });
+    const [submittingReport, setSubmittingReport] = useState(false);
+
+    // Message owner loading state
+    const [messagingBookingId, setMessagingBookingId] = useState<string | null>(null);
+
+    // Real-time subscription — fires immediately when Firestore updates after payment
+    useEffect(() => {
+        if (!user) return;
+        const unsubscribe = subscribeToAdvertiserBookings(user.uid, (data) => {
+            setBookings(data);
+            setLoading(false);
+        });
+        return unsubscribe;
+    }, [user]);
 
     useEffect(() => {
-        const fetchBookings = async () => {
-            if (!user) return;
-            try {
-                const data = await getAdvertiserBookings(user.uid);
-                setBookings(data);
-            } catch (error) {
-                console.error('Error fetching campaigns:', error);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchBookings();
+        if (!user) return;
+        const unsubscribe = subscribeToAdvertiserPaidBookings(user.uid, (data) => {
+            const nextState = Object.fromEntries(
+                Object.entries(data).map(([bookingId, info]) => [bookingId, { reference: info.reference }]),
+            );
+            setPaidBookingsById(nextState);
+        });
+        return unsubscribe;
     }, [user]);
+
+    // Fetch billboard views for all unique billboards
+    useEffect(() => {
+        if (bookings.length === 0) return;
+        const uniqueIds = [...new Set(bookings.map((b) => b.billboardId))];
+        Promise.all(
+            uniqueIds.map(async (bid) => {
+                try {
+                    const bb = await getBillboard(bid);
+                    return { id: bid, views: bb?.views || 0 };
+                } catch {
+                    return { id: bid, views: 0 };
+                }
+            }),
+        ).then((results) => {
+            const map: Record<string, number> = {};
+            results.forEach((r) => { map[r.id] = r.views; });
+            setBillboardViews(map);
+        });
+    }, [bookings]);
+
+    const isPaidBooking = (booking: Booking) =>
+        booking.paymentStatus === 'paid' || !!paidBookingsById[booking.id];
+
+    const getPaymentReference = (booking: Booking) =>
+        booking.paymentId || paidBookingsById[booking.id]?.reference || '';
+
+    const isActive = (booking: Booking) =>
+        booking.status === 'active' || (booking.status === 'confirmed' && isPaidBooking(booking));
 
     const getFilteredBookings = () => {
         const now = new Date();
         switch (activeTab) {
             case 'active':
-                return bookings.filter((b) => b.status === 'active');
+                return bookings.filter(isActive);
             case 'upcoming':
-                return bookings.filter((b) =>
-                    b.status === 'confirmed' && new Date(b.startDate) > now
+                return bookings.filter(
+                    (b) => b.status === 'confirmed' && !isPaidBooking(b) && new Date(b.startDate) > now,
                 );
             case 'completed':
-                return bookings.filter((b) => b.status === 'completed');
+                return bookings.filter((b) => b.status === 'completed' || new Date(b.endDate) < now);
             default:
                 return [];
         }
@@ -62,65 +141,108 @@ const MyCampaigns: React.FC = () => {
 
     const filteredBookings = getFilteredBookings();
 
-    const formatPrice = (price: number) => {
-        return new Intl.NumberFormat('en-NG', {
-            style: 'currency',
-            currency: 'NGN',
-            minimumFractionDigits: 0,
-        }).format(price);
-    };
+    const formatPrice = (price: number) =>
+        new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', minimumFractionDigits: 0 }).format(price);
 
-    const formatDate = (date: Date) => {
-        return new Date(date).toLocaleDateString('en-NG', {
-            day: 'numeric',
-            month: 'short',
-            year: 'numeric',
-        });
-    };
+    const formatDate = (date: Date) =>
+        new Date(date).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' });
 
     const getDaysRemaining = (endDate: Date) => {
-        const now = new Date();
-        const end = new Date(endDate);
-        const diff = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        const diff = Math.ceil((new Date(endDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
         return diff > 0 ? diff : 0;
     };
 
-    const getDaysTotal = (startDate: Date, endDate: Date) => {
-        const start = new Date(startDate);
-        const end = new Date(endDate);
-        return Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-    };
+    const getDaysTotal = (startDate: Date, endDate: Date) =>
+        Math.max(1, Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)));
 
     const getProgress = (startDate: Date, endDate: Date) => {
         const total = getDaysTotal(startDate, endDate);
         const remaining = getDaysRemaining(endDate);
-        if (total <= 0) return 100;
         return Math.round(((total - remaining) / total) * 100);
     };
 
+    const handleMessageOwner = async (booking: Booking) => {
+        if (!user) return;
+        setMessagingBookingId(booking.id);
+        const toastId = toast.loading('Opening conversation...');
+        try {
+            const convoId = await startConversation(
+                user.uid,
+                booking.ownerId,
+                `Hi, I'm reaching out about my campaign on "${booking.billboardTitle}".`,
+            );
+            toast.dismiss(toastId);
+            navigate(`/dashboard/advertiser/messages?conversation=${convoId}`);
+        } catch {
+            toast.error('Failed to open conversation. Try again.', { id: toastId });
+        } finally {
+            setMessagingBookingId(null);
+        }
+    };
+
+    const handleOpenReport = (booking: Booking) => {
+        setReportBooking(booking);
+        setReportForm({ category: 'billing', subject: '', description: '' });
+    };
+
+    const handleSubmitReport = async () => {
+        if (!user || !reportBooking) return;
+        if (!reportForm.subject.trim() || !reportForm.description.trim()) {
+            toast.error('Please fill in all fields.');
+            return;
+        }
+        setSubmittingReport(true);
+        try {
+            await submitReport(
+                user.uid,
+                user.displayName || 'Advertiser',
+                user.email || '',
+                {
+                    bookingId: reportBooking.id,
+                    billboardId: reportBooking.billboardId,
+                    billboardTitle: reportBooking.billboardTitle,
+                    ownerId: reportBooking.ownerId,
+                    ownerName: reportBooking.ownerName,
+                    category: reportForm.category,
+                    subject: reportForm.subject.trim(),
+                    description: reportForm.description.trim(),
+                },
+            );
+            toast.success('Report submitted. Our team will review it shortly.');
+            setReportBooking(null);
+        } catch {
+            toast.error('Failed to submit report. Please try again.');
+        } finally {
+            setSubmittingReport(false);
+        }
+    };
+
     const tabs: { key: TabType; label: string; count: number }[] = [
-        { key: 'active', label: 'Active', count: bookings.filter(b => b.status === 'active').length },
-        { key: 'upcoming', label: 'Upcoming', count: bookings.filter(b => b.status === 'confirmed' && new Date(b.startDate) > new Date()).length },
-        { key: 'completed', label: 'Completed', count: bookings.filter(b => b.status === 'completed').length },
+        { key: 'active', label: 'Active', count: bookings.filter(isActive).length },
+        {
+            key: 'upcoming',
+            label: 'Upcoming',
+            count: bookings.filter(
+                (b) => b.status === 'confirmed' && !isPaidBooking(b) && new Date(b.startDate) > new Date(),
+            ).length,
+        },
+        { key: 'completed', label: 'Completed', count: bookings.filter((b) => b.status === 'completed' || new Date(b.endDate) < new Date()).length },
     ];
 
-    const getEmptyStateContent = (tab: TabType) => {
-        const content: Record<TabType, { title: string; description: string }> = {
-            active: {
-                title: 'No Active Campaigns',
-                description: 'Campaigns currently running on billboards will appear here. Book a billboard to start advertising!',
-            },
-            upcoming: {
-                title: 'No Upcoming Campaigns',
-                description: 'Confirmed bookings that are scheduled to start will appear here.',
-            },
-            completed: {
-                title: 'No Completed Campaigns',
-                description: 'Your past advertising campaigns will be stored here for reference.',
-            },
-        };
-        return content[tab];
-    };
+    const getEmptyStateContent = (tab: TabType) => ({
+        active: {
+            title: 'No Active Campaigns',
+            description: 'Campaigns currently running on billboards will appear here. Book a billboard to start advertising!',
+        },
+        upcoming: {
+            title: 'No Upcoming Campaigns',
+            description: 'Confirmed bookings scheduled to start will appear here.',
+        },
+        completed: {
+            title: 'No Completed Campaigns',
+            description: 'Your past advertising campaigns will be stored here for reference.',
+        },
+    }[tab]);
 
     if (loading) {
         return (
@@ -164,10 +286,11 @@ const MyCampaigns: React.FC = () => {
                     <button
                         key={tab.key}
                         onClick={() => setActiveTab(tab.key)}
-                        className={`relative px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-200 whitespace-nowrap ${activeTab === tab.key
-                            ? 'text-white'
-                            : 'text-neutral-600 hover:bg-neutral-100 border border-neutral-200 bg-white'
-                            }`}
+                        className={`relative px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-200 whitespace-nowrap ${
+                            activeTab === tab.key
+                                ? 'text-white'
+                                : 'text-neutral-600 hover:bg-neutral-100 border border-neutral-200 bg-white'
+                        }`}
                     >
                         {activeTab === tab.key && (
                             <motion.div
@@ -182,10 +305,9 @@ const MyCampaigns: React.FC = () => {
                                 <motion.span
                                     initial={{ scale: 0 }}
                                     animate={{ scale: 1 }}
-                                    className={`px-1.5 py-0.5 text-xs rounded-full ${activeTab === tab.key
-                                        ? 'bg-white/20 text-white'
-                                        : 'bg-neutral-100 text-neutral-600'
-                                        }`}
+                                    className={`px-1.5 py-0.5 text-xs rounded-full ${
+                                        activeTab === tab.key ? 'bg-white/20 text-white' : 'bg-neutral-100 text-neutral-600'
+                                    }`}
                                 >
                                     {tab.count}
                                 </motion.span>
@@ -219,93 +341,283 @@ const MyCampaigns: React.FC = () => {
                         variants={containerVariants}
                         initial="hidden"
                         animate="visible"
-                        className="grid grid-cols-1 lg:grid-cols-2 gap-6"
+                        className="grid grid-cols-1 gap-6"
                     >
-                        {filteredBookings.map((booking) => (
-                            <motion.div key={booking.id} variants={itemVariants}>
-                                <Card className="overflow-hidden hover:shadow-lg transition-shadow duration-300">
-                                    <div className="flex flex-col sm:flex-row">
-                                        {/* Billboard Image */}
-                                        <div className="w-full h-44 sm:w-32 sm:h-32 flex-shrink-0 bg-neutral-100 overflow-hidden">
-                                            {booking.billboardPhoto ? (
-                                                <img
-                                                    src={booking.billboardPhoto}
-                                                    alt={booking.billboardTitle}
-                                                    className="w-full h-full object-cover"
-                                                />
-                                            ) : (
-                                                <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-neutral-100 to-neutral-200">
-                                                    <MdCampaign size={32} className="text-neutral-300" />
-                                                </div>
-                                            )}
-                                        </div>
+                        {filteredBookings.map((booking) => {
+                            const views = billboardViews[booking.billboardId] ?? null;
+                            const progress = getProgress(booking.startDate, booking.endDate);
+                            const daysTotal = getDaysTotal(booking.startDate, booking.endDate);
+                            const daysRemaining = getDaysRemaining(booking.endDate);
+                            const paymentReference = getPaymentReference(booking);
 
-                                        {/* Content */}
-                                        <div className="flex-1 p-4">
-                                            <div className="flex items-start justify-between mb-2">
-                                                <h3 className="font-bold text-neutral-900 line-clamp-1">
-                                                    {booking.billboardTitle}
-                                                </h3>
+                            return (
+                                <motion.div key={booking.id} variants={itemVariants}>
+                                    <Card className="overflow-hidden hover:shadow-lg transition-shadow duration-300">
+                                        <div className="flex flex-col sm:flex-row">
+                                            {/* Billboard Image */}
+                                            <div className="w-full h-48 sm:w-44 sm:h-auto flex-shrink-0 bg-neutral-100 overflow-hidden relative">
+                                                {booking.billboardPhoto ? (
+                                                    <img
+                                                        src={booking.billboardPhoto}
+                                                        alt={booking.billboardTitle}
+                                                        className="w-full h-full object-cover"
+                                                    />
+                                                ) : (
+                                                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-neutral-100 to-neutral-200">
+                                                        <MdCampaign size={40} className="text-neutral-300" />
+                                                    </div>
+                                                )}
                                                 {activeTab === 'active' && (
-                                                    <span className="px-2.5 py-1 bg-green-100 text-green-700 text-xs font-semibold rounded-full flex-shrink-0 flex items-center gap-1">
-                                                        <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-live-pulse" />
-                                                        Live
+                                                    <span className="absolute top-2 left-2 px-2 py-1 bg-green-500 text-white text-xs font-bold rounded-full flex items-center gap-1 shadow">
+                                                        <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
+                                                        LIVE
+                                                    </span>
+                                                )}
+                                                {activeTab === 'completed' && (
+                                                    <span className="absolute top-2 left-2 px-2 py-1 bg-neutral-600 text-white text-xs font-bold rounded-full shadow">
+                                                        ENDED
+                                                    </span>
+                                                )}
+                                                {activeTab === 'upcoming' && (
+                                                    <span className="absolute top-2 left-2 px-2 py-1 bg-blue-500 text-white text-xs font-bold rounded-full shadow">
+                                                        UPCOMING
                                                     </span>
                                                 )}
                                             </div>
 
-                                            <div className="space-y-2 text-sm">
-                                                <div className="flex items-center gap-2 text-neutral-600">
-                                                    <MdCalendarToday size={14} className="text-neutral-400" />
-                                                    <span>
-                                                        {formatDate(booking.startDate)} - {formatDate(booking.endDate)}
-                                                    </span>
-                                                </div>
-
-                                                <div className="flex items-center justify-between">
-                                                    <span className="font-bold text-neutral-900">
+                                            {/* Main Content */}
+                                            <div className="flex-1 p-5 flex flex-col gap-3">
+                                                {/* Title + Amount row */}
+                                                <div className="flex items-start justify-between gap-2">
+                                                    <h3 className="font-bold text-neutral-900 text-base leading-tight">
+                                                        {booking.billboardTitle}
+                                                    </h3>
+                                                    <span className="text-lg font-bold text-neutral-900 flex-shrink-0">
                                                         {formatPrice(booking.totalAmount)}
                                                     </span>
-                                                    {activeTab === 'active' && (
-                                                        <span className="text-xs text-neutral-500">
-                                                            {getDaysRemaining(booking.endDate)} days remaining
+                                                </div>
+
+                                                {/* Meta grid */}
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-1.5 gap-x-4 text-sm text-neutral-600">
+                                                    <div className="flex items-center gap-2">
+                                                        <MdPerson size={15} className="text-neutral-400 flex-shrink-0" />
+                                                        <span>
+                                                            Owner:{' '}
+                                                            <span className="font-medium text-neutral-800">
+                                                                {booking.ownerName || 'N/A'}
+                                                            </span>
                                                         </span>
+                                                    </div>
+
+                                                    <div className="flex items-center gap-2">
+                                                        <MdVisibility size={15} className="text-neutral-400 flex-shrink-0" />
+                                                        <span>
+                                                            Billboard views:{' '}
+                                                            <span className="font-medium text-neutral-800">
+                                                                {views !== null ? views.toLocaleString() : '—'}
+                                                            </span>
+                                                        </span>
+                                                    </div>
+
+                                                    <div className="flex items-center gap-2">
+                                                        <MdCalendarToday size={15} className="text-neutral-400 flex-shrink-0" />
+                                                        <span>
+                                                            Start:{' '}
+                                                            <span className="font-medium text-neutral-800">
+                                                                {formatDate(booking.startDate)}
+                                                            </span>
+                                                        </span>
+                                                    </div>
+
+                                                    <div className="flex items-center gap-2">
+                                                        <MdCalendarToday size={15} className="text-neutral-400 flex-shrink-0" />
+                                                        <span>
+                                                            End:{' '}
+                                                            <span className="font-medium text-neutral-800">
+                                                                {formatDate(booking.endDate)}
+                                                            </span>
+                                                        </span>
+                                                    </div>
+
+                                                    <div className="flex items-center gap-2">
+                                                        <MdTimer size={15} className="text-neutral-400 flex-shrink-0" />
+                                                        <span>
+                                                            Duration:{' '}
+                                                            <span className="font-medium text-neutral-800">
+                                                                {daysTotal} day{daysTotal !== 1 ? 's' : ''}
+                                                            </span>
+                                                            {activeTab === 'active' && daysRemaining > 0 && (
+                                                                <span className="ml-1 text-green-600 font-medium">
+                                                                    ({daysRemaining} left)
+                                                                </span>
+                                                            )}
+                                                        </span>
+                                                    </div>
+
+                                                    {paymentReference && (
+                                                        <div className="flex items-center gap-2">
+                                                            <MdPayment size={15} className="text-neutral-400 flex-shrink-0" />
+                                                            <span className="truncate">
+                                                                Ref:{' '}
+                                                                <span className="font-mono text-xs font-medium text-neutral-800">
+                                                                    {paymentReference}
+                                                                </span>
+                                                            </span>
+                                                        </div>
                                                     )}
                                                 </div>
-                                            </div>
-                                        </div>
-                                    </div>
 
-                                    {/* Progress Bar for active campaigns */}
-                                    {activeTab === 'active' && (
-                                        <div className="px-4 pb-4">
-                                            <div className="pt-3 border-t border-neutral-100">
-                                                <div className="flex items-center justify-between mb-2">
-                                                    <div className="flex items-center gap-1 text-xs text-neutral-500">
-                                                        <MdTrendingUp size={14} className="text-green-500" />
-                                                        <span>Campaign progress</span>
+                                                {/* Progress bar (active only) */}
+                                                {activeTab === 'active' && (
+                                                    <div>
+                                                        <div className="flex items-center justify-between mb-1">
+                                                            <div className="flex items-center gap-1 text-xs text-neutral-500">
+                                                                <MdTrendingUp size={13} className="text-green-500" />
+                                                                <span>Campaign progress</span>
+                                                            </div>
+                                                            <span className="text-xs font-semibold text-neutral-700">
+                                                                {progress}%
+                                                            </span>
+                                                        </div>
+                                                        <div className="w-full bg-neutral-100 rounded-full h-2 overflow-hidden">
+                                                            <motion.div
+                                                                initial={{ width: 0 }}
+                                                                animate={{ width: `${progress}%` }}
+                                                                transition={{ duration: 1, delay: 0.3, ease: 'easeOut' }}
+                                                                className="h-full bg-gradient-to-r from-green-500 to-emerald-400 rounded-full"
+                                                            />
+                                                        </div>
                                                     </div>
-                                                    <span className="text-xs font-medium text-neutral-700">
-                                                        {getProgress(booking.startDate, booking.endDate)}%
-                                                    </span>
-                                                </div>
-                                                <div className="w-full bg-neutral-100 rounded-full h-1.5 overflow-hidden">
-                                                    <motion.div
-                                                        initial={{ width: 0 }}
-                                                        animate={{ width: `${getProgress(booking.startDate, booking.endDate)}%` }}
-                                                        transition={{ duration: 1, delay: 0.3, ease: 'easeOut' }}
-                                                        className="h-full bg-gradient-to-r from-green-500 to-green-400 rounded-full"
-                                                    />
+                                                )}
+
+                                                {/* Action buttons */}
+                                                <div className="flex items-center gap-2 pt-1 mt-auto flex-wrap">
+                                                    <button
+                                                        onClick={() => handleMessageOwner(booking)}
+                                                        disabled={messagingBookingId === booking.id}
+                                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-neutral-900 text-white text-xs font-medium hover:bg-neutral-700 disabled:opacity-60 transition-colors"
+                                                    >
+                                                        <MdMessage size={14} />
+                                                        {messagingBookingId === booking.id ? 'Opening...' : 'Message Owner'}
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleOpenReport(booking)}
+                                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-200 text-red-600 text-xs font-medium hover:bg-red-50 transition-colors"
+                                                    >
+                                                        <MdFlag size={14} />
+                                                        Report Issue
+                                                    </button>
                                                 </div>
                                             </div>
                                         </div>
-                                    )}
-                                </Card>
-                            </motion.div>
-                        ))}
+                                    </Card>
+                                </motion.div>
+                            );
+                        })}
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            {/* ===== Report Modal ===== */}
+            <Modal
+                isOpen={!!reportBooking}
+                onClose={() => setReportBooking(null)}
+                title="Report an Issue"
+                size="md"
+            >
+                <div className="p-6 space-y-4">
+                    {reportBooking && (
+                        <div className="flex items-center gap-3 p-3 bg-neutral-50 rounded-xl border border-neutral-200">
+                            {reportBooking.billboardPhoto ? (
+                                <img
+                                    src={reportBooking.billboardPhoto}
+                                    alt={reportBooking.billboardTitle}
+                                    className="w-12 h-12 rounded-lg object-cover flex-shrink-0"
+                                />
+                            ) : (
+                                <div className="w-12 h-12 rounded-lg bg-neutral-200 flex items-center justify-center flex-shrink-0">
+                                    <MdCampaign size={20} className="text-neutral-400" />
+                                </div>
+                            )}
+                            <div className="min-w-0">
+                                <p className="font-semibold text-neutral-900 text-sm truncate">
+                                    {reportBooking.billboardTitle}
+                                </p>
+                                <p className="text-xs text-neutral-500">Owner: {reportBooking.ownerName}</p>
+                            </div>
+                        </div>
+                    )}
+
+                    <div>
+                        <label className="block text-sm font-medium text-neutral-700 mb-1.5">
+                            Issue Category <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                            value={reportForm.category}
+                            onChange={(e) =>
+                                setReportForm((f) => ({ ...f, category: e.target.value as ReportCategory }))
+                            }
+                            className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 bg-white text-sm text-neutral-800 focus:outline-none focus:ring-2 focus:ring-neutral-900"
+                        >
+                            {REPORT_CATEGORIES.map((c) => (
+                                <option key={c.value} value={c.value}>
+                                    {c.label}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-neutral-700 mb-1.5">
+                            Subject <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                            type="text"
+                            value={reportForm.subject}
+                            onChange={(e) => setReportForm((f) => ({ ...f, subject: e.target.value }))}
+                            placeholder="Brief summary of the issue"
+                            maxLength={120}
+                            className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 text-sm text-neutral-800 focus:outline-none focus:ring-2 focus:ring-neutral-900"
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-neutral-700 mb-1.5">
+                            Description <span className="text-red-500">*</span>
+                        </label>
+                        <textarea
+                            value={reportForm.description}
+                            onChange={(e) => setReportForm((f) => ({ ...f, description: e.target.value }))}
+                            placeholder="Describe the issue in detail — include relevant dates, amounts, or observations."
+                            rows={4}
+                            maxLength={1000}
+                            className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 text-sm text-neutral-800 resize-none focus:outline-none focus:ring-2 focus:ring-neutral-900"
+                        />
+                        <p className="text-xs text-neutral-400 mt-1 text-right">
+                            {reportForm.description.length}/1000
+                        </p>
+                    </div>
+
+                    <div className="flex gap-3 pt-1">
+                        <button
+                            onClick={() => setReportBooking(null)}
+                            className="flex-1 px-4 py-2.5 rounded-xl border border-neutral-200 text-sm font-medium text-neutral-700 hover:bg-neutral-50 transition-colors"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleSubmitReport}
+                            disabled={
+                                submittingReport || !reportForm.subject.trim() || !reportForm.description.trim()
+                            }
+                            className="flex-1 px-4 py-2.5 rounded-xl bg-red-600 text-white text-sm font-semibold hover:bg-red-700 disabled:opacity-60 transition-colors flex items-center justify-center gap-2"
+                        >
+                            <MdFlag size={15} />
+                            {submittingReport ? 'Submitting...' : 'Submit Report'}
+                        </button>
+                    </div>
+                </div>
+            </Modal>
         </DashboardLayout>
     );
 };
