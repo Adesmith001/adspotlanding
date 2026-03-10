@@ -18,13 +18,61 @@ import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "./firebase";
 import {
   User,
-  UserRole,
+  PublicUserRole,
   LoginCredentials,
   SignupCredentials,
+  GoogleSignupResult,
 } from "@/types/user.types";
 
 // Google Provider
 const googleProvider = new GoogleAuthProvider();
+const USERS_COLLECTION = "users";
+const PUBLIC_SIGNUP_ROLES: PublicUserRole[] = ["owner", "advertiser"];
+
+const isPublicSignupRole = (role: string): role is PublicUserRole =>
+  PUBLIC_SIGNUP_ROLES.includes(role as PublicUserRole);
+
+const getRoleConflictMessage = (role: string) =>
+  `This account is already registered as ${role}. Each account can only have one role.`;
+
+const createUserProfileDocument = async (
+  firebaseUser: FirebaseUser,
+  role: PublicUserRole,
+): Promise<User> => {
+  const userRef = doc(db, USERS_COLLECTION, firebaseUser.uid);
+  const existingUserDoc = await getDoc(userRef);
+
+  if (existingUserDoc.exists()) {
+    const existingRole = existingUserDoc.data().role;
+    if (existingRole !== role) {
+      throw new Error(getRoleConflictMessage(existingRole));
+    }
+
+    return getUserData(firebaseUser);
+  }
+
+  const userData: Omit<User, "uid"> = {
+    email: firebaseUser.email,
+    displayName: firebaseUser.displayName || "User",
+    photoURL: firebaseUser.photoURL,
+    phoneNumber: firebaseUser.phoneNumber,
+    role,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  await setDoc(userRef, {
+    ...userData,
+    emailLowercase: firebaseUser.email?.toLowerCase() || null,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+
+  return {
+    uid: firebaseUser.uid,
+    ...userData,
+  };
+};
 
 /**
  * Sign up with email and password
@@ -33,6 +81,10 @@ export const signUpWithEmail = async (
   credentials: SignupCredentials,
 ): Promise<User> => {
   try {
+    if (!isPublicSignupRole(credentials.role)) {
+      throw new Error("Please choose a valid account role.");
+    }
+
     // Create user in Firebase Auth
     const userCredential = await createUserWithEmailAndPassword(
       auth,
@@ -58,6 +110,7 @@ export const signUpWithEmail = async (
 
     await setDoc(doc(db, "users", userCredential.user.uid), {
       ...userData,
+      emailLowercase: credentials.email.toLowerCase(),
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
@@ -91,43 +144,85 @@ export const signInWithEmail = async (
 };
 
 /**
- * Sign in with Google
+ * Begin Google sign up. Existing accounts are returned immediately.
  */
-export const signInWithGoogle = async (role?: UserRole): Promise<User> => {
+export const beginGoogleSignUp = async (): Promise<GoogleSignupResult> => {
   try {
     const result = await signInWithPopup(auth, googleProvider);
     const user = result.user;
 
     // Check if user document exists
-    const userDoc = await getDoc(doc(db, "users", user.uid));
+    const userDoc = await getDoc(doc(db, USERS_COLLECTION, user.uid));
 
-    if (!userDoc.exists()) {
-      // Create new user document
-      const userData: Omit<User, "uid"> = {
+    if (userDoc.exists()) {
+      return {
+        requiresRoleSelection: false,
+        user: await getUserData(user),
+      };
+    }
+
+    return {
+      requiresRoleSelection: true,
+      profile: {
         email: user.email,
         displayName: user.displayName,
         photoURL: user.photoURL,
         phoneNumber: user.phoneNumber,
-        role: role || "advertiser", // Default to advertiser
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
+      },
+    };
+  } catch (error: any) {
+    throw new Error(getAuthErrorMessage(error.code));
+  }
+};
 
-      await setDoc(doc(db, "users", user.uid), {
-        ...userData,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
+/**
+ * Complete Google sign up after role selection.
+ */
+export const completeGoogleSignUp = async (
+  role: PublicUserRole,
+): Promise<User> => {
+  try {
+    if (!isPublicSignupRole(role)) {
+      throw new Error("Please choose a valid account role.");
+    }
 
-      return {
-        uid: user.uid,
-        ...userData,
-      };
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      throw new Error("Google authentication expired. Please try again.");
+    }
+
+    return createUserProfileDocument(currentUser, role);
+  } catch (error: any) {
+    throw new Error(error.message || getAuthErrorMessage(error.code));
+  }
+};
+
+/**
+ * Cancel a pending social sign up.
+ */
+export const cancelPendingGoogleSignUp = async (): Promise<void> => {
+  await signOut(auth);
+};
+
+/**
+ * Sign in with Google for existing accounts only.
+ */
+export const signInWithGoogle = async (): Promise<User> => {
+  try {
+    const result = await signInWithPopup(auth, googleProvider);
+    const user = result.user;
+    const userDoc = await getDoc(doc(db, USERS_COLLECTION, user.uid));
+
+    if (!userDoc.exists()) {
+      await signOut(auth);
+      throw new Error(
+        "No account found for this Google profile. Please sign up first and choose your role.",
+      );
     }
 
     return await getUserData(user);
   } catch (error: any) {
-    throw new Error(getAuthErrorMessage(error.code));
+    throw new Error(error.message || getAuthErrorMessage(error.code));
   }
 };
 
@@ -175,7 +270,7 @@ export const sendPhoneVerificationCode = async (
 export const verifyPhoneCode = async (
   confirmationResult: ConfirmationResult,
   code: string,
-  role?: UserRole,
+  role?: PublicUserRole,
 ): Promise<User> => {
   try {
     const result = await confirmationResult.confirm(code);
@@ -198,6 +293,7 @@ export const verifyPhoneCode = async (
 
       await setDoc(doc(db, "users", user.uid), {
         ...userData,
+        emailLowercase: user.email?.toLowerCase() || null,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
@@ -312,6 +408,8 @@ const getAuthErrorMessage = (errorCode: string): string => {
     "auth/popup-closed-by-user": "Sign-in popup was closed before completing.",
     "auth/cancelled-popup-request":
       "Only one popup request is allowed at a time.",
+    "auth/account-exists-with-different-credential":
+      "An account already exists with this email. Sign in with the original method instead.",
     "auth/invalid-phone-number": "Please enter a valid Nigerian phone number.",
     "auth/invalid-verification-code":
       "Invalid verification code. Please try again.",

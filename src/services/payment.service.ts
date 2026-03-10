@@ -8,7 +8,10 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import { updateBookingStatus, updatePaymentStatus } from "./billboard.service";
+import {
+  syncBookingCampaignStatus,
+  updatePaymentStatus,
+} from "./billboard.service";
 import { createNotification } from "./notification.service";
 import { PaymentStatus } from "@/types/billboard.types";
 
@@ -124,9 +127,10 @@ export const processPayment = async (
         try {
           const paymentReference = data.reference || reference;
 
-          // 1. Update booking first so campaigns can render even if later writes fail
-          await updateBookingStatus(bookingId, "active");
+          // 1. Update payment first, then activate only if creative approval is complete
           await updatePaymentStatus(bookingId, "paid", paymentReference);
+          const booking = await syncBookingCampaignStatus(bookingId);
+          const isActive = booking?.status === "active";
 
           // 2. Create payment record in Firestore
           const payment = {
@@ -160,7 +164,9 @@ export const processPayment = async (
             advertiserId,
             "booking_confirmed",
             "Payment Successful",
-            `Your booking for "${billboardTitle}" is now active.`,
+            isActive
+              ? `Your booking for "${billboardTitle}" is now active.`
+              : `Payment for "${billboardTitle}" was received. The campaign will go live after the owner approves the creative.`,
             { bookingId },
             "/dashboard/advertiser/campaigns",
           );

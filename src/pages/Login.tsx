@@ -48,7 +48,7 @@ const Login: React.FC = () => {
 
     const handleGoogleSignIn = async () => {
         try {
-            const result = await dispatch(signInGoogle(undefined)).unwrap();
+            const result = await dispatch(signInGoogle()).unwrap();
             toast.success('Welcome back!');
             if (result.role === 'owner') {
                 navigate('/dashboard/owner');

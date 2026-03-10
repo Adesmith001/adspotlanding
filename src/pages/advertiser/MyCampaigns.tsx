@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     MdCampaign,
     MdCalendarToday,
+    MdDesignServices,
     MdTrendingUp,
     MdPerson,
     MdVisibility,
@@ -11,6 +12,7 @@ import {
     MdFlag,
     MdTimer,
     MdPayment,
+    MdPictureAsPdf,
 } from 'react-icons/md';
 import DashboardLayout from '@/components/DashboardLayout';
 import EmptyState from '@/components/EmptyState';
@@ -24,6 +26,7 @@ import { subscribeToAdvertiserPaidBookings } from '@/services/payment.service';
 import { submitReport, type ReportCategory } from '@/services/admin.service';
 import { startConversation } from '@/services/message.service';
 import type { Booking } from '@/types/billboard.types';
+import { getAssetLabelFromUrl, isPdfUrl } from '@/utils/media.utils';
 import toast from 'react-hot-toast';
 
 type TabType = 'active' | 'upcoming' | 'completed';
@@ -120,8 +123,12 @@ const MyCampaigns: React.FC = () => {
     const getPaymentReference = (booking: Booking) =>
         booking.paymentId || paidBookingsById[booking.id]?.reference || '';
 
-    const isActive = (booking: Booking) =>
-        booking.status === 'active' || (booking.status === 'confirmed' && isPaidBooking(booking));
+    const isActive = (booking: Booking) => booking.status === 'active';
+
+    const isReadyForPayment = (booking: Booking) =>
+        booking.status === 'confirmed' &&
+        !isPaidBooking(booking) &&
+        booking.creativeApprovalStatus === 'approved';
 
     const getFilteredBookings = () => {
         const now = new Date();
@@ -130,7 +137,9 @@ const MyCampaigns: React.FC = () => {
                 return bookings.filter(isActive);
             case 'upcoming':
                 return bookings.filter(
-                    (b) => b.status === 'confirmed' && !isPaidBooking(b) && new Date(b.startDate) > now,
+                    (b) =>
+                        b.status === 'confirmed' &&
+                        new Date(b.startDate) > now,
                 );
             case 'completed':
                 return bookings.filter((b) => b.status === 'completed' || new Date(b.endDate) < now);
@@ -223,7 +232,7 @@ const MyCampaigns: React.FC = () => {
             key: 'upcoming',
             label: 'Upcoming',
             count: bookings.filter(
-                (b) => b.status === 'confirmed' && !isPaidBooking(b) && new Date(b.startDate) > new Date(),
+                (b) => b.status === 'confirmed' && new Date(b.startDate) > new Date(),
             ).length,
         },
         { key: 'completed', label: 'Completed', count: bookings.filter((b) => b.status === 'completed' || new Date(b.endDate) < new Date()).length },
@@ -490,8 +499,70 @@ const MyCampaigns: React.FC = () => {
                                                     </div>
                                                 )}
 
+                                                <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
+                                                    <div className="flex items-start justify-between gap-3 mb-3">
+                                                        <div className="flex items-start gap-2">
+                                                            <MdDesignServices size={18} className="text-neutral-500 mt-0.5" />
+                                                            <div>
+                                                                <p className="text-sm font-semibold text-neutral-900">Creative review</p>
+                                                                <p className="text-xs text-neutral-500">
+                                                                    {booking.creativeRequirementType === 'advertiser_upload'
+                                                                        ? 'You uploaded the design for owner review.'
+                                                                        : 'You requested the owner to create the design.'}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${booking.creativeApprovalStatus === 'approved'
+                                                            ? 'bg-green-100 text-green-700'
+                                                            : booking.creativeApprovalStatus === 'changes_requested'
+                                                                ? 'bg-amber-100 text-amber-700'
+                                                                : 'bg-blue-100 text-blue-700'
+                                                            }`}>
+                                                            {(booking.creativeApprovalStatus ?? 'pending').replace('_', ' ')}
+                                                        </span>
+                                                    </div>
+
+                                                    <p className="text-sm text-neutral-600 leading-relaxed">
+                                                        {booking.creativeBrief}
+                                                    </p>
+
+                                                    {(booking.creativeAssets?.length ?? 0) > 0 && (
+                                                        <div className="grid grid-cols-3 gap-2 mt-3">
+                                                            {booking.creativeAssets.slice(0, 3).map((asset) => (
+                                                                <a key={asset} href={asset} target="_blank" rel="noreferrer" className="block">
+                                                                    {isPdfUrl(asset) ? (
+                                                                        <div className="flex h-20 w-full flex-col items-center justify-center rounded-lg border border-red-200 bg-red-50 px-2 text-center">
+                                                                            <MdPictureAsPdf size={26} className="text-red-600" />
+                                                                            <span className="mt-1 line-clamp-2 text-[11px] font-medium text-red-700">
+                                                                                {getAssetLabelFromUrl(asset)}
+                                                                            </span>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <img src={asset} alt="Creative asset" className="h-20 w-full rounded-lg border border-neutral-200 object-cover" />
+                                                                    )}
+                                                                </a>
+                                                            ))}
+                                                        </div>
+                                                    )}
+
+                                                    {booking.creativeReviewNotes && (
+                                                        <p className="text-xs text-neutral-500 mt-3">
+                                                            Owner note: {booking.creativeReviewNotes}
+                                                        </p>
+                                                    )}
+                                                </div>
+
                                                 {/* Action buttons */}
                                                 <div className="flex items-center gap-2 pt-1 mt-auto flex-wrap">
+                                                    {isReadyForPayment(booking) && (
+                                                        <Link
+                                                            to="/dashboard/advertiser/payments"
+                                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary-600 text-white text-xs font-medium hover:bg-primary-700 transition-colors"
+                                                        >
+                                                            <MdPayment size={14} />
+                                                            Complete Payment
+                                                        </Link>
+                                                    )}
                                                     <button
                                                         onClick={() => handleMessageOwner(booking)}
                                                         disabled={messagingBookingId === booking.id}

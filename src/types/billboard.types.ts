@@ -94,6 +94,13 @@ export type BookingStatus =
   | "cancelled"
   | "rejected";
 export type PaymentStatus = "pending" | "paid" | "refunded" | "failed";
+export type CreativeRequirementType =
+  | "advertiser_upload"
+  | "owner_design_service";
+export type CreativeApprovalStatus =
+  | "pending"
+  | "changes_requested"
+  | "approved";
 
 export interface Booking {
   id: string;
@@ -136,6 +143,13 @@ export interface Booking {
   // Campaign
   campaignPhotos: string[];
   campaignNotes?: string;
+  creativeRequirementType: CreativeRequirementType;
+  creativeAssets: string[];
+  creativeBrief: string;
+  creativeApprovalStatus: CreativeApprovalStatus;
+  creativeReviewNotes?: string;
+  creativeReviewedAt?: Date;
+  campaignStartedAt?: Date;
 
   // Cancellation
   cancellationReason?: string;
@@ -281,7 +295,9 @@ export type NotificationType =
   | "booking_cancelled"
   | "payment_received"
   | "new_message"
-  | "review_received";
+  | "review_received"
+  | "creative_changes_requested"
+  | "creative_approved";
 
 export interface Notification {
   id: string;
@@ -357,4 +373,7 @@ export interface BookingRequest {
   startDate: Date;
   endDate: Date;
   message?: string;
+  creativeRequirementType: CreativeRequirementType;
+  creativeBrief: string;
+  designFiles?: File[];
 }

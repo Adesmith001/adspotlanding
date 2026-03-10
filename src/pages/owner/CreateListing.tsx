@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -34,8 +34,10 @@ import Card from '@/components/ui/Card';
 import { useAppSelector } from '@/hooks/useRedux';
 import { selectUser } from '@/store/authSlice';
 import { createBillboard } from '@/services/billboard.service';
+import { geocodeAddress, reverseGeocodeCoordinates } from '@/services/location.service';
 import type { BillboardType, CreateBillboardForm } from '@/types/billboard.types';
 import { extractGpsFromFiles } from '@/utils/exif.utils';
+import StreetViewPanel from '@/components/StreetViewPanel';
 import toast from 'react-hot-toast';
 
 const STEPS = [
@@ -77,8 +79,12 @@ const CreateListing: React.FC = () => {
     const [photos, setPhotos] = useState<File[]>([]);
     const [photoPreviewUrls, setPhotoPreviewUrls] = useState<string[]>([]);
     const [extractingLocation, setExtractingLocation] = useState(false);
+    const [resolvingAddress, setResolvingAddress] = useState(false);
+    const [geocodingAddress, setGeocodingAddress] = useState(false);
+    const [locationLookupNote, setLocationLookupNote] = useState('');
 
-
+    const skipNextAddressLookupRef = useRef(false);
+    const lastResolvedAddressQueryRef = useRef('');
 
     const [formData, setFormData] = useState<CreateBillboardForm>({
         title: '',
@@ -110,6 +116,50 @@ const CreateListing: React.FC = () => {
         setFormData((prev) => ({ ...prev, [field]: value }));
     };
 
+    const applyCoordinates = async (lat: number, lng: number, source: 'photo' | 'camera' | 'map' | 'address') => {
+        setFormData((prev) => ({
+            ...prev,
+            latitude: lat,
+            longitude: lng,
+        }));
+
+        if (source === 'address') {
+            setLocationLookupNote('Map and street view updated from the address details you entered.');
+            return;
+        }
+
+        setResolvingAddress(true);
+        const resolvedAddress = await reverseGeocodeCoordinates(lat, lng);
+        setResolvingAddress(false);
+
+        if (!resolvedAddress) {
+            setLocationLookupNote('Coordinates found, but we could not fetch the street details automatically.');
+            return;
+        }
+
+        skipNextAddressLookupRef.current = true;
+        const nextAddressQuery = [resolvedAddress.address, resolvedAddress.city, resolvedAddress.state]
+            .filter(Boolean)
+            .join('|');
+        lastResolvedAddressQueryRef.current = nextAddressQuery;
+
+        setFormData((prev) => ({
+            ...prev,
+            latitude: lat,
+            longitude: lng,
+            address: resolvedAddress.address || prev.address,
+            city: resolvedAddress.city || prev.city,
+            state: resolvedAddress.state || prev.state,
+            landmark: prev.landmark || resolvedAddress.landmark || '',
+        }));
+
+        setLocationLookupNote(
+            source === 'map'
+                ? 'Map pin moved and the closest street details were filled automatically.'
+                : 'Coordinates and street details were extracted automatically from the photo.',
+        );
+    };
+
     const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
         if (files) {
@@ -126,11 +176,7 @@ const CreateListing: React.FC = () => {
                 try {
                     const gps = await extractGpsFromFiles(newPhotos);
                     if (gps) {
-                        setFormData((prev) => ({
-                            ...prev,
-                            latitude: gps.latitude,
-                            longitude: gps.longitude,
-                        }));
+                        await applyCoordinates(gps.latitude, gps.longitude, 'photo');
                         toast.success('📍 Location detected from photo!', { duration: 4000 });
                     }
                 } catch {
@@ -157,11 +203,7 @@ const CreateListing: React.FC = () => {
             try {
                 const gps = await extractGpsFromFiles(newPhotos);
                 if (gps) {
-                    setFormData((prev) => ({
-                        ...prev,
-                        latitude: gps.latitude,
-                        longitude: gps.longitude,
-                    }));
+                    await applyCoordinates(gps.latitude, gps.longitude, 'camera');
                     toast.success('📍 Location detected from camera photo!', { duration: 4000 });
                 } else {
                     toast('No GPS data found in this photo. Try taking the photo at the billboard location.', {
@@ -242,12 +284,46 @@ const CreateListing: React.FC = () => {
     const mapZoom = formData.latitude && formData.longitude ? 16 : 11;
 
     const onMapClick = (lat: number, lng: number) => {
-        setFormData((prev) => ({
-            ...prev,
-            latitude: lat,
-            longitude: lng,
-        }));
+        void applyCoordinates(lat, lng, 'map');
     };
+
+    useEffect(() => {
+        const address = formData.address.trim();
+        const city = formData.city.trim();
+        const state = formData.state.trim();
+
+        if (!address || !city || !state) {
+            return;
+        }
+
+        const query = [address, city, state].join('|');
+
+        if (skipNextAddressLookupRef.current) {
+            skipNextAddressLookupRef.current = false;
+            lastResolvedAddressQueryRef.current = query;
+            return;
+        }
+
+        if (lastResolvedAddressQueryRef.current === query) {
+            return;
+        }
+
+        const timeoutId = window.setTimeout(async () => {
+            setGeocodingAddress(true);
+            const coords = await geocodeAddress(address, city, state);
+            setGeocodingAddress(false);
+
+            if (!coords) {
+                setLocationLookupNote('We could not place that address accurately. Adjust the wording or set it manually on the map.');
+                return;
+            }
+
+            lastResolvedAddressQueryRef.current = query;
+            await applyCoordinates(coords.latitude, coords.longitude, 'address');
+        }, 700);
+
+        return () => window.clearTimeout(timeoutId);
+    }, [formData.address, formData.city, formData.state]);
 
     const renderStepContent = () => {
         switch (currentStep) {
@@ -362,12 +438,32 @@ const CreateListing: React.FC = () => {
                                                 <p className="text-xs text-green-600 font-mono">
                                                     {formData.latitude.toFixed(6)}, {formData.longitude.toFixed(6)}
                                                 </p>
+                                                {(formData.address || formData.city || formData.state) && (
+                                                    <p className="text-xs text-green-700 mt-1">
+                                                        {formData.address || 'Address pending'}, {formData.city || 'City pending'}, {formData.state || 'State pending'}
+                                                    </p>
+                                                )}
                                             </div>
                                         </div>
                                     </Card>
                                 </motion.div>
                             )}
                         </AnimatePresence>
+
+                        {(resolvingAddress || geocodingAddress || locationLookupNote) && (
+                            <Card className="p-4 bg-white border border-neutral-200">
+                                <p className="text-sm font-medium text-neutral-800 mb-1">Location sync</p>
+                                {resolvingAddress && (
+                                    <p className="text-xs text-neutral-500">Looking up the street, city, and state from the detected coordinates...</p>
+                                )}
+                                {geocodingAddress && (
+                                    <p className="text-xs text-neutral-500">Using your address details to place the billboard on the map...</p>
+                                )}
+                                {!resolvingAddress && !geocodingAddress && locationLookupNote && (
+                                    <p className="text-xs text-neutral-500">{locationLookupNote}</p>
+                                )}
+                            </Card>
+                        )}
                     </div>
                 );
             case 3:
@@ -382,10 +478,20 @@ const CreateListing: React.FC = () => {
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-neutral-700 mb-2">City/Area *</label>
-                            <select className="w-full px-4 py-3 rounded-xl border border-neutral-300 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all cursor-pointer" value={formData.city} onChange={(e) => updateFormData('city', e.target.value)} disabled={!formData.state}>
-                                <option value="">Select City</option>
-                                {formData.state && nigerianCities[formData.state]?.map((city) => (<option key={city} value={city}>{city}</option>))}
-                            </select>
+                            <Input
+                                type="text"
+                                placeholder={formData.state && nigerianCities[formData.state]?.length
+                                    ? `e.g., ${nigerianCities[formData.state][0]}`
+                                    : 'e.g., Lekki Phase 1'}
+                                value={formData.city}
+                                onChange={(e) => updateFormData('city', e.target.value)}
+                                disabled={!formData.state}
+                            />
+                            {formData.state && nigerianCities[formData.state]?.length > 0 && (
+                                <p className="text-xs text-neutral-500 -mt-2">
+                                    Common areas in {formData.state}: {nigerianCities[formData.state].join(', ')}
+                                </p>
+                            )}
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-neutral-700 mb-2">Full Address *</label>
@@ -403,7 +509,7 @@ const CreateListing: React.FC = () => {
                             </label>
                             {formData.latitude && formData.longitude ? (
                                 <p className="text-xs text-neutral-500 mb-3">
-                                    Location auto-detected from your photo. Drag the pin or click on the map to adjust.
+                                    Location auto-detected from your photo or typed address. Drag the pin or click on the map to adjust.
                                 </p>
                             ) : (
                                 <p className="text-xs text-neutral-500 mb-3">
@@ -452,6 +558,18 @@ const CreateListing: React.FC = () => {
                                         Lat: {formData.latitude.toFixed(6)} • Lng: {formData.longitude.toFixed(6)}
                                     </span>
                                 </motion.div>
+                            )}
+
+                            {formData.latitude && formData.longitude && (
+                                <div className="mt-4">
+                                    <StreetViewPanel
+                                        latitude={formData.latitude}
+                                        longitude={formData.longitude}
+                                        title="Street-Level Billboard Preview"
+                                        subtitle="This helps confirm the billboard is positioned on the actual road, not just on the map."
+                                        heightClassName="h-[280px]"
+                                    />
+                                </div>
                             )}
                         </div>
                     </div>
@@ -617,26 +735,36 @@ const CreateListing: React.FC = () => {
 
                             {/* Mini map preview in review */}
                             {formData.latitude && formData.longitude && (
-                                <div className="mt-6">
-                                    <p className="text-sm text-neutral-500 mb-2">Map Preview</p>
-                                    <div className="rounded-xl overflow-hidden border border-neutral-200 z-0">
-                                        <MapContainer
-                                            center={[formData.latitude, formData.longitude]}
-                                            zoom={15}
-                                            scrollWheelZoom={false}
-                                            dragging={false}
-                                            zoomControl={false}
-                                            touchZoom={false}
-                                            doubleClickZoom={false}
-                                            style={{ height: '200px', width: '100%' }}
-                                        >
-                                            <TileLayer
-                                                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                                                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                                            />
-                                            <Marker position={[formData.latitude, formData.longitude]} />
-                                        </MapContainer>
+                                <div className="mt-6 space-y-4">
+                                    <div>
+                                        <p className="text-sm text-neutral-500 mb-2">Map Preview</p>
+                                        <div className="rounded-xl overflow-hidden border border-neutral-200 z-0">
+                                            <MapContainer
+                                                center={[formData.latitude, formData.longitude]}
+                                                zoom={15}
+                                                scrollWheelZoom={false}
+                                                dragging={false}
+                                                zoomControl={false}
+                                                touchZoom={false}
+                                                doubleClickZoom={false}
+                                                style={{ height: '200px', width: '100%' }}
+                                            >
+                                                <TileLayer
+                                                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                                                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                                                />
+                                                <Marker position={[formData.latitude, formData.longitude]} />
+                                            </MapContainer>
+                                        </div>
                                     </div>
+
+                                    <StreetViewPanel
+                                        latitude={formData.latitude}
+                                        longitude={formData.longitude}
+                                        title="Street View Preview"
+                                        subtitle="Use this to confirm the road-facing context before submitting the listing."
+                                        heightClassName="h-[260px]"
+                                    />
                                 </div>
                             )}
                         </Card>

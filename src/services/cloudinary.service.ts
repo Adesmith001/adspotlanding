@@ -1,8 +1,3 @@
-/**
- * Cloudinary Image Upload Service
- * Handles image uploads to Cloudinary using unsigned upload preset
- */
-
 const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
 const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
 
@@ -10,8 +5,8 @@ export interface CloudinaryUploadResponse {
   secure_url: string;
   public_id: string;
   format: string;
-  width: number;
-  height: number;
+  width?: number;
+  height?: number;
   bytes: number;
   created_at: string;
 }
@@ -23,9 +18,9 @@ export interface UploadProgress {
 }
 
 /**
- * Upload a single image to Cloudinary
+ * Upload a single image or PDF to Cloudinary.
  */
-export const uploadImage = async (
+export const uploadFile = async (
   file: File,
   onProgress?: (progress: UploadProgress) => void,
 ): Promise<string> => {
@@ -36,13 +31,22 @@ export const uploadImage = async (
       );
     }
 
+    const isSupportedFile =
+      file.type.startsWith("image/") ||
+      file.type === "application/pdf" ||
+      file.name.toLowerCase().endsWith(".pdf");
+
+    if (!isSupportedFile) {
+      throw new Error("Only image and PDF uploads are supported.");
+    }
+
     const formData = new FormData();
     formData.append("file", file);
     formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
     formData.append("folder", "billboards");
 
     const xhr = new XMLHttpRequest();
-    const uploadUrl = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
+    const uploadUrl = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/auto/upload`;
 
     return new Promise((resolve, reject) => {
       // Track upload progress
@@ -84,21 +88,28 @@ export const uploadImage = async (
       xhr.send(formData);
     });
   } catch (error) {
-    console.error("Error uploading image to Cloudinary:", error);
-    throw new Error("Failed to upload image");
+    console.error("Error uploading file to Cloudinary:", error);
+    throw new Error("Failed to upload file");
   }
 };
 
+export const uploadImage = async (
+  file: File,
+  onProgress?: (progress: UploadProgress) => void,
+): Promise<string> => {
+  return uploadFile(file, onProgress);
+};
+
 /**
- * Upload multiple images to Cloudinary
+ * Upload multiple images or PDFs to Cloudinary.
  */
-export const uploadImages = async (
+export const uploadFiles = async (
   files: File[],
   onProgress?: (fileIndex: number, progress: UploadProgress) => void,
 ): Promise<string[]> => {
   try {
     const uploadPromises = files.map((file, index) =>
-      uploadImage(file, (progress) => {
+      uploadFile(file, (progress) => {
         if (onProgress) {
           onProgress(index, progress);
         }
@@ -107,9 +118,16 @@ export const uploadImages = async (
 
     return await Promise.all(uploadPromises);
   } catch (error) {
-    console.error("Error uploading images to Cloudinary:", error);
-    throw new Error("Failed to upload images");
+    console.error("Error uploading files to Cloudinary:", error);
+    throw new Error("Failed to upload files");
   }
+};
+
+export const uploadImages = async (
+  files: File[],
+  onProgress?: (fileIndex: number, progress: UploadProgress) => void,
+): Promise<string[]> => {
+  return uploadFiles(files, onProgress);
 };
 
 /**

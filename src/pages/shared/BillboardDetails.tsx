@@ -1,24 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
-
-// Fix for default Leaflet icon marker
-import markerIcon from 'leaflet/dist/images/marker-icon.png';
-import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
-import markerShadow from 'leaflet/dist/images/marker-shadow.png';
-
-// @ts-expect-error - Icon scaling fix
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-    iconUrl: markerIcon,
-    iconRetinaUrl: markerIcon2x,
-    shadowUrl: markerShadow,
-});
 import { motion } from 'framer-motion';
 import {
     MdArrowBack,
+    MdDesignServices,
     MdLocationOn,
     MdStar,
     MdLightMode,
@@ -30,18 +15,21 @@ import {
     MdMessage,
     MdChevronLeft,
     MdChevronRight,
+    MdUpload,
+    MdPictureAsPdf,
 } from 'react-icons/md';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import EmptyState from '@/components/EmptyState';
+import GoogleMapPanel from '@/components/GoogleMapPanel';
+import StreetViewPanel from '@/components/StreetViewPanel';
 import { useAppSelector } from '@/hooks/useRedux';
 import { selectUser, selectIsAuthenticated } from '@/store/authSlice';
 import { getBillboard, createBooking, incrementBillboardViews, getBillboardReviews, toggleFavorite, isBillboardFavorited } from '@/services/billboard.service';
-import { processPayment } from '@/services/payment.service';
-import { createNotification } from '@/services/notification.service';
 import { startConversation } from '@/services/message.service';
 import { syncUserProfile, getUserProfile } from '@/services/user.service';
-import type { Billboard, Review } from '@/types/billboard.types';
+import type { Billboard, CreativeRequirementType, Review } from '@/types/billboard.types';
+import { isPdfFile } from '@/utils/media.utils';
 import toast from 'react-hot-toast';
 
 const BillboardDetails: React.FC = () => {
@@ -62,6 +50,10 @@ const BillboardDetails: React.FC = () => {
     const [endDate, setEndDate] = useState('');
     const [bookingDuration, setBookingDuration] = useState(0);
     const [totalPrice, setTotalPrice] = useState(0);
+    const [creativeRequirementType, setCreativeRequirementType] = useState<CreativeRequirementType>('advertiser_upload');
+    const [creativeBrief, setCreativeBrief] = useState('');
+    const [designFiles, setDesignFiles] = useState<File[]>([]);
+    const [designPreviewUrls, setDesignPreviewUrls] = useState<string[]>([]);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -181,6 +173,16 @@ const BillboardDetails: React.FC = () => {
             return;
         }
 
+        if (creativeRequirementType === 'advertiser_upload' && designFiles.length === 0) {
+            toast.error('Upload the design file the owner should review before the campaign starts');
+            return;
+        }
+
+        if (creativeRequirementType === 'owner_design_service' && creativeBrief.trim().length < 20) {
+            toast.error('Describe the design request in more detail so the owner can review it');
+            return;
+        }
+
         if (!billboard) return;
 
         setIsBooking(true);
@@ -188,47 +190,31 @@ const BillboardDetails: React.FC = () => {
 
         try {
             // 1. Create Booking
-            const bookingId = await createBooking(
+            await createBooking(
                 user.uid,
                 user.displayName || 'Advertiser',
                 user.email || '',
                 {
                     billboardId: billboard.id,
                     startDate: new Date(startDate),
-                    endDate: new Date(endDate)
+                    endDate: new Date(endDate),
+                    creativeRequirementType,
+                    creativeBrief: creativeRequirementType === 'advertiser_upload'
+                        ? (creativeBrief.trim() || 'Advertiser uploaded a ready-to-use design for approval.')
+                        : creativeBrief.trim(),
+                    designFiles,
                 }
             );
 
-            // 2. Process Payment via KoraPay if Instant Book
-            if (billboard.bookingRules.instantBook) {
-                toast.loading('Launching payment...', { id: toastId });
-                await processPayment(
-                    bookingId,
-                    totalPrice,
-                    'korapay',
-                    user.uid,
-                    billboard.ownerId,
-                    billboard.title,
-                    user.displayName || 'Advertiser',
-                    user.email || '',
-                );
+            const isInstantBooking = billboard.bookingRules.instantBook;
 
-                toast.success('Booking confirmed & paid!', { id: toastId });
-            } else {
-                // 3. Notify Owner of Request (if not instant booked)
-                await createNotification(
-                    billboard.ownerId,
-                    'booking_request',
-                    'New Booking Request',
-                    `${user.displayName} requested to book "${billboard.title}" for ${bookingDuration} days.`,
-                    { bookingId, billboardId: billboard.id },
-                    '/dashboard/owner/bookings'
-                );
+            toast.success(
+                isInstantBooking
+                    ? 'Booking created. The owner will review the creative before payment is due.'
+                    : 'Booking request sent. Payment will be unlocked after owner approval.',
+                { id: toastId },
+            );
 
-                toast.success('Booking request sent!', { id: toastId });
-            }
-
-            // Redirect to campaigns
             navigate('/dashboard/advertiser/campaigns');
 
         } catch (error: any) {
@@ -253,6 +239,10 @@ const BillboardDetails: React.FC = () => {
 
         loadFavoriteStatus();
     }, [user, id]);
+
+    useEffect(() => () => {
+        designPreviewUrls.forEach((url) => URL.revokeObjectURL(url));
+    }, [designPreviewUrls]);
 
     const handleToggleFavorite = async () => {
         if (!isAuthenticated || !user) {
@@ -302,6 +292,20 @@ const BillboardDetails: React.FC = () => {
         if (billboard && billboard.photos.length > 0) {
             setCurrentPhotoIndex((prev) => (prev - 1 + billboard.photos.length) % billboard.photos.length);
         }
+    };
+
+    const handleDesignUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const files = event.target.files;
+        if (!files) {
+            return;
+        }
+
+        const nextFiles = Array.from(files);
+        setDesignFiles(nextFiles);
+        setDesignPreviewUrls((prev) => {
+            prev.forEach((url) => URL.revokeObjectURL(url));
+            return nextFiles.map((file) => URL.createObjectURL(file));
+        });
     };
 
     if (loading) {
@@ -593,30 +597,22 @@ const BillboardDetails: React.FC = () => {
                                         <MdLocationOn size={20} className="text-primary-600" />
                                         Billboard Location
                                     </h2>
-                                    <div className="rounded-2xl overflow-hidden border-2 border-neutral-200 shadow-soft relative z-0">
-                                        <MapContainer
-                                            center={[billboard.location.lat, billboard.location.lng]}
-                                            zoom={16}
-                                            scrollWheelZoom={false}
-                                            style={{ height: '350px', width: '100%' }}
-                                        >
-                                            <TileLayer
-                                                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                                                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                                            />
-                                            <Marker position={[billboard.location.lat, billboard.location.lng]}>
-                                                <Popup>
-                                                    <div className="max-w-[200px] p-0">
-                                                        <h4 className="font-bold text-sm text-neutral-900 mb-1 line-clamp-1">
-                                                            {billboard.title}
-                                                        </h4>
-                                                        <p className="text-xs text-neutral-500">
-                                                            {billboard.location.address}, {billboard.location.city}
-                                                        </p>
-                                                    </div>
-                                                </Popup>
-                                            </Marker>
-                                        </MapContainer>
+                                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                                        <GoogleMapPanel
+                                            latitude={billboard.location.lat}
+                                            longitude={billboard.location.lng}
+                                            title="Billboard Location"
+                                            subtitle="Review the exact placement on Google Maps before booking."
+                                            heightClassName="h-[350px]"
+                                        />
+
+                                        <StreetViewPanel
+                                            latitude={billboard.location.lat}
+                                            longitude={billboard.location.lng}
+                                            title="Street-Level View"
+                                            subtitle="See the billboard from the road instead of relying on the pin alone."
+                                            heightClassName="h-[350px]"
+                                        />
                                     </div>
                                     <p className="text-xs text-neutral-400 mt-3 font-mono">
                                         Lat: {billboard.location.lat.toFixed(6)} • Lng: {billboard.location.lng.toFixed(6)}
@@ -756,6 +752,122 @@ const BillboardDetails: React.FC = () => {
                                         className="w-full px-4 py-3 rounded-xl border border-neutral-300 focus:outline-none focus:ring-2 focus:ring-primary-500"
                                     />
                                 </div>
+
+                                <div className="rounded-2xl border border-neutral-200 bg-white p-4 space-y-4">
+                                    <div>
+                                        <p className="text-sm font-semibold text-neutral-900">Creative Requirements</p>
+                                        <p className="text-xs text-neutral-500 mt-1">
+                                            The owner reviews the creative first. Payment is only requested after that approval.
+                                        </p>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 gap-3">
+                                        <button
+                                            type="button"
+                                            onClick={() => setCreativeRequirementType('advertiser_upload')}
+                                            className={`rounded-xl border p-4 text-left transition-all ${creativeRequirementType === 'advertiser_upload'
+                                                ? 'border-primary-500 bg-primary-50'
+                                                : 'border-neutral-200 hover:border-neutral-300'
+                                                }`}
+                                        >
+                                            <div className="flex items-start gap-3">
+                                                <div className="mt-0.5 rounded-lg bg-primary-100 p-2 text-primary-700">
+                                                    <MdUpload size={18} />
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-semibold text-neutral-900">I already have a design</p>
+                                                    <p className="text-xs text-neutral-500 mt-1">Upload artwork, mockups, or a PDF proof so the owner can approve it.</p>
+                                                </div>
+                                            </div>
+                                        </button>
+
+                                        <button
+                                            type="button"
+                                            onClick={() => setCreativeRequirementType('owner_design_service')}
+                                            className={`rounded-xl border p-4 text-left transition-all ${creativeRequirementType === 'owner_design_service'
+                                                ? 'border-primary-500 bg-primary-50'
+                                                : 'border-neutral-200 hover:border-neutral-300'
+                                                }`}
+                                        >
+                                            <div className="flex items-start gap-3">
+                                                <div className="mt-0.5 rounded-lg bg-amber-100 p-2 text-amber-700">
+                                                    <MdDesignServices size={18} />
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-semibold text-neutral-900">I need the company to create the design</p>
+                                                    <p className="text-xs text-neutral-500 mt-1">Explain the campaign, offer, audience, and any brand direction the owner should review.</p>
+                                                </div>
+                                            </div>
+                                        </button>
+                                    </div>
+
+                                    {creativeRequirementType === 'advertiser_upload' && (
+                                        <div className="space-y-3">
+                                            <label className="flex cursor-pointer items-center justify-center rounded-xl border border-dashed border-neutral-300 bg-neutral-50 px-4 py-5 text-center hover:border-primary-400 hover:bg-primary-50/40 transition-colors">
+                                                <div>
+                                                    <p className="text-sm font-medium text-neutral-800">Upload design files</p>
+                                                    <p className="text-xs text-neutral-500 mt-1">PNG, JPG, or PDF files the owner should approve before launch.</p>
+                                                </div>
+                                                <input
+                                                    type="file"
+                                                    accept="image/*,application/pdf,.pdf"
+                                                    multiple
+                                                    onChange={handleDesignUpload}
+                                                    className="hidden"
+                                                />
+                                            </label>
+
+                                            {designPreviewUrls.length > 0 && (
+                                                <div className="grid grid-cols-3 gap-2">
+                                                    {designPreviewUrls.map((url, index) => {
+                                                        const file = designFiles[index];
+
+                                                        if (file && isPdfFile(file)) {
+                                                            return (
+                                                                <a
+                                                                    key={url}
+                                                                    href={url}
+                                                                    target="_blank"
+                                                                    rel="noreferrer"
+                                                                    className="flex h-20 w-full flex-col items-center justify-center rounded-lg border border-red-200 bg-red-50 px-2 text-center"
+                                                                >
+                                                                    <MdPictureAsPdf size={28} className="text-red-600" />
+                                                                    <span className="mt-1 line-clamp-2 text-[11px] font-medium text-red-700">
+                                                                        {file.name}
+                                                                    </span>
+                                                                </a>
+                                                            );
+                                                        }
+
+                                                        return (
+                                                            <img
+                                                                key={url}
+                                                                src={url}
+                                                                alt={`Creative upload ${index + 1}`}
+                                                                className="h-20 w-full rounded-lg object-cover border border-neutral-200"
+                                                            />
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-neutral-700 mb-2">
+                                            {creativeRequirementType === 'advertiser_upload' ? 'Additional creative notes' : 'Design brief'}
+                                        </label>
+                                        <textarea
+                                            value={creativeBrief}
+                                            onChange={(e) => setCreativeBrief(e.target.value)}
+                                            rows={4}
+                                            placeholder={creativeRequirementType === 'advertiser_upload'
+                                                ? 'Optional: add brand, sizing, print, or placement notes for the owner.'
+                                                : 'Describe the offer, target audience, CTA, colours, preferred message, and anything the owner needs to create the design.'}
+                                            className="w-full px-4 py-3 rounded-xl border border-neutral-300 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+                                        />
+                                    </div>
+                                </div>
                             </div>
 
                             {bookingDuration > 0 && (
@@ -772,13 +884,13 @@ const BillboardDetails: React.FC = () => {
                             )}
 
                             <Button fullWidth size="lg" onClick={handleBooking} disabled={isBooking}>
-                                {isBooking ? 'Processing...' : (billboard.bookingRules.instantBook ? 'Book Now' : 'Request Booking')}
+                                {isBooking ? 'Processing...' : 'Submit For Review'}
                             </Button>
 
                             <p className="text-xs text-neutral-500 text-center mt-4">
                                 {billboard.bookingRules.instantBook
-                                    ? 'Instant booking available. You will be charged immediately.'
-                                    : 'This booking requires owner approval.'}
+                                    ? 'Instant booking confirms the dates immediately, but payment is still collected only after creative approval.'
+                                    : 'This booking requires owner review first, and payment is collected only after the creative is approved.'}
                             </p>
 
                             {/* Pricing Info */}

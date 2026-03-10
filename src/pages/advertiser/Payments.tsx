@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { MdCreditCard, MdShield, MdCheckCircle, MdPending, MdError, MdReceipt } from 'react-icons/md';
+import { MdCreditCard, MdShield, MdCheckCircle, MdPending, MdError, MdReceipt, MdScheduleSend, MdCampaign } from 'react-icons/md';
 import DashboardLayout from '@/components/DashboardLayout';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import toast from 'react-hot-toast';
 import { useAppSelector } from '@/hooks/useRedux';
 import { selectUser } from '@/store/authSlice';
-import { getPaymentHistory, PaymentTransaction } from '@/services/payment.service';
+import { getAdvertiserBookings } from '@/services/billboard.service';
+import { getPaymentHistory, PaymentTransaction, processPayment } from '@/services/payment.service';
+import type { Booking } from '@/types/billboard.types';
 
 const containerVariants = {
     hidden: { opacity: 0 },
@@ -36,24 +38,75 @@ const Payments: React.FC = () => {
     const user = useAppSelector(selectUser);
 
     const [transactions, setTransactions] = useState<PaymentTransaction[]>([]);
+    const [payableBookings, setPayableBookings] = useState<Booking[]>([]);
     const [loading, setLoading] = useState(true);
+    const [payingBookingId, setPayingBookingId] = useState<string | null>(null);
+
+    const loadPaymentData = async () => {
+        if (!user) {
+            return;
+        }
+
+        const [fetchedTxns, advertiserBookings] = await Promise.all([
+            getPaymentHistory(user.uid, 'advertiser'),
+            getAdvertiserBookings(user.uid),
+        ]);
+
+        setTransactions(fetchedTxns);
+        setPayableBookings(
+            advertiserBookings.filter(
+                (booking) =>
+                    booking.status === 'confirmed' &&
+                    booking.paymentStatus !== 'paid' &&
+                    booking.creativeApprovalStatus === 'approved',
+            ),
+        );
+    };
 
     useEffect(() => {
         if (!user) return;
         const load = async () => {
             setLoading(true);
             try {
-                const fetchedTxns = await getPaymentHistory(user.uid, 'advertiser');
-                setTransactions(fetchedTxns);
+                await loadPaymentData();
             } catch (err) {
                 console.error('Error loading payment history:', err);
-                toast.error('Failed to load payment history');
+                toast.error('Failed to load payment data');
             } finally {
                 setLoading(false);
             }
         };
         load();
     }, [user]);
+
+    const handlePayNow = async (booking: Booking) => {
+        if (!user) {
+            return;
+        }
+
+        setPayingBookingId(booking.id);
+        const toastId = toast.loading('Launching payment...');
+
+        try {
+            await processPayment(
+                booking.id,
+                booking.totalAmount,
+                'korapay',
+                user.uid,
+                booking.ownerId,
+                booking.billboardTitle,
+                user.displayName || 'Advertiser',
+                user.email || '',
+            );
+
+            await loadPaymentData();
+            toast.success('Payment completed successfully.', { id: toastId });
+        } catch (error: any) {
+            toast.error(error.message || 'Payment failed. Please try again.', { id: toastId });
+        } finally {
+            setPayingBookingId(null);
+        }
+    };
 
     return (
         <DashboardLayout
@@ -72,11 +125,90 @@ const Payments: React.FC = () => {
                     <MdShield className="text-blue-600" size={20} />
                 </div>
                 <div className="text-sm">
-                    <p className="font-semibold text-blue-900 mb-1">Secure Payments via Korapay</p>
+                    <p className="font-semibold text-blue-900 mb-1">Pay only after owner approval</p>
                     <p className="text-blue-700 leading-relaxed">
-                        All payments are processed securely through Korapay. Your card information is encrypted and never stored on our servers. Click <strong>Book Now</strong> on any billboard listing to initiate a payment.
+                        Once the owner approves your creative, the booking appears here for payment through Korapay. Your card information is encrypted and never stored on our servers.
                     </p>
                 </div>
+            </motion.div>
+
+            <motion.div
+                initial={{ opacity: 0, y: 18 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.05 }}
+                className="mb-8"
+            >
+                <Card>
+                    <div className="p-6 md:p-8">
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center">
+                                <MdScheduleSend size={20} className="text-amber-700" />
+                            </div>
+                            <div>
+                                <h2 className="text-xl font-bold text-neutral-900">Ready for Payment</h2>
+                                <p className="text-sm text-neutral-500">Bookings unlocked after owner approval</p>
+                            </div>
+                        </div>
+
+                        {loading ? (
+                            <div className="space-y-3">
+                                {[1, 2].map((i) => (
+                                    <div key={i} className="h-28 rounded-2xl bg-neutral-100 animate-pulse" />
+                                ))}
+                            </div>
+                        ) : payableBookings.length === 0 ? (
+                            <div className="rounded-2xl border border-dashed border-neutral-200 bg-neutral-50 px-6 py-10 text-center">
+                                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-white text-neutral-400 shadow-sm">
+                                    <MdCampaign size={28} />
+                                </div>
+                                <h3 className="text-base font-semibold text-neutral-900">No payments waiting</h3>
+                                <p className="mt-2 text-sm text-neutral-500 max-w-xl mx-auto">
+                                    Approved creatives that are ready for checkout will appear here. If a booking is still under review, you can track it from My Campaigns.
+                                </p>
+                            </div>
+                        ) : (
+                            <div className="space-y-4">
+                                {payableBookings.map((booking) => (
+                                    <div
+                                        key={booking.id}
+                                        className="rounded-2xl border border-neutral-200 bg-neutral-50 p-5"
+                                    >
+                                        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                                            <div>
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <h3 className="text-lg font-bold text-neutral-900">{booking.billboardTitle}</h3>
+                                                    <span className="rounded-full bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-700">
+                                                        Creative approved
+                                                    </span>
+                                                </div>
+                                                <p className="mt-2 text-sm text-neutral-600">
+                                                    {new Date(booking.startDate).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                    {' '}to{' '}
+                                                    {new Date(booking.endDate).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                </p>
+                                                <p className="mt-1 text-sm text-neutral-500">
+                                                    Owner: {booking.ownerName}
+                                                </p>
+                                            </div>
+
+                                            <div className="flex flex-col items-start gap-3 lg:items-end">
+                                                <p className="text-2xl font-bold text-neutral-900">
+                                                    {formatPrice(booking.totalAmount)}
+                                                </p>
+                                                <Button
+                                                    onClick={() => handlePayNow(booking)}
+                                                    disabled={payingBookingId === booking.id}
+                                                >
+                                                    {payingBookingId === booking.id ? 'Processing...' : 'Pay Now'}
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </Card>
             </motion.div>
 
             {/* Transaction History */}

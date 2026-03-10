@@ -10,6 +10,7 @@ export interface User {
 }
 
 export type UserRole = "owner" | "advertiser" | "admin";
+export type PublicUserRole = Exclude<UserRole, "admin">;
 
 export interface UserProfile extends User {
   firstName?: string;
@@ -39,9 +40,26 @@ export interface SignupCredentials {
   email: string;
   password: string;
   displayName: string;
-  role: UserRole;
+  role: PublicUserRole;
   phoneNumber?: string;
 }
+
+export interface PendingGoogleSignup {
+  email: string | null;
+  displayName: string | null;
+  photoURL: string | null;
+  phoneNumber: string | null;
+}
+
+export type GoogleSignupResult =
+  | {
+      requiresRoleSelection: true;
+      profile: PendingGoogleSignup;
+    }
+  | {
+      requiresRoleSelection: false;
+      user: User;
+    };
 
 export interface AuthError {
   code: string;

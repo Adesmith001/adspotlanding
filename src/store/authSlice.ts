@@ -2,6 +2,8 @@ import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/services/firebase";
 import {
+  beginGoogleSignUp,
+  completeGoogleSignUp,
   signUpWithEmail,
   signInWithEmail,
   signInWithGoogle,
@@ -11,10 +13,11 @@ import {
 } from "@/services/auth.service";
 import type {
   AuthState,
+  GoogleSignupResult,
   User,
   LoginCredentials,
   SignupCredentials,
-  UserRole,
+  PublicUserRole,
 } from "@/types/user.types";
 
 const initialState: AuthState = {
@@ -52,9 +55,33 @@ export const signIn = createAsyncThunk(
 
 export const signInGoogle = createAsyncThunk(
   "auth/signInGoogle",
-  async (role: UserRole | undefined, { rejectWithValue }) => {
+  async (_: void, { rejectWithValue }) => {
     try {
-      const user = await signInWithGoogle(role);
+      const user = await signInWithGoogle();
+      return user;
+    } catch (error: any) {
+      return rejectWithValue(error.message);
+    }
+  },
+);
+
+export const beginGoogleSignupFlow = createAsyncThunk(
+  "auth/beginGoogleSignup",
+  async (_, { rejectWithValue }) => {
+    try {
+      const result = await beginGoogleSignUp();
+      return result as GoogleSignupResult;
+    } catch (error: any) {
+      return rejectWithValue(error.message);
+    }
+  },
+);
+
+export const completeGoogleSignupRole = createAsyncThunk(
+  "auth/completeGoogleSignupRole",
+  async (role: PublicUserRole, { rejectWithValue }) => {
+    try {
+      const user = await completeGoogleSignUp(role);
       return user;
     } catch (error: any) {
       return rejectWithValue(error.message);
@@ -184,6 +211,48 @@ const authSlice = createSlice({
         state.error = null;
       })
       .addCase(signInGoogle.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload as string;
+      });
+
+    // Google Sign Up Start
+    builder
+      .addCase(beginGoogleSignupFlow.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(beginGoogleSignupFlow.fulfilled, (state, action) => {
+        state.loading = false;
+        state.error = null;
+
+        if (!action.payload.requiresRoleSelection) {
+          state.user = action.payload.user;
+          state.isAuthenticated = true;
+          return;
+        }
+
+        state.user = null;
+        state.profile = null;
+        state.isAuthenticated = false;
+      })
+      .addCase(beginGoogleSignupFlow.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload as string;
+      });
+
+    // Google Sign Up Complete
+    builder
+      .addCase(completeGoogleSignupRole.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(completeGoogleSignupRole.fulfilled, (state, action) => {
+        state.user = action.payload;
+        state.isAuthenticated = true;
+        state.loading = false;
+        state.error = null;
+      })
+      .addCase(completeGoogleSignupRole.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload as string;
       });

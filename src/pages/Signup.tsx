@@ -6,10 +6,12 @@ import { FcGoogle } from 'react-icons/fc';
 import { MdEmail, MdLock, MdPerson, MdPhone, MdArrowForward, MdCheck } from 'react-icons/md';
 import toast from 'react-hot-toast';
 import { useAppDispatch, useAppSelector } from '@/hooks/useRedux';
-import { signUp, signInGoogle, selectAuthLoading } from '@/store/authSlice';
+import { beginGoogleSignupFlow, completeGoogleSignupRole, signUp, selectAuthLoading } from '@/store/authSlice';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
-import type { SignupCredentials, UserRole } from '@/types/user.types';
+import Modal from '@/components/ui/Modal';
+import { cancelPendingGoogleSignUp } from '@/services/auth.service';
+import type { PendingGoogleSignup, PublicUserRole, SignupCredentials, UserRole } from '@/types/user.types';
 
 interface SignupForm {
     displayName: string;
@@ -25,7 +27,8 @@ const Signup: React.FC = () => {
     const navigate = useNavigate();
     const dispatch = useAppDispatch();
     const loading = useAppSelector(selectAuthLoading);
-    const [selectedRole, setSelectedRole] = useState<UserRole>('advertiser');
+    const [selectedRole, setSelectedRole] = useState<PublicUserRole>('advertiser');
+    const [pendingGoogleProfile, setPendingGoogleProfile] = useState<PendingGoogleSignup | null>(null);
 
     const {
         register,
@@ -37,6 +40,15 @@ const Signup: React.FC = () => {
     });
 
     const password = watch('password');
+
+    const navigateToRoleDashboard = (role: UserRole) => {
+        if (role === 'owner') {
+            navigate('/dashboard/owner');
+            return;
+        }
+
+        navigate('/dashboard/advertiser');
+    };
 
     const onSubmit = async (data: SignupForm) => {
         if (!data.agreeToTerms) {
@@ -53,11 +65,7 @@ const Signup: React.FC = () => {
             };
             await dispatch(signUp(credentials)).unwrap();
             toast.success('Account created successfully!');
-            if (selectedRole === 'owner') {
-                navigate('/dashboard/owner');
-            } else {
-                navigate('/dashboard/advertiser');
-            }
+            navigateToRoleDashboard(selectedRole);
         } catch (err: any) {
             toast.error(err || 'Failed to create account');
         }
@@ -65,27 +73,49 @@ const Signup: React.FC = () => {
 
     const handleGoogleSignUp = async () => {
         try {
-            await dispatch(signInGoogle(selectedRole)).unwrap();
-            toast.success('Account created successfully!');
-            if (selectedRole === 'owner') {
-                navigate('/dashboard/owner');
-            } else {
-                navigate('/dashboard/advertiser');
+            const result = await dispatch(beginGoogleSignupFlow()).unwrap();
+
+            if (result.requiresRoleSelection) {
+                setPendingGoogleProfile(result.profile);
+                return;
             }
+
+            toast.success('Welcome back!');
+            navigateToRoleDashboard(result.user.role);
         } catch (err: any) {
             toast.error(err || 'Failed to sign up with Google');
         }
     };
 
+    const handleCompleteGoogleSignup = async () => {
+        try {
+            const user = await dispatch(completeGoogleSignupRole(selectedRole)).unwrap();
+            setPendingGoogleProfile(null);
+            toast.success('Account created successfully!');
+            navigateToRoleDashboard(user.role);
+        } catch (err: any) {
+            toast.error(err || 'Failed to finish Google signup');
+        }
+    };
+
+    const handleCloseGoogleRoleModal = async () => {
+        setPendingGoogleProfile(null);
+        try {
+            await cancelPendingGoogleSignUp();
+        } catch {
+            // Best effort cleanup only.
+        }
+    };
+
     const roles = [
         {
-            key: 'advertiser' as UserRole,
+            key: 'advertiser' as PublicUserRole,
             emoji: '📢',
             title: 'Advertiser',
             description: 'Looking to rent billboard space for campaigns',
         },
         {
-            key: 'owner' as UserRole,
+            key: 'owner' as PublicUserRole,
             emoji: '🏢',
             title: 'Billboard Owner',
             description: 'I own billboard spaces to rent out',
@@ -399,6 +429,47 @@ const Signup: React.FC = () => {
                     </form>
                 </motion.div>
             </div>
+
+            <Modal
+                isOpen={!!pendingGoogleProfile}
+                onClose={handleCloseGoogleRoleModal}
+                title="Choose Your Role"
+                size="md"
+            >
+                <div className="space-y-5">
+                    <div className="rounded-2xl bg-neutral-50 border border-neutral-200 p-4">
+                        <p className="text-sm font-semibold text-neutral-900">Continue Google signup as</p>
+                        <p className="text-sm text-neutral-600 mt-1">{pendingGoogleProfile?.displayName || pendingGoogleProfile?.email || 'Google user'}</p>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {roles.map((role) => (
+                            <button
+                                key={role.key}
+                                type="button"
+                                onClick={() => setSelectedRole(role.key)}
+                                className={`rounded-2xl border-2 p-4 text-left transition-all ${selectedRole === role.key
+                                    ? 'border-primary-600 bg-primary-50'
+                                    : 'border-neutral-200 hover:border-neutral-300 bg-white'
+                                    }`}
+                            >
+                                <div className="text-2xl mb-2">{role.emoji}</div>
+                                <p className="font-semibold text-neutral-900">{role.title}</p>
+                                <p className="text-xs text-neutral-500 mt-1">{role.description}</p>
+                            </button>
+                        ))}
+                    </div>
+
+                    <div className="flex gap-3 pt-2">
+                        <Button type="button" variant="outline" fullWidth onClick={handleCloseGoogleRoleModal}>
+                            Cancel
+                        </Button>
+                        <Button type="button" fullWidth loading={loading} onClick={handleCompleteGoogleSignup}>
+                            Finish Signup
+                        </Button>
+                    </div>
+                </div>
+            </Modal>
         </div>
     );
 };

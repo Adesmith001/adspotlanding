@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MdBookmarkBorder, MdCheck, MdClose, MdAccessTime } from 'react-icons/md';
+import { MdBookmarkBorder, MdCheck, MdClose, MdAccessTime, MdMessage, MdPictureAsPdf } from 'react-icons/md';
 import DashboardLayout from '@/components/DashboardLayout';
 import EmptyState from '@/components/EmptyState';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import { useAppSelector } from '@/hooks/useRedux';
 import { selectUser } from '@/store/authSlice';
-import { getOwnerBookings, updateBookingStatus } from '@/services/billboard.service';
+import { getOwnerBookings, updateBookingStatus, updateCreativeApprovalStatus } from '@/services/billboard.service';
+import { startConversation } from '@/services/message.service';
 import type { Booking, BookingStatus } from '@/types/billboard.types';
+import { getAssetLabelFromUrl, isPdfUrl } from '@/utils/media.utils';
 import toast from 'react-hot-toast';
 
 type TabType = 'pending' | 'confirmed' | 'active' | 'completed' | 'cancelled';
@@ -24,10 +27,13 @@ const itemVariants = {
 };
 
 const OwnerBookings: React.FC = () => {
+    const navigate = useNavigate();
     const user = useAppSelector(selectUser);
     const [bookings, setBookings] = useState<Booking[]>([]);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<TabType>('pending');
+    const [messagingBookingId, setMessagingBookingId] = useState<string | null>(null);
+    const [reviewingBookingId, setReviewingBookingId] = useState<string | null>(null);
 
     useEffect(() => {
         const fetchBookings = async () => {
@@ -53,6 +59,50 @@ const OwnerBookings: React.FC = () => {
             toast.success(`Booking ${status === 'confirmed' ? 'accepted' : status}`);
         } catch (error) {
             toast.error('Failed to update booking');
+        }
+    };
+
+    const handleMessageAdvertiser = async (booking: Booking) => {
+        if (!user) return;
+        setMessagingBookingId(booking.id);
+        const toastId = toast.loading('Opening conversation...');
+
+        try {
+            const conversationId = await startConversation(
+                user.uid,
+                booking.advertiserId,
+                `Hi ${booking.advertiserName}, I am reviewing the creative for "${booking.billboardTitle}".`,
+            );
+            toast.success('Conversation ready in Messages.', { id: toastId });
+            navigate(`/dashboard/owner/messages?conversation=${conversationId}`);
+        } catch {
+            toast.error('Failed to open conversation.', { id: toastId });
+        } finally {
+            setMessagingBookingId(null);
+        }
+    };
+
+    const handleCreativeReview = async (booking: Booking, nextStatus: 'approved' | 'changes_requested') => {
+        setReviewingBookingId(booking.id);
+
+        try {
+            const updated = await updateCreativeApprovalStatus(
+                booking.id,
+                nextStatus,
+                nextStatus === 'changes_requested'
+                    ? 'Please message the advertiser for more detail or updated artwork before launch.'
+                    : 'Creative approved for launch.',
+            );
+
+            if (updated) {
+                setBookings((prev) => prev.map((item) => (item.id === booking.id ? updated : item)));
+            }
+
+            toast.success(nextStatus === 'approved' ? 'Creative approved' : 'Creative changes requested');
+        } catch {
+            toast.error('Failed to update creative approval');
+        } finally {
+            setReviewingBookingId(null);
         }
     };
 
@@ -229,6 +279,56 @@ const OwnerBookings: React.FC = () => {
                                             </div>
                                         </div>
 
+                                        <div className="lg:min-w-[320px] rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
+                                            <div className="flex items-center justify-between gap-3 mb-3">
+                                                <div>
+                                                    <p className="text-xs uppercase tracking-wide text-neutral-500">Creative review</p>
+                                                    <p className="text-sm font-semibold text-neutral-900">
+                                                        {booking.creativeRequirementType === 'advertiser_upload'
+                                                            ? 'Advertiser uploaded design'
+                                                            : 'Owner design service requested'}
+                                                    </p>
+                                                </div>
+                                                <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${booking.creativeApprovalStatus === 'approved'
+                                                    ? 'bg-green-100 text-green-700'
+                                                    : booking.creativeApprovalStatus === 'changes_requested'
+                                                        ? 'bg-amber-100 text-amber-700'
+                                                        : 'bg-blue-100 text-blue-700'
+                                                    }`}>
+                                                    {booking.creativeApprovalStatus.replace('_', ' ')}
+                                                </span>
+                                            </div>
+
+                                            {booking.creativeAssets.length > 0 && (
+                                                <div className="grid grid-cols-3 gap-2 mb-3">
+                                                    {booking.creativeAssets.slice(0, 3).map((asset) => (
+                                                        <a key={asset} href={asset} target="_blank" rel="noreferrer" className="block">
+                                                            {isPdfUrl(asset) ? (
+                                                                <div className="flex h-20 w-full flex-col items-center justify-center rounded-lg border border-red-200 bg-red-50 px-2 text-center">
+                                                                    <MdPictureAsPdf size={26} className="text-red-600" />
+                                                                    <span className="mt-1 line-clamp-2 text-[11px] font-medium text-red-700">
+                                                                        {getAssetLabelFromUrl(asset)}
+                                                                    </span>
+                                                                </div>
+                                                            ) : (
+                                                                <img src={asset} alt="Creative asset" className="h-20 w-full rounded-lg object-cover border border-neutral-200" />
+                                                            )}
+                                                        </a>
+                                                    ))}
+                                                </div>
+                                            )}
+
+                                            <p className="text-sm text-neutral-600 leading-relaxed">
+                                                {booking.creativeBrief}
+                                            </p>
+
+                                            {booking.creativeReviewNotes && (
+                                                <p className="text-xs text-neutral-500 mt-3">
+                                                    Review note: {booking.creativeReviewNotes}
+                                                </p>
+                                            )}
+                                        </div>
+
                                         {/* Actions */}
                                         <div className="flex items-center gap-2">
                                             {activeTab === 'pending' && (
@@ -252,19 +352,71 @@ const OwnerBookings: React.FC = () => {
                                                             Decline
                                                         </Button>
                                                     </motion.div>
+                                                    <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            onClick={() => handleMessageAdvertiser(booking)}
+                                                            icon={<MdMessage />}
+                                                            disabled={messagingBookingId === booking.id}
+                                                        >
+                                                            {messagingBookingId === booking.id ? 'Opening...' : 'Message'}
+                                                        </Button>
+                                                    </motion.div>
                                                 </>
                                             )}
                                             {activeTab === 'confirmed' && (
-                                                <div className="flex items-center gap-2 text-amber-600 bg-amber-50 px-3 py-1.5 rounded-full">
-                                                    <MdAccessTime size={18} />
-                                                    <span className="text-sm font-medium">Awaiting Payment</span>
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <div className="flex items-center gap-2 text-amber-600 bg-amber-50 px-3 py-1.5 rounded-full">
+                                                        <MdAccessTime size={18} />
+                                                        <span className="text-sm font-medium">
+                                                            {booking.creativeApprovalStatus === 'approved'
+                                                                ? (booking.paymentStatus === 'paid' ? 'Ready To Launch' : 'Awaiting Advertiser Payment')
+                                                                : 'Approve Creative To Unlock Payment'}
+                                                        </span>
+                                                    </div>
+                                                    <Button
+                                                        size="sm"
+                                                        onClick={() => handleCreativeReview(booking, 'approved')}
+                                                        disabled={reviewingBookingId === booking.id || booking.creativeApprovalStatus === 'approved'}
+                                                    >
+                                                        Approve Creative
+                                                    </Button>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        onClick={() => handleCreativeReview(booking, 'changes_requested')}
+                                                        disabled={reviewingBookingId === booking.id}
+                                                    >
+                                                        Request Changes
+                                                    </Button>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="ghost"
+                                                        onClick={() => handleMessageAdvertiser(booking)}
+                                                        disabled={messagingBookingId === booking.id}
+                                                        icon={<MdMessage />}
+                                                    >
+                                                        Message
+                                                    </Button>
                                                 </div>
                                             )}
                                             {activeTab === 'active' && (
-                                                <span className="px-3 py-1.5 bg-green-100 text-green-700 rounded-full text-sm font-medium flex items-center gap-1.5">
-                                                    <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-live-pulse" />
-                                                    In Progress
-                                                </span>
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <span className="px-3 py-1.5 bg-green-100 text-green-700 rounded-full text-sm font-medium flex items-center gap-1.5">
+                                                        <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-live-pulse" />
+                                                        In Progress
+                                                    </span>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="ghost"
+                                                        onClick={() => handleMessageAdvertiser(booking)}
+                                                        disabled={messagingBookingId === booking.id}
+                                                        icon={<MdMessage />}
+                                                    >
+                                                        Message
+                                                    </Button>
+                                                </div>
                                             )}
                                             {activeTab === 'completed' && (
                                                 <span className="px-3 py-1.5 bg-neutral-100 text-neutral-700 rounded-full text-sm font-medium">

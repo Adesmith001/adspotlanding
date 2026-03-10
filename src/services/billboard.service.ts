@@ -16,11 +16,14 @@ import {
   serverTimestamp,
   onSnapshot,
 } from "firebase/firestore";
-import { uploadImages } from "./cloudinary.service";
+import { uploadFiles, uploadImages } from "./cloudinary.service";
 import { db } from "./firebase";
+import { createNotification } from "./notification.service";
+import { startConversation } from "./message.service";
 import type {
   Billboard,
   Booking,
+  CreativeApprovalStatus,
   Review,
   SearchFilters,
   SortOption,
@@ -40,6 +43,28 @@ const timestampToDate = (timestamp: any): Date => {
     return timestamp.toDate();
   }
   return timestamp;
+};
+
+const resolveLiveBookingStatus = (
+  booking: Booking,
+): Pick<Booking, "status" | "campaignStartedAt"> => {
+  if (["cancelled", "completed", "rejected", "pending"].includes(booking.status)) {
+    return {
+      status: booking.status,
+      campaignStartedAt: booking.campaignStartedAt,
+    };
+  }
+
+  const shouldBeActive =
+    booking.paymentStatus === "paid" &&
+    booking.creativeApprovalStatus === "approved";
+
+  return {
+    status: shouldBeActive ? "active" : "confirmed",
+    campaignStartedAt: shouldBeActive
+      ? booking.campaignStartedAt || new Date()
+      : undefined,
+  };
 };
 
 // ==================== BILLBOARD SERVICES ====================
@@ -84,7 +109,7 @@ export const createBillboard = async (
       visibilityRating: 0,
       orientation: data.orientation,
       photos: photoUrls,
-      streetViewAvailable: false,
+      streetViewAvailable: Boolean(data.latitude && data.longitude),
       pricing: {
         daily: data.dailyPrice,
         weekly: data.weeklyPrice,
@@ -379,6 +404,10 @@ export const createBooking = async (
       pricePerDay = totalAmount / duration;
     }
 
+    const creativeAssets = request.designFiles?.length
+      ? await uploadFiles(request.designFiles)
+      : [];
+
     const booking: Omit<Booking, "id"> = {
       billboardId: billboard.id,
       billboardTitle: billboard.title,
@@ -398,11 +427,41 @@ export const createBooking = async (
       status: billboard.bookingRules.instantBook ? "confirmed" : "pending",
       paymentStatus: "pending",
       campaignPhotos: [],
+      campaignNotes: request.message?.trim() || undefined,
+      creativeRequirementType: request.creativeRequirementType,
+      creativeAssets,
+      creativeBrief: request.creativeBrief.trim(),
+      creativeApprovalStatus: "pending",
       createdAt: new Date(),
       updatedAt: new Date(),
     };
 
     const docRef = await addDoc(collection(db, BOOKINGS_COLLECTION), booking);
+
+    const creativeSummary =
+      request.creativeRequirementType === "advertiser_upload"
+        ? `I have uploaded ${creativeAssets.length} design file${creativeAssets.length === 1 ? "" : "s"} for review.`
+        : `I would like your company to create the design. Brief: ${request.creativeBrief.trim()}`;
+
+    const initialMessage = [
+      `Hi, I just booked \"${billboard.title}\" from ${request.startDate.toLocaleDateString("en-NG")} to ${request.endDate.toLocaleDateString("en-NG")}.`,
+      creativeSummary,
+      request.message?.trim() || "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    await startConversation(advertiserId, billboard.ownerId, initialMessage);
+
+    await createNotification(
+      billboard.ownerId,
+      "booking_request",
+      "New Booking Request",
+      `${advertiserName} submitted a booking request for \"${billboard.title}\" with creative details ready for review.`,
+      { bookingId: docRef.id, billboardId: billboard.id },
+      "/dashboard/owner/bookings",
+    );
+
     return docRef.id;
   } catch (error) {
     console.error("Error creating booking:", error);
@@ -546,11 +605,44 @@ export const updateBookingStatus = async (
   status: Booking["status"],
 ): Promise<void> => {
   try {
+    const booking = await getBooking(bookingId);
+    if (!booking) {
+      throw new Error("Booking not found");
+    }
+
     const docRef = doc(db, BOOKINGS_COLLECTION, bookingId);
-    await updateDoc(docRef, {
+    const updates: Record<string, unknown> = {
       status,
       updatedAt: new Date(),
-    });
+    };
+
+    if (status === "active") {
+      updates.campaignStartedAt = new Date();
+    }
+
+    await updateDoc(docRef, updates);
+
+    if (status === "confirmed") {
+      await createNotification(
+        booking.advertiserId,
+        "booking_confirmed",
+        "Booking Approved",
+        `Your booking for "${booking.billboardTitle}" was approved. The owner can now review the creative before payment is due.`,
+        { bookingId, billboardId: booking.billboardId },
+        "/dashboard/advertiser/campaigns",
+      );
+    }
+
+    if (status === "rejected") {
+      await createNotification(
+        booking.advertiserId,
+        "booking_cancelled",
+        "Booking Declined",
+        `Your booking request for "${booking.billboardTitle}" was declined by the owner.`,
+        { bookingId, billboardId: booking.billboardId },
+        "/dashboard/advertiser/campaigns",
+      );
+    }
   } catch (error) {
     console.error("Error updating booking status:", error);
     throw new Error("Failed to update booking");
@@ -576,6 +668,85 @@ export const updatePaymentStatus = async (
   } catch (error) {
     console.error("Error updating payment status:", error);
     throw new Error("Failed to update payment");
+  }
+};
+
+export const syncBookingCampaignStatus = async (
+  bookingId: string,
+): Promise<Booking | null> => {
+  const booking = await getBooking(bookingId);
+  if (!booking) {
+    return null;
+  }
+
+  const next = resolveLiveBookingStatus(booking);
+  const updates: Record<string, unknown> = {
+    status: next.status,
+    updatedAt: new Date(),
+  };
+
+  if (next.status === "active") {
+    updates.campaignStartedAt = next.campaignStartedAt || new Date();
+  }
+
+  await updateDoc(doc(db, BOOKINGS_COLLECTION, bookingId), updates);
+
+  return {
+    ...booking,
+    status: next.status,
+    campaignStartedAt: next.campaignStartedAt,
+    updatedAt: new Date(),
+  };
+};
+
+export const updateCreativeApprovalStatus = async (
+  bookingId: string,
+  creativeApprovalStatus: CreativeApprovalStatus,
+  creativeReviewNotes?: string,
+): Promise<Booking | null> => {
+  try {
+    const booking = await getBooking(bookingId);
+    if (!booking) {
+      throw new Error("Booking not found");
+    }
+
+    await updateDoc(doc(db, BOOKINGS_COLLECTION, bookingId), {
+      creativeApprovalStatus,
+      creativeReviewNotes: creativeReviewNotes?.trim() || null,
+      creativeReviewedAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const updatedBooking = await syncBookingCampaignStatus(bookingId);
+
+    if (creativeApprovalStatus === "approved") {
+      await createNotification(
+        booking.advertiserId,
+        "creative_approved",
+        "Creative Approved",
+        `Your creative for \"${booking.billboardTitle}\" has been approved.${booking.paymentStatus === "paid" ? " The campaign can now go live." : " Complete payment to lock the booking and launch the campaign."}`,
+        { bookingId, billboardId: booking.billboardId },
+        booking.paymentStatus === "paid"
+          ? "/dashboard/advertiser/campaigns"
+          : "/dashboard/advertiser/payments",
+      );
+    }
+
+    if (creativeApprovalStatus === "changes_requested") {
+      await createNotification(
+        booking.advertiserId,
+        "creative_changes_requested",
+        "Creative Changes Requested",
+        creativeReviewNotes?.trim() || `The owner requested more detail or revisions for \"${booking.billboardTitle}\".`,
+        { bookingId, billboardId: booking.billboardId },
+        "/dashboard/advertiser/campaigns",
+      );
+    }
+
+    return updatedBooking;
+  } catch (error) {
+    console.error("Error updating creative approval status:", error);
+    throw new Error("Failed to update creative approval status");
   }
 };
 
