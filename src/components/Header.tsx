@@ -25,64 +25,61 @@ const Header: React.FC = () => {
     <header
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${
         isScrolled
-          ? "bg-white/90 backdrop-blur-xl shadow-sm py-3"
+          ? "bg-white/80 backdrop-blur-xl border-b border-neutral-100 py-3"
           : "bg-transparent py-5"
       }`}
     >
       <div className="max-w-7xl mx-auto px-6 lg:px-8 flex items-center justify-between">
-        <motion.a
-          href="#"
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          className="flex items-center gap-3"
+        <Link
+          to="/"
+          className="flex items-center gap-2.5 group"
         >
-          <div className="w-10 h-10 rounded-2xl bg-black text-white flex items-center justify-center font-bold">
+          <div className="w-10 h-10 rounded-xl bg-[#003c30] text-white flex items-center justify-center font-bold text-xl transition-transform group-hover:scale-105">
             A
           </div>
-          <span className="text-gray-900 font-semibold text-xl tracking-tight">
-            Adspot
+          <span className="text-[#003c30] font-bold text-2xl tracking-tight">
+            AdSpot
           </span>
-        </motion.a>
+        </Link>
 
-        <motion.nav
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="hidden md:flex items-center gap-2"
+        <nav
+          className="hidden md:flex items-center gap-8"
         >
-          {navLinks.map((link) => (
-            <a
-              key={link.href}
-              href={link.href}
-              className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
+          <div className="flex items-center gap-6">
+            {navLinks.map((link) => (
+              <a
+                key={link.href}
+                href={link.href}
+                className="text-sm font-bold text-[#003c30]/70 hover:text-[#003c30] transition-colors"
+              >
+                {link.label}
+              </a>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-4 border-l border-neutral-200 pl-8">
+            <Link
+              to="/login"
+              className="text-sm font-bold text-[#003c30] hover:text-[#003c30]/70 transition-colors"
             >
-              {link.label}
-            </a>
-          ))}
+              Log in
+            </Link>
 
-          <div className="w-px h-6 bg-black/10 mx-3" />
-
-          <Link
-            to="/login"
-            className="text-sm font-medium text-gray-600 hover:text-gray-900 px-3 py-2"
-          >
-            Sign in
-          </Link>
-
-          <Link to="/login">
-            <motion.button
-              whileHover={{ scale: 1.02, y: -1 }}
-              whileTap={{ scale: 0.98 }}
-              className="inline-flex items-center gap-2 bg-black text-white px-5 py-2.5 rounded-full text-sm font-semibold shadow-sm"
-            >
-              Get started
-              <ArrowRight size={16} />
-            </motion.button>
-          </Link>
-        </motion.nav>
+            <Link to="/login">
+              <motion.button
+                whileHover={{ scale: 1.02, y: -1 }}
+                whileTap={{ scale: 0.98 }}
+                className="inline-flex items-center gap-2 bg-[#d4f34a] text-[#003c30] px-6 py-2.5 rounded-xl text-sm font-bold shadow-sm hover:shadow-md transition-all"
+              >
+                Sign up
+                <ArrowRight size={16} />
+              </motion.button>
+            </Link>
+          </div>
+        </nav>
 
         <button
-          className="md:hidden text-gray-900 p-2.5 hover:bg-black/5 rounded-xl transition-colors"
+          className="md:hidden text-[#003c30] p-2 hover:bg-[#003c30]/5 rounded-xl transition-colors"
           onClick={() => setIsMobileMenuOpen((prev) => !prev)}
           aria-label="Toggle menu"
         >
@@ -97,42 +94,39 @@ const Header: React.FC = () => {
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.3, ease: "easeInOut" }}
-            className="absolute top-full left-0 right-0 bg-white/95 backdrop-blur-xl border-b border-black/5 md:hidden overflow-hidden"
+            className="absolute top-full left-0 right-0 bg-white border-b border-neutral-100 md:hidden overflow-hidden shadow-xl"
           >
-            <nav className="max-w-7xl mx-auto px-6 py-6 flex flex-col gap-2">
+            <nav className="max-w-7xl mx-auto px-6 py-8 flex flex-col gap-1">
               {navLinks.map((link, index) => (
                 <motion.a
                   key={link.href}
                   href={link.href}
-                  initial={{ opacity: 0, x: -20 }}
+                  initial={{ opacity: 0, x: -10 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: index * 0.05 }}
-                  className="text-gray-700 hover:text-gray-900 py-3 text-base font-medium"
+                  className="text-[#003c30] hover:bg-[#f7f7f6] px-4 py-3 rounded-xl text-lg font-bold transition-colors"
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
                   {link.label}
                 </motion.a>
               ))}
 
-              <div className="pt-4 space-y-3">
+              <div className="pt-6 mt-4 border-t border-neutral-100 space-y-3">
                 <Link
                   to="/login"
-                  className="block text-center text-gray-700 hover:text-gray-900 py-3 text-base font-medium"
+                  className="block px-4 py-3 text-[#003c30] font-bold text-lg"
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
-                  Sign in
+                  Log in
                 </Link>
 
-                <Link to="/login" onClick={() => setIsMobileMenuOpen(false)}>
-                  <motion.button
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.2 }}
-                    className="w-full flex items-center justify-center gap-2 bg-black text-white px-6 py-4 rounded-2xl font-semibold"
+                <Link to="/login" onClick={() => setIsMobileMenuOpen(false)} className="block">
+                  <button
+                    className="w-full flex items-center justify-center gap-2 bg-[#d4f34a] text-[#003c30] px-6 py-4 rounded-xl font-bold text-lg"
                   >
                     Get started
                     <ArrowRight size={18} />
-                  </motion.button>
+                  </button>
                 </Link>
               </div>
             </nav>

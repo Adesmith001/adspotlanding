@@ -205,10 +205,10 @@ const OwnerAnalytics: React.FC = () => {
     };
 
     const statCards = [
-        { label: 'Total Revenue', value: formatPrice(data.totalRevenue), sub: `${formatPrice(data.monthlyRevenue)} this month`, icon: <MdAttachMoney size={24} />, bgColor: 'bg-green-50', iconColor: 'text-green-600', ringColor: 'from-green-400 to-emerald-500' },
-        { label: 'Total Bookings', value: `${data.totalBookings}`, sub: `${data.activeBookings} active • ${data.pendingBookings} pending`, icon: <MdCalendarToday size={24} />, bgColor: 'bg-blue-50', iconColor: 'text-blue-600', ringColor: 'from-blue-400 to-indigo-500' },
-        { label: 'Utilization Rate', value: `${data.utilizationRate}%`, sub: 'Days booked / available', icon: <MdTrendingUp size={24} />, bgColor: 'bg-purple-50', iconColor: 'text-purple-600', ringColor: 'from-purple-400 to-violet-500' },
-        { label: 'Total Views', value: `${data.totalViews.toLocaleString()}`, sub: 'Listing page views', icon: <MdVisibility size={24} />, bgColor: 'bg-amber-50', iconColor: 'text-amber-600', ringColor: 'from-amber-400 to-orange-500' },
+        { label: 'Total Revenue', value: formatPrice(data.totalRevenue), sub: `${formatPrice(data.monthlyRevenue)} this month`, icon: <MdAttachMoney size={24} />, bgColor: 'bg-green-50', iconColor: 'text-green-600', ringColor: 'bg-green-400' },
+        { label: 'Total Bookings', value: `${data.totalBookings}`, sub: `${data.activeBookings} active • ${data.pendingBookings} pending`, icon: <MdCalendarToday size={24} />, bgColor: 'bg-primary-50', iconColor: 'text-primary-600', ringColor: 'bg-primary-400' },
+        { label: 'Utilization Rate', value: `${data.utilizationRate}%`, sub: 'Days booked / available', icon: <MdTrendingUp size={24} />, bgColor: 'bg-purple-50', iconColor: 'text-purple-600', ringColor: 'bg-purple-400' },
+        { label: 'Total Views', value: `${data.totalViews.toLocaleString()}`, sub: 'Listing page views', icon: <MdVisibility size={24} />, bgColor: 'bg-amber-50', iconColor: 'text-amber-600', ringColor: 'bg-amber-400' },
     ];
 
     const maxRevenue = Math.max(...data.revenueByMonth.map((m) => m.revenue), 1);
@@ -242,7 +242,7 @@ const OwnerAnalytics: React.FC = () => {
                                     <div className={`w-12 h-12 rounded-2xl ${card.bgColor} flex items-center justify-center`}>
                                         <span className={card.iconColor}>{card.icon}</span>
                                     </div>
-                                    <div className={`w-8 h-1 rounded-full bg-gradient-to-r ${card.ringColor} opacity-40`} />
+                                    <div className={`w-8 h-1 rounded-full ${card.ringColor} opacity-40`} />
                                 </div>
                                 <p className="text-sm text-neutral-500">{card.label}</p>
                                 <p className="text-2xl font-bold text-neutral-900 mt-1">{card.value}</p>
@@ -261,7 +261,7 @@ const OwnerAnalytics: React.FC = () => {
                     <Card className="p-6">
                         <h3 className="text-lg font-bold text-neutral-900 mb-6">Revenue Over Time</h3>
                         {data.totalRevenue === 0 ? (
-                            <div className="h-64 flex flex-col items-center justify-center bg-gradient-to-br from-neutral-50 to-neutral-100 rounded-2xl">
+                            <div className="h-64 flex flex-col items-center justify-center bg-neutral-100 rounded-2xl">
                                 <motion.div animate={{ y: [0, -8, 0] }} transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}>
                                     <MdTrendingUp size={48} className="text-neutral-300 mb-4" />
                                 </motion.div>
@@ -279,7 +279,7 @@ const OwnerAnalytics: React.FC = () => {
                                             initial={{ height: 0 }}
                                             animate={{ height: `${Math.max((m.revenue / maxRevenue) * 180, m.revenue > 0 ? 8 : 2)}px` }}
                                             transition={{ duration: 0.6, delay: i * 0.1 }}
-                                            className="w-full bg-gradient-to-t from-green-500 to-emerald-400 rounded-t-xl min-h-[2px]"
+                                            className="w-full bg-[#d4f34a] rounded-t-xl min-h-[2px]"
                                         />
                                         <span className="text-xs text-neutral-500">{m.month}</span>
                                     </div>
@@ -300,7 +300,7 @@ const OwnerAnalytics: React.FC = () => {
                     <Card className="p-6">
                         <h3 className="text-lg font-bold text-neutral-900 mb-6">Top Performing Billboard</h3>
                         {data.topBillboard ? (
-                            <div className="flex items-center gap-4 p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-2xl">
+                            <div className="flex items-center gap-4 p-4 bg-green-50 rounded-2xl">
                                 <div className="w-14 h-14 bg-green-100 rounded-2xl flex items-center justify-center">
                                     <MdTrendingUp size={28} className="text-green-600" />
                                 </div>
@@ -310,7 +310,7 @@ const OwnerAnalytics: React.FC = () => {
                                 </div>
                             </div>
                         ) : (
-                            <div className="h-48 flex flex-col items-center justify-center bg-gradient-to-br from-neutral-50 to-neutral-100 rounded-2xl">
+                            <div className="h-48 flex flex-col items-center justify-center bg-neutral-100 rounded-2xl">
                                 <motion.div animate={{ rotate: [0, 5, -5, 0] }} transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}>
                                     <MdAnalytics size={40} className="text-neutral-300 mb-3" />
                                 </motion.div>
@@ -323,7 +323,7 @@ const OwnerAnalytics: React.FC = () => {
                     <Card className="p-6">
                         <h3 className="text-lg font-bold text-neutral-900 mb-6">Bookings by Month</h3>
                         {data.totalBookings === 0 ? (
-                            <div className="h-48 flex flex-col items-center justify-center bg-gradient-to-br from-neutral-50 to-neutral-100 rounded-2xl">
+                            <div className="h-48 flex flex-col items-center justify-center bg-neutral-100 rounded-2xl">
                                 <motion.div animate={{ scale: [1, 1.05, 1] }} transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}>
                                     <MdCalendarToday size={40} className="text-neutral-300 mb-3" />
                                 </motion.div>
@@ -340,7 +340,7 @@ const OwnerAnalytics: React.FC = () => {
                                             initial={{ height: 0 }}
                                             animate={{ height: `${Math.max((m.count / maxBookings) * 120, m.count > 0 ? 8 : 2)}px` }}
                                             transition={{ duration: 0.6, delay: i * 0.1 }}
-                                            className="w-full bg-gradient-to-t from-blue-500 to-indigo-400 rounded-t-xl min-h-[2px]"
+                                            className="w-full bg-neutral-800 rounded-t-xl min-h-[2px]"
                                         />
                                         <span className="text-xs text-neutral-500">{m.month}</span>
                                     </div>
@@ -362,7 +362,7 @@ const OwnerAnalytics: React.FC = () => {
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                 {[
                                     { label: 'Active', value: data.activeBookings, color: 'bg-green-500' },
-                                    { label: 'Completed', value: data.completedBookings, color: 'bg-blue-500' },
+                                    { label: 'Completed', value: data.completedBookings, color: 'bg-primary-500' },
                                     { label: 'Pending', value: data.pendingBookings, color: 'bg-amber-500' },
                                     { label: 'Cancelled', value: data.cancelledBookings, color: 'bg-red-500' },
                                 ].map((item, i) => (
@@ -383,7 +383,7 @@ const OwnerAnalytics: React.FC = () => {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5, delay: 0.5 }}
                 >
-                    <Card className="p-6 md:p-8 bg-gradient-to-r from-primary-50 via-white to-accent-50 border-0">
+                    <Card className="p-6 md:p-8 bg-neutral-50 border border-neutral-100">
                         <h3 className="text-lg font-bold text-neutral-900 mb-6">💡 Tips to Boost Your Analytics</h3>
                         <ul className="space-y-4 text-sm text-neutral-600">
                             {tips.map((tip, i) => (
@@ -397,7 +397,7 @@ const OwnerAnalytics: React.FC = () => {
                                 >
                                     <motion.span
                                         whileHover={{ scale: 1.1 }}
-                                        className="w-7 h-7 rounded-full bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center text-white font-bold text-xs flex-shrink-0 shadow-sm"
+                                        className="w-7 h-7 rounded-full bg-neutral-900 flex items-center justify-center text-white font-bold text-xs flex-shrink-0 shadow-sm"
                                     >
                                         {i + 1}
                                     </motion.span>

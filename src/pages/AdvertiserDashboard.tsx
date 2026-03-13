@@ -27,7 +27,7 @@ const formatDate = (date: Date) =>
 
 const statusColor: Record<string, string> = {
     pending: 'bg-amber-50 text-amber-700',
-    confirmed: 'bg-blue-50 text-blue-700',
+    confirmed: 'bg-primary-50 text-primary-700',
     active: 'bg-[#d4f34a]/30 text-green-800',
     completed: 'bg-neutral-100 text-neutral-600',
     cancelled: 'bg-red-50 text-red-600',
@@ -84,7 +84,7 @@ const AdvertiserDashboard: React.FC = () => {
 
     const statCards = [
         { label: 'Active Campaigns', value: stats.activeCampaigns, icon: <MdCampaign size={20} />, iconBg: 'bg-[#d4f34a]/30 text-green-700' },
-        { label: 'Upcoming', value: stats.upcomingCampaigns, icon: <MdCalendarToday size={20} />, iconBg: 'bg-blue-50 text-blue-600' },
+        { label: 'Upcoming', value: stats.upcomingCampaigns, icon: <MdCalendarToday size={20} />, iconBg: 'bg-primary-50 text-primary-600' },
         { label: 'Completed', value: stats.completedCampaigns, icon: <MdTrendingUp size={20} />, iconBg: 'bg-purple-50 text-purple-600' },
         { label: 'Total Spend', value: formatPrice(stats.totalSpend), icon: <MdPayment size={20} />, iconBg: 'bg-amber-50 text-amber-600' },
     ];

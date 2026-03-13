@@ -246,8 +246,8 @@ const OwnerBookings: React.FC = () => {
                                                         className="w-full h-full object-cover"
                                                     />
                                                 ) : (
-                                                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-neutral-100 to-neutral-200">
-                                                        <MdBookmarkBorder size={24} className="text-neutral-300" />
+                                                    <div className="w-full h-full flex items-center justify-center bg-neutral-200">
+                                                        <MdBookmarkBorder size={24} className="text-neutral-400" />
                                                     </div>
                                                 )}
                                             </div>
@@ -293,7 +293,7 @@ const OwnerBookings: React.FC = () => {
                                                     ? 'bg-green-100 text-green-700'
                                                     : booking.creativeApprovalStatus === 'changes_requested'
                                                         ? 'bg-amber-100 text-amber-700'
-                                                        : 'bg-blue-100 text-blue-700'
+                                                        : 'bg-primary-100 text-primary-700'
                                                     }`}>
                                                     {booking.creativeApprovalStatus.replace('_', ' ')}
                                                 </span>

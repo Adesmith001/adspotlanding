@@ -237,7 +237,7 @@ function AppContent() {
                     },
                     success: {
                         iconTheme: {
-                            primary: '#0ea5e9',
+                            primary: '#003c30',
                             secondary: '#fff',
                         },
                     },

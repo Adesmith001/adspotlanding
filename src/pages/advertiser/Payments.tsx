@@ -119,14 +119,14 @@ const Payments: React.FC = () => {
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.4 }}
-                className="mb-8 p-5 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200/50 rounded-2xl flex gap-4"
+                className="mb-8 p-5 bg-primary-50 border border-primary-200/50 rounded-2xl flex gap-4"
             >
-                <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
-                    <MdShield className="text-blue-600" size={20} />
+                <div className="w-10 h-10 rounded-xl bg-primary-100 flex items-center justify-center flex-shrink-0">
+                    <MdShield className="text-primary-600" size={20} />
                 </div>
                 <div className="text-sm">
-                    <p className="font-semibold text-blue-900 mb-1">Pay only after owner approval</p>
-                    <p className="text-blue-700 leading-relaxed">
+                    <p className="font-semibold text-primary-900 mb-1">Pay only after owner approval</p>
+                    <p className="text-primary-700 leading-relaxed">
                         Once the owner approves your creative, the booking appears here for payment through Korapay. Your card information is encrypted and never stored on our servers.
                     </p>
                 </div>
@@ -242,7 +242,7 @@ const Payments: React.FC = () => {
                                 transition={{ duration: 0.4 }}
                                 className="text-center py-16"
                             >
-                                <div className="w-20 h-20 bg-gradient-to-br from-neutral-100 to-neutral-200 rounded-full flex items-center justify-center mx-auto mb-6">
+                                <div className="w-20 h-20 bg-neutral-100 rounded-full flex items-center justify-center mx-auto mb-6">
                                     <MdCreditCard size={36} className="text-neutral-400" />
                                 </div>
                                 <h3 className="text-lg font-bold text-neutral-900 mb-2">
@@ -293,10 +293,10 @@ const Payments: React.FC = () => {
                                                 </td>
                                                 <td className="py-3 px-4">
                                                     <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${txn.status === 'paid'
-                                                            ? 'bg-green-100 text-green-700'
-                                                            : txn.status === 'pending'
-                                                                ? 'bg-amber-100 text-amber-700'
-                                                                : 'bg-red-100 text-red-700'
+                                                        ? 'bg-green-100 text-green-700'
+                                                        : txn.status === 'pending'
+                                                            ? 'bg-amber-100 text-amber-700'
+                                                            : 'bg-red-100 text-red-700'
                                                         }`}>
                                                         {getStatusIcon(txn.status)}
                                                         {txn.status.charAt(0).toUpperCase() + txn.status.slice(1)}

@@ -24,7 +24,7 @@ const formatPrice = (price: number) =>
 
 const statusColor: Record<string, string> = {
     pending: 'bg-amber-50 text-amber-700',
-    confirmed: 'bg-blue-50 text-blue-700',
+    confirmed: 'bg-primary-50 text-primary-700',
     active: 'bg-[#d4f34a]/30 text-green-800',
     completed: 'bg-neutral-100 text-neutral-600',
     cancelled: 'bg-red-50 text-red-600',
@@ -70,7 +70,7 @@ const OwnerDashboard: React.FC = () => {
             label: 'Total Billboards',
             value: stats.totalBillboards,
             icon: <MdList size={20} />,
-            iconBg: 'bg-blue-50 text-blue-600',
+            iconBg: 'bg-primary-50 text-primary-600',
             trend: null,
         },
         {

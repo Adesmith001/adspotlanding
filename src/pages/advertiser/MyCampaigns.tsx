@@ -479,8 +479,8 @@ const MyCampaigns: React.FC = () => {
                                                         className="w-full h-full object-cover"
                                                     />
                                                 ) : (
-                                                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-neutral-100 to-neutral-200">
-                                                        <MdCampaign size={40} className="text-neutral-300" />
+                                                    <div className="w-full h-full flex items-center justify-center bg-neutral-200">
+                                                        <MdCampaign size={40} className="text-neutral-400" />
                                                     </div>
                                                 )}
                                                 {activeTab === 'active' && (
@@ -495,7 +495,7 @@ const MyCampaigns: React.FC = () => {
                                                     </span>
                                                 )}
                                                 {activeTab === 'upcoming' && (
-                                                    <span className="absolute top-2 left-2 px-2 py-1 bg-blue-500 text-white text-xs font-bold rounded-full shadow">
+                                                    <span className="absolute top-2 left-2 px-2 py-1 bg-primary-500 text-white text-xs font-bold rounded-full shadow">
                                                         UPCOMING
                                                     </span>
                                                 )}
@@ -600,7 +600,7 @@ const MyCampaigns: React.FC = () => {
                                                                 initial={{ width: 0 }}
                                                                 animate={{ width: `${progress}%` }}
                                                                 transition={{ duration: 1, delay: 0.3, ease: 'easeOut' }}
-                                                                className="h-full bg-gradient-to-r from-green-500 to-emerald-400 rounded-full"
+                                                                className="h-full bg-[#d4f34a] rounded-full"
                                                             />
                                                         </div>
                                                     </div>
@@ -623,7 +623,7 @@ const MyCampaigns: React.FC = () => {
                                                             ? 'bg-green-100 text-green-700'
                                                             : booking.creativeApprovalStatus === 'changes_requested'
                                                                 ? 'bg-amber-100 text-amber-700'
-                                                                : 'bg-blue-100 text-blue-700'
+                                                                : 'bg-primary-100 text-primary-700'
                                                             }`}>
                                                             {(booking.creativeApprovalStatus ?? 'pending').replace('_', ' ')}
                                                         </span>

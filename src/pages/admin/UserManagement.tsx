@@ -83,7 +83,7 @@ const UserManagement: React.FC = () => {
 
     const roleBadge = (role: string) => {
         if (role === 'admin') return 'bg-purple-100 text-purple-700';
-        if (role === 'owner') return 'bg-blue-100 text-blue-700';
+        if (role === 'owner') return 'bg-primary-100 text-primary-700';
         return 'bg-green-100 text-green-700';
     };
 
@@ -157,7 +157,7 @@ const UserManagement: React.FC = () => {
                                         >
                                             <td className="py-4 px-4 sm:px-6">
                                                 <div className="flex items-center gap-3">
-                                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white font-bold text-sm">
+                                                    <div className="w-10 h-10 rounded-full bg-neutral-900 flex items-center justify-center text-white font-bold text-sm">
                                                         {(u.displayName || 'U').charAt(0).toUpperCase()}
                                                     </div>
                                                     <div>

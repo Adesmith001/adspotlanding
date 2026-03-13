@@ -101,22 +101,9 @@ const Sidebar: React.FC<SidebarProps> = ({ userRole }) => {
                 <div className="flex flex-col h-full">
                     {/* Logo */}
                     <div className={`flex items-center border-b border-neutral-100 h-16 flex-shrink-0 ${collapsed ? 'px-4 justify-center' : 'px-5 gap-2'}`}>
-                        <Link to="/" className="flex items-center gap-2 min-w-0">
-                            <div className="w-8 h-8 rounded-xl bg-neutral-900 flex items-center justify-center flex-shrink-0">
-                                <span className="text-[#d4f34a] font-bold text-base">A</span>
-                            </div>
-                            <AnimatePresence>
-                                {!collapsed && (
-                                    <motion.span
-                                        initial={{ opacity: 0, width: 0 }}
-                                        animate={{ opacity: 1, width: 'auto' }}
-                                        exit={{ opacity: 0, width: 0 }}
-                                        className="font-bold text-lg text-neutral-900 overflow-hidden whitespace-nowrap"
-                                    >
-                                        adspot
-                                    </motion.span>
-                                )}
-                            </AnimatePresence>
+                        <Link to="/" className="flex items-center gap-1">
+                            <span className="text-xl font-bold tracking-tight text-neutral-900">adspot</span>
+                            <span className="text-xl font-bold text-[#d4f34a]">.</span>
                         </Link>
                     </div>
 

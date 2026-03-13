@@ -150,7 +150,7 @@ const Messages: React.FC<MessagesProps> = ({ userRole }) => {
                                 }`}
                         >
                             {/* Avatar */}
-                            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white font-bold flex-shrink-0">
+                            <div className="w-12 h-12 rounded-full bg-neutral-900 flex items-center justify-center text-white font-bold flex-shrink-0">
                                 {otherUser.photo
                                     ? <img src={otherUser.photo} alt={otherUser.name} className="w-full h-full rounded-full object-cover" />
                                     : <MdPerson size={24} />}
@@ -194,7 +194,7 @@ const Messages: React.FC<MessagesProps> = ({ userRole }) => {
                 >
                     <MdArrowBack size={22} />
                 </motion.button>
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white font-bold flex-shrink-0">
+                <div className="w-10 h-10 rounded-full bg-neutral-900 flex items-center justify-center text-white font-bold flex-shrink-0">
                     {selectedOtherUser.photo
                         ? <img src={selectedOtherUser.photo} alt={selectedOtherUser.name} className="w-full h-full rounded-full object-cover" />
                         : <MdPerson size={20} />}
@@ -216,7 +216,7 @@ const Messages: React.FC<MessagesProps> = ({ userRole }) => {
                         className={`flex ${message.senderId === user?.uid ? 'justify-end' : 'justify-start'}`}
                     >
                         <div className={`max-w-[75%] px-4 py-2.5 rounded-2xl shadow-sm ${message.senderId === user?.uid
-                            ? 'bg-gradient-to-br from-primary-600 to-primary-700 text-white rounded-br-sm'
+                            ? 'bg-neutral-900 text-white rounded-br-sm'
                             : 'bg-white text-neutral-900 rounded-bl-sm border border-neutral-200'
                             }`}>
                             <p className="text-sm leading-relaxed">{message.text}</p>
@@ -244,7 +244,7 @@ const Messages: React.FC<MessagesProps> = ({ userRole }) => {
                         whileTap={{ scale: 0.9 }}
                         onClick={handleSendMessage}
                         disabled={!newMessage.trim()}
-                        className="w-11 h-11 rounded-xl bg-gradient-to-br from-primary-600 to-primary-700 text-white flex items-center justify-center disabled:from-neutral-300 disabled:to-neutral-400 disabled:cursor-not-allowed shadow-lg shadow-primary-200 disabled:shadow-none flex-shrink-0"
+                        className="w-11 h-11 rounded-xl bg-[#d4f34a] text-green-900 flex items-center justify-center disabled:bg-neutral-200 disabled:text-neutral-400 disabled:cursor-not-allowed shadow-sm disabled:shadow-none flex-shrink-0 hover:bg-[#c5e53a] transition-colors"
                     >
                         <MdSend size={18} />
                     </motion.button>

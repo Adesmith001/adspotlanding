@@ -26,8 +26,8 @@ const Card: React.FC<CardProps> = ({
     return (
         <div
             className={clsx(
-                'bg-white rounded-xl shadow-card transition-all duration-300',
-                hover && 'hover:shadow-card-hover hover:-translate-y-1 cursor-pointer',
+                'bg-white rounded-[2rem] border border-neutral-100 shadow-sm transition-all duration-300',
+                hover && 'hover:shadow-md hover:-translate-y-1 hover:border-[#d4f34a]/30 cursor-pointer',
                 paddingSizes[padding],
                 className
             )}

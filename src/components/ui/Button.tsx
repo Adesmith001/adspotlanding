@@ -3,7 +3,7 @@ import clsx from 'clsx';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
     children: ReactNode;
-    variant?: 'primary' | 'secondary' | 'outline' | 'ghost';
+    variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'dark';
     size?: 'sm' | 'md' | 'lg';
     fullWidth?: boolean;
     loading?: boolean;
@@ -24,9 +24,10 @@ const Button: React.FC<ButtonProps> = ({
     const baseStyles = 'inline-flex items-center justify-center font-medium rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed';
 
     const variants = {
-        primary: 'bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-500 shadow-sm hover:shadow-md',
+        primary: 'bg-[#d4f34a] text-[#003c30] hover:bg-[#c2e236] focus:ring-[#d4f34a]/50 shadow-sm hover:shadow-md',
+        dark: 'bg-[#003c30] text-white hover:bg-[#002820] focus:ring-[#003c30]/50 shadow-sm hover:shadow-md',
         secondary: 'bg-accent-500 text-white hover:bg-accent-600 focus:ring-accent-500 shadow-sm hover:shadow-md',
-        outline: 'bg-transparent border-2 border-primary-600 text-primary-600 hover:bg-primary-50 focus:ring-primary-500',
+        outline: 'bg-transparent border-2 border-[#003c30] text-[#003c30] hover:bg-neutral-50 focus:ring-[#003c30]/50',
         ghost: 'bg-transparent text-neutral-700 hover:bg-neutral-100 focus:ring-neutral-500',
     };
 

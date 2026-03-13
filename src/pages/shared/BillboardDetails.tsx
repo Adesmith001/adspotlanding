@@ -19,7 +19,6 @@ import {
     MdPictureAsPdf,
 } from 'react-icons/md';
 import Button from '@/components/ui/Button';
-import Card from '@/components/ui/Card';
 import EmptyState from '@/components/EmptyState';
 import GoogleMapPanel from '@/components/GoogleMapPanel';
 import StreetViewPanel from '@/components/StreetViewPanel';
@@ -355,13 +354,13 @@ const BillboardDetails: React.FC = () => {
     }
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-neutral-50 via-white to-primary-50">
+        <div className="min-h-screen bg-[#f7f7f6]">
             {/* Header */}
             <motion.header
                 initial={{ y: -20, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
                 transition={{ duration: 0.4 }}
-                className="bg-white/80 backdrop-blur-xl border-b border-neutral-200/50 sticky top-0 z-40 shadow-soft"
+                className="bg-[#f7f7f6] border-b border-neutral-200/60 sticky top-0 z-40"
             >
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
                     <div className="flex items-center justify-between">
@@ -411,7 +410,7 @@ const BillboardDetails: React.FC = () => {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5, delay: 0.3 }}
-                    className="relative h-[300px] sm:h-[400px] md:h-[500px] rounded-3xl overflow-hidden mb-8 bg-gradient-to-br from-neutral-200 to-neutral-300 shadow-card"
+                    className="relative h-[300px] sm:h-[400px] md:h-[500px] rounded-[2rem] overflow-hidden mb-8 bg-neutral-200 border border-neutral-100"
                 >
                     {billboard.photos.length > 0 ? (
                         <>
@@ -481,11 +480,11 @@ const BillboardDetails: React.FC = () => {
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ duration: 0.5, delay: 0.4 }}
-                                className="flex items-center gap-3 mb-2 flex-wrap"
+                                className="flex items-center gap-2 mb-4 flex-wrap"
                             >
                                 <motion.span
                                     whileHover={{ scale: 1.05 }}
-                                    className="px-3 py-1 bg-gradient-to-r from-primary-50 to-primary-100 text-primary-700 rounded-full text-sm font-medium capitalize shadow-soft"
+                                    className="px-3 py-1 bg-neutral-900 text-white rounded-full text-sm font-semibold capitalize"
                                 >
                                     {billboard.type}
                                 </motion.span>
@@ -495,7 +494,7 @@ const BillboardDetails: React.FC = () => {
                                         animate={{ opacity: 1, scale: 1 }}
                                         transition={{ delay: 0.45 }}
                                         whileHover={{ scale: 1.05 }}
-                                        className="px-3 py-1 bg-gradient-to-r from-amber-50 to-amber-100 text-amber-700 rounded-full text-sm font-medium flex items-center gap-1 shadow-soft"
+                                        className="px-3 py-1 bg-[#d4f34a] text-green-900 rounded-full text-sm font-semibold flex items-center gap-1"
                                     >
                                         <MdLightMode size={14} />
                                         Lit
@@ -507,7 +506,7 @@ const BillboardDetails: React.FC = () => {
                                         animate={{ opacity: 1, scale: 1 }}
                                         transition={{ delay: 0.5 }}
                                         whileHover={{ scale: 1.05 }}
-                                        className="px-3 py-1 bg-gradient-to-r from-green-50 to-green-100 text-green-700 rounded-full text-sm font-medium shadow-soft"
+                                        className="px-3 py-1 bg-[#d4f34a] text-green-900 rounded-full text-sm font-semibold"
                                     >
                                         Instant Book
                                     </motion.span>
@@ -518,7 +517,7 @@ const BillboardDetails: React.FC = () => {
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ duration: 0.5, delay: 0.55 }}
-                                className="text-3xl font-bold text-neutral-900 mb-3 bg-gradient-to-r from-neutral-900 to-neutral-700 bg-clip-text text-transparent"
+                                className="text-3xl md:text-5xl font-extrabold text-neutral-900 mb-4 tracking-tight"
                             >
                                 {billboard.title}
                             </motion.h1>
@@ -527,9 +526,9 @@ const BillboardDetails: React.FC = () => {
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ duration: 0.5, delay: 0.6 }}
-                                className="flex items-start sm:items-center gap-2 text-neutral-600 bg-gradient-to-r from-neutral-50 to-white px-4 py-2 rounded-xl shadow-soft"
+                                className="flex items-start sm:items-center gap-2 text-neutral-500 text-lg"
                             >
-                                <MdLocationOn size={20} className="text-primary-600" />
+                                <MdLocationOn size={24} className="text-neutral-400" />
                                 <span className="font-medium break-words">
                                     {billboard.location.address}, {billboard.location.city}, {billboard.location.state}
                                 </span>
@@ -542,35 +541,35 @@ const BillboardDetails: React.FC = () => {
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ duration: 0.5, delay: 0.65 }}
                         >
-                            <Card className="p-6 shadow-soft bg-gradient-to-br from-white to-primary-50/50">
-                                <h2 className="text-lg font-bold text-neutral-900 mb-4">Specifications</h2>
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                                    <div>
-                                        <p className="text-sm text-neutral-500 mb-1">Dimensions</p>
-                                        <p className="font-bold text-neutral-900">
-                                            {billboard.dimensions.width}×{billboard.dimensions.height} {billboard.dimensions.unit}
+                            <div className="bg-white rounded-[2rem] border border-neutral-100 p-6 md:p-8 shadow-sm">
+                                <h2 className="text-xl font-bold text-neutral-900 mb-6">Specifications</h2>
+                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+                                    <div className="bg-neutral-50 p-4 rounded-2xl">
+                                        <p className="text-sm font-medium text-neutral-500 mb-1">Dimensions</p>
+                                        <p className="font-bold text-neutral-900 text-lg">
+                                            {billboard.dimensions.width}×{billboard.dimensions.height} <span className="text-sm font-medium">{billboard.dimensions.unit}</span>
                                         </p>
                                     </div>
-                                    <div>
-                                        <p className="text-sm text-neutral-500 mb-1">Orientation</p>
-                                        <p className="font-bold text-neutral-900 capitalize">{billboard.orientation}</p>
+                                    <div className="bg-neutral-50 p-4 rounded-2xl">
+                                        <p className="text-sm font-medium text-neutral-500 mb-1">Orientation</p>
+                                        <p className="font-bold text-neutral-900 text-lg capitalize">{billboard.orientation}</p>
                                     </div>
-                                    <div>
-                                        <p className="text-sm text-neutral-500 mb-1">Traffic Score</p>
-                                        <p className="font-bold text-neutral-900 flex items-center gap-1">
-                                            <MdTrendingUp size={16} className="text-green-600" />
+                                    <div className="bg-neutral-50 p-4 rounded-2xl">
+                                        <p className="text-sm font-medium text-neutral-500 mb-1">Traffic Score</p>
+                                        <p className="font-bold text-neutral-900 text-lg flex items-center gap-1">
+                                            <MdTrendingUp size={20} className="text-[#d4f34a]" />
                                             {billboard.trafficScore}/10
                                         </p>
                                     </div>
-                                    <div>
-                                        <p className="text-sm text-neutral-500 mb-1">Rating</p>
-                                        <p className="font-bold text-neutral-900 flex items-center gap-1">
-                                            <MdStar size={16} className="text-amber-500" />
+                                    <div className="bg-neutral-50 p-4 rounded-2xl">
+                                        <p className="text-sm font-medium text-neutral-500 mb-1">Rating</p>
+                                        <p className="font-bold text-neutral-900 text-lg flex items-center gap-1">
+                                            <MdStar size={20} className="text-amber-400" />
                                             {billboard.rating > 0 ? `${billboard.rating.toFixed(1)} (${billboard.reviewCount})` : 'New'}
                                         </p>
                                     </div>
                                 </div>
-                            </Card>
+                            </div>
                         </motion.div>
 
                         {/* Description */}
@@ -579,10 +578,10 @@ const BillboardDetails: React.FC = () => {
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ duration: 0.5, delay: 0.7 }}
                         >
-                            <Card className="p-6 shadow-soft bg-gradient-to-br from-white to-accent-50/50">
-                                <h2 className="text-lg font-bold text-neutral-900 mb-4">About This Billboard</h2>
-                                <p className="text-neutral-600 leading-relaxed text-justify">{billboard.description}</p>
-                            </Card>
+                            <div className="bg-white rounded-[2rem] border border-neutral-100 p-6 md:p-8 shadow-sm">
+                                <h2 className="text-xl font-bold text-neutral-900 mb-4">About This Billboard</h2>
+                                <p className="text-neutral-600 leading-relaxed text-lg">{billboard.description}</p>
+                            </div>
                         </motion.div>
 
                         {/* Location Map */}
@@ -592,9 +591,9 @@ const BillboardDetails: React.FC = () => {
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ duration: 0.5, delay: 0.72 }}
                             >
-                                <Card className="p-6 shadow-soft bg-gradient-to-br from-white to-primary-50/50">
-                                    <h2 className="text-lg font-bold text-neutral-900 mb-4 flex items-center gap-2">
-                                        <MdLocationOn size={20} className="text-primary-600" />
+                                <div className="bg-white rounded-[2rem] border border-neutral-100 p-6 md:p-8 shadow-sm">
+                                    <h2 className="text-xl font-bold text-neutral-900 mb-6 flex items-center gap-2">
+                                        <MdLocationOn size={24} className="text-neutral-400" />
                                         Billboard Location
                                     </h2>
                                     <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
@@ -623,11 +622,11 @@ const BillboardDetails: React.FC = () => {
                                         />
                                     </div>
                                     {billboard.location.lat !== 0 && billboard.location.lng !== 0 && (
-                                        <p className="text-xs text-neutral-400 mt-3 font-mono">
+                                        <p className="text-xs text-neutral-400 mt-4 font-mono">
                                             Lat: {billboard.location.lat.toFixed(6)} • Lng: {billboard.location.lng.toFixed(6)}
                                         </p>
                                     )}
-                                </Card>
+                                </div>
                             </motion.div>
                         )}
 
@@ -637,11 +636,11 @@ const BillboardDetails: React.FC = () => {
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ duration: 0.5, delay: 0.75 }}
                         >
-                            <Card className="p-6 shadow-soft bg-gradient-to-br from-white to-neutral-50/50">
-                                <h2 className="text-lg font-bold text-neutral-900 mb-4">Billboard Owner</h2>
+                            <div className="bg-white rounded-[2rem] border border-neutral-100 p-6 md:p-8 shadow-sm">
+                                <h2 className="text-xl font-bold text-neutral-900 mb-6">Billboard Owner</h2>
                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                                     <div className="flex items-center gap-4">
-                                        <div className="w-14 h-14 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white text-xl font-bold">
+                                        <div className="w-14 h-14 rounded-full bg-neutral-900 flex items-center justify-center text-white text-xl font-bold">
                                             {billboard.ownerName.charAt(0).toUpperCase()}
                                         </div>
                                         <div>
@@ -660,12 +659,12 @@ const BillboardDetails: React.FC = () => {
                                         whileHover={{ scale: 1.05 }}
                                         whileTap={{ scale: 0.95 }}
                                     >
-                                        <Button variant="outline" icon={<MdMessage />} onClick={handleContact}>
+                                        <Button variant="outline" icon={<MdMessage />} onClick={handleContact} className="!rounded-xl">
                                             Contact
                                         </Button>
                                     </motion.div>
                                 </div>
-                            </Card>
+                            </div>
                         </motion.div>
 
                         {/* Reviews */}
@@ -674,8 +673,8 @@ const BillboardDetails: React.FC = () => {
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ duration: 0.5, delay: 0.8 }}
                         >
-                            <Card className="p-6 shadow-soft bg-gradient-to-br from-white to-neutral-50/50">
-                                <h2 className="text-lg font-bold text-neutral-900 mb-4">
+                            <div className="bg-white rounded-[2rem] border border-neutral-100 p-6 md:p-8 shadow-sm">
+                                <h2 className="text-xl font-bold text-neutral-900 mb-6">
                                     Reviews ({reviews.length})
                                 </h2>
                                 {reviews.length === 0 ? (
@@ -713,7 +712,7 @@ const BillboardDetails: React.FC = () => {
                                         ))}
                                     </div>
                                 )}
-                            </Card>
+                            </div>
                         </motion.div>
                     </div>
 
@@ -724,15 +723,15 @@ const BillboardDetails: React.FC = () => {
                         transition={{ duration: 0.5, delay: 0.85 }}
                         className="lg:col-span-1 w-full mt-8 lg:mt-0"
                     >
-                        <Card className="p-6 lg:sticky lg:top-24 shadow-card bg-gradient-to-br from-white to-primary-50/50">
+                        <div className="bg-white rounded-[2.5rem] border border-neutral-100 p-6 lg:p-8 shadow-sm lg:sticky lg:top-24">
                             <motion.div
                                 initial={{ opacity: 0, y: 10 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ duration: 0.3, delay: 0.86 }}
                                 className="mb-6"
                             >
-                                <p className="text-lg text-neutral-600 mb-1">Price per day</p>
-                                <p className="text-3xl sm:text-4xl font-bold text-transparent bg-gradient-to-r from-primary-600 to-accent-600 bg-clip-text">
+                                <p className="text-lg text-neutral-500 mb-1">Price per day</p>
+                                <p className="text-3xl sm:text-4xl font-extrabold text-neutral-900">
                                     {formatPrice(billboard.pricing.daily)}
                                 </p>
                             </motion.div>
@@ -763,9 +762,9 @@ const BillboardDetails: React.FC = () => {
                                     />
                                 </div>
 
-                                <div className="rounded-2xl border border-neutral-200 bg-white p-4 space-y-4">
+                                <div className="rounded-[1.5rem] border border-neutral-100 bg-neutral-50 p-5 space-y-4">
                                     <div>
-                                        <p className="text-sm font-semibold text-neutral-900">Creative Requirements</p>
+                                        <p className="text-sm font-bold text-neutral-900">Creative Requirements</p>
                                         <p className="text-xs text-neutral-500 mt-1">
                                             The owner reviews the creative first. Payment is only requested after that approval.
                                         </p>
@@ -775,17 +774,17 @@ const BillboardDetails: React.FC = () => {
                                         <button
                                             type="button"
                                             onClick={() => setCreativeRequirementType('advertiser_upload')}
-                                            className={`rounded-xl border p-4 text-left transition-all ${creativeRequirementType === 'advertiser_upload'
-                                                ? 'border-primary-500 bg-primary-50'
-                                                : 'border-neutral-200 hover:border-neutral-300'
+                                            className={`rounded-2xl border-2 p-4 text-left transition-all ${creativeRequirementType === 'advertiser_upload'
+                                                ? 'border-neutral-900 bg-white shadow-sm'
+                                                : 'border-transparent bg-neutral-100 hover:bg-neutral-200/50'
                                                 }`}
                                         >
                                             <div className="flex items-start gap-3">
-                                                <div className="mt-0.5 rounded-lg bg-primary-100 p-2 text-primary-700">
+                                                <div className="mt-0.5 rounded-lg bg-[#d4f34a] p-2 text-green-900">
                                                     <MdUpload size={18} />
                                                 </div>
                                                 <div>
-                                                    <p className="text-sm font-semibold text-neutral-900">I already have a design</p>
+                                                    <p className="text-sm font-bold text-neutral-900">I already have a design</p>
                                                     <p className="text-xs text-neutral-500 mt-1">Upload artwork, mockups, or a PDF proof so the owner can approve it.</p>
                                                 </div>
                                             </div>
@@ -794,17 +793,17 @@ const BillboardDetails: React.FC = () => {
                                         <button
                                             type="button"
                                             onClick={() => setCreativeRequirementType('owner_design_service')}
-                                            className={`rounded-xl border p-4 text-left transition-all ${creativeRequirementType === 'owner_design_service'
-                                                ? 'border-primary-500 bg-primary-50'
-                                                : 'border-neutral-200 hover:border-neutral-300'
+                                            className={`rounded-2xl border-2 p-4 text-left transition-all ${creativeRequirementType === 'owner_design_service'
+                                                ? 'border-neutral-900 bg-white shadow-sm'
+                                                : 'border-transparent bg-neutral-100 hover:bg-neutral-200/50'
                                                 }`}
                                         >
                                             <div className="flex items-start gap-3">
-                                                <div className="mt-0.5 rounded-lg bg-amber-100 p-2 text-amber-700">
+                                                <div className="mt-0.5 rounded-lg bg-neutral-200 p-2 text-neutral-800">
                                                     <MdDesignServices size={18} />
                                                 </div>
                                                 <div>
-                                                    <p className="text-sm font-semibold text-neutral-900">I need the company to create the design</p>
+                                                    <p className="text-sm font-bold text-neutral-900">I need the company to create the design</p>
                                                     <p className="text-xs text-neutral-500 mt-1">Explain the campaign, offer, audience, and any brand direction the owner should review.</p>
                                                 </div>
                                             </div>
@@ -888,12 +887,12 @@ const BillboardDetails: React.FC = () => {
                                     </div>
                                     <div className="flex justify-between text-lg font-bold">
                                         <span className="text-neutral-900">Total</span>
-                                        <span className="text-primary-600">{formatPrice(totalPrice)}</span>
+                                        <span className="text-neutral-900">{formatPrice(totalPrice)}</span>
                                     </div>
                                 </div>
                             )}
 
-                            <Button fullWidth size="lg" onClick={handleBooking} disabled={isBooking}>
+                            <Button fullWidth size="lg" onClick={handleBooking} disabled={isBooking} className="!bg-[#d4f34a] !text-green-900 hover:!bg-[#c5e53a] !rounded-xl font-bold mt-4 shadow-sm">
                                 {isBooking ? 'Processing...' : 'Submit For Review'}
                             </Button>
 
@@ -912,14 +911,14 @@ const BillboardDetails: React.FC = () => {
                             >
                                 <div className="flex justify-between items-center">
                                     <span className="text-neutral-600 font-medium">Weekly rate</span>
-                                    <span className="font-bold text-primary-600">{formatPrice(billboard.pricing.weekly)}</span>
+                                    <span className="font-bold text-neutral-900">{formatPrice(billboard.pricing.weekly)}</span>
                                 </div>
                                 <div className="flex justify-between items-center">
                                     <span className="text-neutral-600 font-medium">Monthly rate</span>
-                                    <span className="font-bold text-primary-600">{formatPrice(billboard.pricing.monthly)}</span>
+                                    <span className="font-bold text-neutral-900">{formatPrice(billboard.pricing.monthly)}</span>
                                 </div>
                             </motion.div>
-                        </Card>
+                        </div>
                     </motion.div>
                 </div>
             </motion.main>

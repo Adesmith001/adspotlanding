@@ -120,7 +120,7 @@ const NotificationBell: React.FC = () => {
                                         <div
                                             key={notification.id}
                                             onClick={() => handleMarkAsRead(notification.id)}
-                                            className={`p-4 border-b border-neutral-100 hover:bg-neutral-50 transition-colors relative cursor-pointer ${!notification.read ? 'bg-blue-50/50' : ''
+                                            className={`p-4 border-b border-neutral-100 hover:bg-neutral-50 transition-colors relative cursor-pointer ${!notification.read ? 'bg-primary-50/50' : ''
                                                 }`}
                                         >
                                             {/* Unread Indicator */}

@@ -346,7 +346,7 @@ const CreateListing: React.FC = () => {
                 return (
                     <div className="space-y-6">
                         {/* Instruction */}
-                        <div className="bg-gradient-to-r from-primary-50 to-accent-50 rounded-2xl p-5 border border-primary-100">
+                        <div className="bg-primary-50 rounded-2xl p-5 border border-primary-100">
                             <div className="flex items-start gap-3">
                                 <div className="w-10 h-10 bg-primary-100 rounded-xl flex items-center justify-center flex-shrink-0">
                                     <MdMyLocation size={22} className="text-primary-600" />
@@ -428,7 +428,7 @@ const CreateListing: React.FC = () => {
                                     animate={{ opacity: 1, y: 0 }}
                                     exit={{ opacity: 0 }}
                                 >
-                                    <Card className="p-4 bg-gradient-to-r from-green-50 to-emerald-50 border-green-200">
+                                    <Card className="p-4 bg-green-50 border-green-200">
                                         <div className="flex items-center gap-3">
                                             <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center">
                                                 <MdLocationOn size={22} className="text-green-600" />
@@ -652,7 +652,7 @@ const CreateListing: React.FC = () => {
                         </div>
                         {formData.dailyPrice > 0 && (
                             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-                                <Card className="p-5 bg-gradient-to-r from-neutral-50 to-primary-50/30">
+                                <Card className="p-5 bg-neutral-50">
                                     <p className="text-sm font-semibold text-neutral-700 mb-3">Pricing Preview</p>
                                     <div className="space-y-1.5 text-sm text-neutral-600">
                                         <p>Daily: <span className="font-bold text-neutral-900">₦{formData.dailyPrice.toLocaleString()}</span></p>
@@ -713,7 +713,7 @@ const CreateListing: React.FC = () => {
             case 7:
                 return (
                     <motion.div variants={containerVariants} initial="hidden" animate="visible" className="space-y-6">
-                        <Card className="p-6 md:p-8 border-primary-100 bg-gradient-to-r from-white to-primary-50/20">
+                        <Card className="p-6 md:p-8 border-primary-100 bg-white shadow-soft">
                             <h3 className="text-lg font-bold text-neutral-900 mb-6">Review Your Listing</h3>
                             <div className="space-y-5">
                                 {[
@@ -782,90 +782,112 @@ const CreateListing: React.FC = () => {
 
     return (
         <DashboardLayout userRole="owner" title="Create New Listing" subtitle="Add a new billboard to your inventory">
-            <div className="max-w-4xl mx-auto">
-                {/* Progress Steps */}
-                <div className="mb-10">
-                    <div className="overflow-x-auto pb-2">
-                        <div className="flex items-center justify-between min-w-[760px]">
-                            {STEPS.map((step, index) => (
-                                <div key={step.id} className="flex items-center">
-                                <motion.div
-                                    initial={false}
-                                    animate={{
-                                        scale: currentStep === step.id ? 1.1 : 1,
-                                        backgroundColor: currentStep > step.id ? '#22c55e' : currentStep === step.id ? '#6366f1' : '#e5e7eb',
-                                    }}
-                                    transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-                                    className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-medium"
-                                    style={{ color: currentStep >= step.id ? '#fff' : '#737373' }}
-                                >
-                                    {currentStep > step.id ? <MdCheck size={18} /> : step.id}
-                                </motion.div>
-                                    {index < STEPS.length - 1 && (
-                                        <div className="hidden md:block w-12 lg:w-24 h-1 bg-neutral-200 relative overflow-hidden rounded-full">
-                                            <motion.div
-                                                initial={{ width: '0%' }}
-                                                animate={{ width: currentStep > step.id ? '100%' : '0%' }}
-                                                transition={{ duration: 0.5, ease: 'easeOut' }}
-                                                className="absolute inset-y-0 left-0 bg-green-500 rounded-full"
-                                            />
+            <div className="max-w-6xl mx-auto flex flex-col lg:flex-row gap-6 lg:gap-10 pb-10">
+                {/* Left: Vertical Progress Steps */}
+                <div className="w-full lg:w-72 flex-shrink-0">
+                    <div className="bg-white rounded-2xl border border-neutral-100 p-6 sticky top-24">
+                        <h3 className="text-sm font-bold text-neutral-900 mb-6 uppercase tracking-wider">Creation Steps</h3>
+                        <div className="space-y-6">
+                            {STEPS.map((step, index) => {
+                                const isCompleted = currentStep > step.id;
+                                const isActive = currentStep === step.id;
+
+                                return (
+                                    <div key={step.id} className="relative flex items-start gap-4">
+                                        {/* Connecting Line */}
+                                        {index < STEPS.length - 1 && (
+                                            <div className="absolute left-[13px] top-8 bottom-[-24px] w-0.5 bg-neutral-100">
+                                                <motion.div
+                                                    initial={{ height: '0%' }}
+                                                    animate={{ height: isCompleted ? '100%' : '0%' }}
+                                                    transition={{ duration: 0.5 }}
+                                                    className="w-full bg-[#d4f34a]"
+                                                />
+                                            </div>
+                                        )}
+
+                                        {/* Step Indicator */}
+                                        <motion.div
+                                            initial={false}
+                                            animate={{
+                                                backgroundColor: isCompleted ? '#d4f34a' : isActive ? '#171717' : '#f5f5f5',
+                                                borderColor: isActive ? '#171717' : 'transparent',
+                                                scale: isActive ? 1.05 : 1
+                                            }}
+                                            className={`relative z-10 w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 border-2 ${isCompleted ? 'text-neutral-900' : isActive ? 'text-white' : 'text-neutral-400'}`}
+                                        >
+                                            {isCompleted ? <MdCheck size={14} className="text-green-800" /> : <span className="text-[10px] font-bold">{step.id}</span>}
+                                        </motion.div>
+
+                                        {/* Step Text */}
+                                        <div className="pt-0.5">
+                                            <p className={`text-sm font-bold ${isActive ? 'text-neutral-900' : isCompleted ? 'text-neutral-700' : 'text-neutral-400'}`}>
+                                                {step.name}
+                                            </p>
+                                            <p className={`text-[10px] mt-0.5 ${isActive ? 'text-neutral-500' : 'text-neutral-300'}`}>
+                                                {step.description}
+                                            </p>
                                         </div>
-                                    )}
-                                </div>
-                            ))}
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
-                    <motion.div
-                        key={currentStep}
-                        initial={{ opacity: 0, y: 5 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="mt-4 text-center"
-                    >
-                        <p className="font-semibold text-neutral-900">{STEPS[currentStep - 1].name}</p>
-                        <p className="text-sm text-neutral-500">{STEPS[currentStep - 1].description}</p>
-                    </motion.div>
                 </div>
 
-                {/* Step Content */}
-                <Card className="p-6 md:p-8 mb-8">
-                    <AnimatePresence mode="wait">
-                        <motion.div
-                            key={currentStep}
-                            variants={stepContentVariants}
-                            initial="initial"
-                            animate="animate"
-                            exit="exit"
-                        >
-                            {renderStepContent()}
-                        </motion.div>
-                    </AnimatePresence>
-                </Card>
+                {/* Right: Step Content Form inside floating card */}
+                <div className="flex-1 min-w-0">
+                    <div className="bg-white rounded-[2rem] shadow-sm border border-neutral-100 p-6 md:p-10 mb-6 min-h-[500px] flex flex-col">
+                        <div className="mb-8">
+                            <h2 className="text-2xl font-bold text-neutral-900">{STEPS[currentStep - 1].name}</h2>
+                            <p className="text-neutral-500 text-sm mt-1">{STEPS[currentStep - 1].description}</p>
+                        </div>
 
-                {/* Navigation */}
-                <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-3">
-                    <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-                        <Button
-                            variant="outline"
-                            onClick={() => setCurrentStep((prev) => Math.max(1, prev - 1))}
-                            disabled={currentStep === 1}
-                            icon={<MdArrowBack />}
-                            className="w-full sm:w-auto"
-                        >
-                            Previous
-                        </Button>
-                    </motion.div>
+                        <div className="flex-1">
+                            <AnimatePresence mode="wait">
+                                <motion.div
+                                    key={currentStep}
+                                    variants={stepContentVariants}
+                                    initial="initial"
+                                    animate="animate"
+                                    exit="exit"
+                                >
+                                    {renderStepContent()}
+                                </motion.div>
+                            </AnimatePresence>
+                        </div>
 
-                    <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-                        {currentStep < 7 ? (
-                            <Button onClick={() => setCurrentStep((prev) => Math.min(7, prev + 1))} disabled={!canProceed()} icon={<MdArrowForward />} className="w-full sm:w-auto">
-                                Next
+                        {/* Navigation Footer */}
+                        <div className="mt-12 pt-6 border-t border-neutral-100 flex items-center justify-between gap-3">
+                            <Button
+                                variant="outline"
+                                onClick={() => setCurrentStep((prev) => Math.max(1, prev - 1))}
+                                disabled={currentStep === 1}
+                                className="!rounded-xl px-6"
+                            >
+                                <MdArrowBack className="mr-2" /> Back
                             </Button>
-                        ) : (
-                            <Button onClick={handleSubmit} loading={isSubmitting} disabled={!canProceed() || isSubmitting} className="w-full sm:w-auto">
-                                Submit Listing
-                            </Button>
-                        )}
-                    </motion.div>
+
+                            {currentStep < 7 ? (
+                                <Button
+                                    onClick={() => setCurrentStep((prev) => Math.min(7, prev + 1))}
+                                    disabled={!canProceed()}
+                                    className="!bg-[#d4f34a] !text-green-900 hover:!bg-[#c5e53a] !rounded-xl px-8 font-semibold"
+                                >
+                                    Continue <MdArrowForward className="ml-2" />
+                                </Button>
+                            ) : (
+                                <Button
+                                    onClick={handleSubmit}
+                                    loading={isSubmitting}
+                                    disabled={!canProceed() || isSubmitting}
+                                    className="!bg-neutral-900 !text-white hover:!bg-neutral-800 !rounded-xl px-8 font-semibold"
+                                >
+                                    Submit Listing <MdCheck className="ml-2" />
+                                </Button>
+                            )}
+                        </div>
+                    </div>
                 </div>
             </div>
         </DashboardLayout>

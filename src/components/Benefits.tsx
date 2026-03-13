@@ -4,148 +4,137 @@ import { TrendingUp, Users, ShieldCheck, Zap, ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
 
 const Benefits: React.FC = () => {
-  const advertiserBenefits = [
-    {
-      icon: <TrendingUp size={18} />,
-      text: "Maximize ROI with targeted placements",
-    },
-    { icon: <Zap size={18} />, text: "Launch campaigns in minutes" },
-    {
-      icon: <ShieldCheck size={18} />,
-      text: "Verified locations and traffic data",
-    },
-  ];
+    const advertiserBenefits = [
+        {
+            icon: <TrendingUp size={18} />,
+            text: "Maximize ROI with targeted placements",
+        },
+        { icon: <Zap size={18} />, text: "Launch campaigns in minutes" },
+        {
+            icon: <ShieldCheck size={18} />,
+            text: "Verified locations and traffic data",
+        },
+    ];
 
-  const ownerBenefits = [
-    {
-      icon: <Users size={18} />,
-      text: "Reach thousands of active advertisers",
-    },
-    { icon: <Zap size={18} />, text: "Automate bookings and payments" },
-    {
-      icon: <ShieldCheck size={18} />,
-      text: "Guaranteed payouts with clear reporting",
-    },
-  ];
+    const ownerBenefits = [
+        {
+            icon: <Users size={18} />,
+            text: "Reach thousands of active advertisers",
+        },
+        { icon: <Zap size={18} />, text: "Automate bookings and payments" },
+        {
+            icon: <ShieldCheck size={18} />,
+            text: "Guaranteed payouts with clear reporting",
+        },
+    ];
 
-  return (
-    <section id="benefits" className="py-24 md:py-28 bg-[#f7f7f7]">
-      <div className="max-w-7xl mx-auto px-6 lg:px-8">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-          viewport={{ once: true }}
-          className="text-center mb-14"
-        >
-          <span className="text-sm font-semibold uppercase tracking-widest text-gray-400">
-            Who it&apos;s for
-          </span>
-          <h2 className="text-3xl md:text-4xl lg:text-5xl font-semibold text-gray-900 mt-4">
-            Built for everyone in outdoor media.
-          </h2>
-        </motion.div>
+    return (
+        <section id="benefits" className="py-24 md:py-32 bg-[#f7f7f6]">
+            <div className="max-w-6xl mx-auto px-6 lg:px-8">
+                <div className="text-center max-w-3xl mx-auto mb-20">
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        whileInView={{ opacity: 1, y: 0 }}
+                        viewport={{ once: true }}
+                        className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white border border-neutral-200 mb-6 uppercase text-xs font-bold tracking-widest text-neutral-500"
+                    >
+                        Success
+                    </motion.div>
+                    <h2 className="text-4xl md:text-5xl font-bold text-[#003c30] mb-6 tracking-tight">
+                        Built for <span className="text-[#003c30]/60">everyone</span> in outdoor media
+                    </h2>
+                </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <motion.div
-            initial={{ opacity: 0, y: 24 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-            viewport={{ once: true }}
-            className="rounded-3xl border border-black/5 bg-white shadow-sm overflow-hidden"
-          >
-            <div className="relative h-48 overflow-hidden">
-              <img
-                src="/assets/lifestyle_brand_1763516941658.png"
-                alt="For Advertisers"
-                className="w-full h-full object-cover"
-                loading="lazy"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
-              <div className="absolute bottom-0 left-0 right-0 p-6">
-                <span className="inline-flex px-3 py-1 text-xs font-medium rounded-full bg-white/80 text-gray-900">
-                  For advertisers
-                </span>
-                <h3 className="text-2xl font-semibold text-white mt-3">
-                  Your brand deserves to be seen.
-                </h3>
-              </div>
-            </div>
-            <div className="p-7">
-              <p className="text-gray-600 mb-6">
-                Skip the middlemen and book directly with owners. Transparent
-                pricing, real-time availability, and instant confirmation.
-              </p>
-              <ul className="space-y-3 mb-6">
-                {advertiserBenefits.map((benefit) => (
-                  <li key={benefit.text} className="flex items-start gap-3">
-                    <span className="w-9 h-9 rounded-xl bg-black text-white flex items-center justify-center">
-                      {benefit.icon}
-                    </span>
-                    <span className="text-gray-700 pt-1">{benefit.text}</span>
-                  </li>
-                ))}
-              </ul>
-              <Link
-                to="/login"
-                className="inline-flex items-center gap-2 text-gray-900 font-semibold hover:gap-3 transition-all"
-              >
-                Start advertising <ArrowRight size={18} />
-              </Link>
-            </div>
-          </motion.div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    {/* For Advertisers */}
+                    <motion.div
+                        initial={{ opacity: 0, x: -20 }}
+                        whileInView={{ opacity: 1, x: 0 }}
+                        transition={{ duration: 0.6 }}
+                        viewport={{ once: true }}
+                        className="group bg-white rounded-[40px] border border-neutral-100 shadow-sm hover:shadow-xl hover:shadow-black/5 transition-all duration-700 overflow-hidden"
+                    >
+                        <div className="p-10 lg:p-12">
+                            <div className="flex items-center gap-4 mb-8">
+                                <div className="w-12 h-12 rounded-2xl bg-[#f0f2eb] text-[#003c30] flex items-center justify-center">
+                                    <TrendingUp size={24} />
+                                </div>
+                                <div>
+                                    <span className="text-xs font-bold text-neutral-400 uppercase tracking-widest block mb-1">For Brands</span>
+                                    <h3 className="text-3xl font-bold text-[#003c30]">Advertisers</h3>
+                                </div>
+                            </div>
+                            
+                            <p className="text-neutral-600 mb-10 text-lg leading-relaxed font-medium">
+                                Skip the manual agency emails and book directly. Get transparent pricing and data you can actually trust.
+                            </p>
 
-          <motion.div
-            initial={{ opacity: 0, y: 24 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.1 }}
-            viewport={{ once: true }}
-            className="rounded-3xl border border-black/5 bg-white shadow-sm overflow-hidden"
-          >
-            <div className="relative h-48 overflow-hidden">
-              <img
-                src="/assets/lifestyle_drone_1763516949532.png"
-                alt="For Media Owners"
-                className="w-full h-full object-cover"
-                loading="lazy"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
-              <div className="absolute bottom-0 left-0 right-0 p-6">
-                <span className="inline-flex px-3 py-1 text-xs font-medium rounded-full bg-white/80 text-gray-900">
-                  For media owners
-                </span>
-                <h3 className="text-2xl font-semibold text-white mt-3">
-                  Maximize your inventory.
-                </h3>
-              </div>
+                            <div className="space-y-4 mb-10">
+                                {advertiserBenefits.map((benefit) => (
+                                    <div key={benefit.text} className="flex items-center gap-4 p-4 rounded-2xl bg-[#f7f7f6] group-hover:bg-[#f0f2eb] transition-colors duration-500">
+                                        <div className="w-8 h-8 rounded-lg bg-white text-[#003c30] flex items-center justify-center shadow-sm">
+                                            {benefit.icon}
+                                        </div>
+                                        <span className="text-neutral-700 font-bold text-sm">{benefit.text}</span>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <Link to="/login" className="w-full">
+                                <button className="w-full bg-[#003c30] text-white py-4 rounded-2xl font-bold text-lg hover:bg-[#002820] transition-colors flex items-center justify-center gap-3">
+                                    Start advertising
+                                    <ArrowRight size={20} />
+                                </button>
+                            </Link>
+                        </div>
+                    </motion.div>
+
+                    {/* For Owners */}
+                    <motion.div
+                        initial={{ opacity: 0, x: 20 }}
+                        whileInView={{ opacity: 1, x: 0 }}
+                        transition={{ duration: 0.6 }}
+                        viewport={{ once: true }}
+                        className="group bg-white rounded-[40px] border border-neutral-100 shadow-sm hover:shadow-xl hover:shadow-black/5 transition-all duration-700 overflow-hidden"
+                    >
+                        <div className="p-10 lg:p-12">
+                            <div className="flex items-center gap-4 mb-8">
+                                <div className="w-12 h-12 rounded-2xl bg-[#f0f2eb] text-[#003c30] flex items-center justify-center">
+                                    <Users size={24} />
+                                </div>
+                                <div>
+                                    <span className="text-xs font-bold text-neutral-400 uppercase tracking-widest block mb-1">For Partners</span>
+                                    <h3 className="text-3xl font-bold text-[#003c30]">Media Owners</h3>
+                                </div>
+                            </div>
+                            
+                            <p className="text-neutral-600 mb-10 text-lg leading-relaxed font-medium">
+                                List your inventory for free, manage bookings effortlessly, and get paid faster through our secure platform.
+                            </p>
+
+                            <div className="space-y-4 mb-10">
+                                {ownerBenefits.map((benefit) => (
+                                    <div key={benefit.text} className="flex items-center gap-4 p-4 rounded-2xl bg-[#f7f7f6] group-hover:bg-[#f0f2eb] transition-colors duration-500">
+                                        <div className="w-8 h-8 rounded-lg bg-white text-[#003c30] flex items-center justify-center shadow-sm">
+                                            {benefit.icon}
+                                        </div>
+                                        <span className="text-neutral-700 font-bold text-sm">{benefit.text}</span>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <Link to="/login" className="w-full">
+                                <button className="w-full border-2 border-[#003c30] text-[#003c30] py-4 rounded-2xl font-bold text-lg hover:bg-[#003c30] hover:text-white transition-all flex items-center justify-center gap-3">
+                                    List your billboard
+                                    <ArrowRight size={20} />
+                                </button>
+                            </Link>
+                        </div>
+                    </motion.div>
+                </div>
             </div>
-            <div className="p-7">
-              <p className="text-gray-600 mb-6">
-                List your billboards for free, reach active buyers, and get paid
-                faster with secure checkout.
-              </p>
-              <ul className="space-y-3 mb-6">
-                {ownerBenefits.map((benefit) => (
-                  <li key={benefit.text} className="flex items-start gap-3">
-                    <span className="w-9 h-9 rounded-xl bg-black text-white flex items-center justify-center">
-                      {benefit.icon}
-                    </span>
-                    <span className="text-gray-700 pt-1">{benefit.text}</span>
-                  </li>
-                ))}
-              </ul>
-              <Link
-                to="/login"
-                className="inline-flex items-center gap-2 text-gray-900 font-semibold hover:gap-3 transition-all"
-              >
-                List your billboard <ArrowRight size={18} />
-              </Link>
-            </div>
-          </motion.div>
-        </div>
-      </div>
-    </section>
-  );
+        </section>
+    );
 };
 
 export default Benefits;

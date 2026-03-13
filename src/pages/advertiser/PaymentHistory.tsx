@@ -103,9 +103,9 @@ const PaymentHistory: React.FC = () => {
     const pending = payments.filter(p => p.status === 'pending').reduce((acc, p) => acc + p.amount, 0);
 
     const summaryCards = [
-        { label: 'Total Spent', value: formatPrice(totalSpent), icon: <MdAccountBalanceWallet size={22} />, color: 'from-green-500 to-emerald-600', bgColor: 'bg-green-50' },
-        { label: 'This Month', value: formatPrice(thisMonth), icon: <MdCalendarMonth size={22} />, color: 'from-blue-500 to-indigo-600', bgColor: 'bg-blue-50' },
-        { label: 'Pending', value: formatPrice(pending), icon: <MdTrendingUp size={22} />, color: 'from-amber-500 to-orange-600', bgColor: 'bg-amber-50' },
+        { label: 'Total Spent', value: formatPrice(totalSpent), icon: <MdAccountBalanceWallet size={22} />, color: 'text-green-600', bgColor: 'bg-green-50' },
+        { label: 'This Month', value: formatPrice(thisMonth), icon: <MdCalendarMonth size={22} />, color: 'text-primary-600', bgColor: 'bg-primary-50' },
+        { label: 'Pending', value: formatPrice(pending), icon: <MdTrendingUp size={22} />, color: 'text-amber-600', bgColor: 'bg-amber-50' },
     ];
 
     if (loading) {
@@ -166,7 +166,7 @@ const PaymentHistory: React.FC = () => {
                                 <Card className="p-6 hover:shadow-lg transition-shadow duration-300">
                                     <div className="flex items-center gap-4">
                                         <div className={`w-12 h-12 rounded-2xl ${card.bgColor} flex items-center justify-center`}>
-                                            <span className={`bg-gradient-to-br ${card.color} bg-clip-text text-transparent`}>
+                                            <span className={card.color}>
                                                 {card.icon}
                                             </span>
                                         </div>

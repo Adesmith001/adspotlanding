@@ -54,7 +54,7 @@ const BillboardCard: React.FC<BillboardCardProps> = ({ billboard, onFavorite, is
                         />
                     </>
                 ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-neutral-100 to-neutral-200">
+                    <div className="w-full h-full flex items-center justify-center bg-neutral-200">
                         <span className="text-neutral-400 text-sm">No image</span>
                     </div>
                 )}
@@ -125,7 +125,7 @@ const BillboardCard: React.FC<BillboardCardProps> = ({ billboard, onFavorite, is
                         </span>
                     )}
                     {isRareFind && (
-                        <span className="px-3 py-1 bg-gradient-to-r from-rose-500 to-orange-500 backdrop-blur-sm rounded-full text-xs font-semibold text-white shadow-lg flex items-center gap-1">
+                        <span className="px-3 py-1 bg-rose-500 backdrop-blur-sm rounded-full text-xs font-semibold text-white shadow-lg flex items-center gap-1">
                             <MdLocalFireDepartment size={12} />
                             Rare find
                         </span>
@@ -175,7 +175,7 @@ const BillboardCard: React.FC<BillboardCardProps> = ({ billboard, onFavorite, is
 
                 {/* Owner info */}
                 <div className="flex items-center gap-2 mb-4 pb-4 border-b border-neutral-100">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white text-xs font-bold">
+                    <div className="w-8 h-8 rounded-full bg-neutral-900 flex items-center justify-center text-white text-xs font-bold">
                         {billboard.ownerName.charAt(0).toUpperCase()}
                     </div>
                     <div className="flex-1 min-w-0">

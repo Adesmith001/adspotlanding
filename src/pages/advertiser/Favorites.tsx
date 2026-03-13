@@ -142,8 +142,8 @@ const Favorites: React.FC = () => {
                                                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
                                                 />
                                             ) : (
-                                                <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-neutral-100 to-neutral-200">
-                                                    <MdFavorite size={48} className="text-neutral-300" />
+                                                <div className="w-full h-full flex items-center justify-center bg-neutral-200">
+                                                    <MdFavorite size={48} className="text-neutral-400" />
                                                 </div>
                                             )}
 

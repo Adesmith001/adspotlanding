@@ -66,7 +66,7 @@ const AdminDashboard: React.FC = () => {
             value: stats?.totalUsers || 0,
             sub: `${stats?.owners || 0} owners · ${stats?.advertisers || 0} advertisers`,
             icon: <MdPeople size={20} />,
-            iconBg: 'bg-blue-50 text-blue-600',
+            iconBg: 'bg-primary-50 text-primary-600',
         },
         {
             label: 'Total Billboards',
@@ -250,7 +250,7 @@ const AdminDashboard: React.FC = () => {
                     className="grid grid-cols-1 sm:grid-cols-3 gap-4"
                 >
                     {[
-                        { label: 'User Management', sub: 'View and manage accounts', icon: <MdPeople size={22} />, href: '/dashboard/admin/users', bg: 'bg-blue-50/70', iconColor: 'text-blue-600' },
+                        { label: 'User Management', sub: 'View and manage accounts', icon: <MdPeople size={22} />, href: '/dashboard/admin/users', bg: 'bg-primary-50/70', iconColor: 'text-primary-600' },
                         { label: 'Verify Listings', sub: 'Approve or reject billboards', icon: <MdVerifiedUser size={22} />, href: '/dashboard/admin/listings', bg: 'bg-[#d4f34a]/20', iconColor: 'text-green-700' },
                         { label: 'Transactions', sub: 'Monitor platform payments', icon: <MdAttachMoney size={22} />, href: '/dashboard/admin/transactions', bg: 'bg-purple-50/70', iconColor: 'text-purple-600' },
                     ].map((card, i) => (
