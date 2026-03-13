@@ -30,16 +30,9 @@ const Header: React.FC = () => {
       }`}
     >
       <div className="max-w-7xl mx-auto px-6 lg:px-8 flex items-center justify-between">
-        <Link
-          to="/"
-          className="flex items-center gap-2.5 group"
-        >
-          <div className="w-10 h-10 rounded-xl bg-[#003c30] text-white flex items-center justify-center font-bold text-xl transition-transform group-hover:scale-105">
-            A
-          </div>
-          <span className="text-[#003c30] font-bold text-2xl tracking-tight">
-            AdSpot
-          </span>
+        <Link to="/" className="flex items-center gap-1">
+          <span className="text-xl font-bold tracking-tight text-neutral-900">adspot</span>
+          <span className="text-xl font-bold text-[#d4f34a]">.</span>
         </Link>
 
         <nav
