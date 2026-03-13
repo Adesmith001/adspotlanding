@@ -66,6 +66,7 @@ export interface Billboard {
 
   // Pricing
   pricing: Pricing;
+  pricePerDay: number;
 
   // Availability
   unavailableDates: AvailabilityPeriod[];
@@ -156,6 +157,9 @@ export interface Booking {
   cancelledBy?: string;
   cancelledAt?: Date;
   refundAmount?: number;
+
+  // Review
+  reviewedAt?: Date;
 
   // Timestamps
   createdAt: Date;
@@ -297,7 +301,9 @@ export type NotificationType =
   | "new_message"
   | "review_received"
   | "creative_changes_requested"
-  | "creative_approved";
+  | "creative_approved"
+  | "review_prompt"
+  | "campaign_completed";
 
 export interface Notification {
   id: string;

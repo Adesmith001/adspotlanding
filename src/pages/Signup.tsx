@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { motion } from 'framer-motion';
 import { FcGoogle } from 'react-icons/fc';
-import { MdEmail, MdLock, MdPerson, MdPhone, MdArrowForward, MdCheck } from 'react-icons/md';
+import { MdEmail, MdLock, MdPerson, MdPhone, MdArrowForward, MdCheck, MdArrowRightAlt } from 'react-icons/md';
 import toast from 'react-hot-toast';
 import { useAppDispatch, useAppSelector } from '@/hooks/useRedux';
 import { beginGoogleSignupFlow, completeGoogleSignupRole, signUp, selectAuthLoading } from '@/store/authSlice';
@@ -23,38 +23,45 @@ interface SignupForm {
     agreeToTerms: boolean;
 }
 
+const roles = [
+    {
+        key: 'advertiser' as PublicUserRole,
+        emoji: '📢',
+        title: 'Advertiser',
+        description: 'Looking to rent billboard space for campaigns',
+    },
+    {
+        key: 'owner' as PublicUserRole,
+        emoji: '🏢',
+        title: 'Billboard Owner',
+        description: 'I own billboard spaces to rent out',
+    },
+];
+
 const Signup: React.FC = () => {
     const navigate = useNavigate();
     const dispatch = useAppDispatch();
     const loading = useAppSelector(selectAuthLoading);
     const [selectedRole, setSelectedRole] = useState<PublicUserRole>('advertiser');
     const [pendingGoogleProfile, setPendingGoogleProfile] = useState<PendingGoogleSignup | null>(null);
+    const [googleLoading, setGoogleLoading] = useState(false);
 
     const {
         register,
         handleSubmit,
         watch,
         formState: { errors },
-    } = useForm<SignupForm>({
-        defaultValues: { role: 'advertiser' },
-    });
+    } = useForm<SignupForm>({ defaultValues: { role: 'advertiser' } });
 
     const password = watch('password');
 
     const navigateToRoleDashboard = (role: UserRole) => {
-        if (role === 'owner') {
-            navigate('/dashboard/owner');
-            return;
-        }
-
+        if (role === 'owner') { navigate('/dashboard/owner'); return; }
         navigate('/dashboard/advertiser');
     };
 
     const onSubmit = async (data: SignupForm) => {
-        if (!data.agreeToTerms) {
-            toast.error('Please accept the terms and conditions');
-            return;
-        }
+        if (!data.agreeToTerms) { toast.error('Please accept the terms and conditions'); return; }
         try {
             const credentials: SignupCredentials = {
                 email: data.email,
@@ -72,18 +79,16 @@ const Signup: React.FC = () => {
     };
 
     const handleGoogleSignUp = async () => {
+        setGoogleLoading(true);
         try {
             const result = await dispatch(beginGoogleSignupFlow()).unwrap();
-
-            if (result.requiresRoleSelection) {
-                setPendingGoogleProfile(result.profile);
-                return;
-            }
-
+            if (result.requiresRoleSelection) { setPendingGoogleProfile(result.profile); return; }
             toast.success('Welcome back!');
             navigateToRoleDashboard(result.user.role);
         } catch (err: any) {
             toast.error(err || 'Failed to sign up with Google');
+        } finally {
+            setGoogleLoading(false);
         }
     };
 
@@ -100,142 +105,85 @@ const Signup: React.FC = () => {
 
     const handleCloseGoogleRoleModal = async () => {
         setPendingGoogleProfile(null);
-        try {
-            await cancelPendingGoogleSignUp();
-        } catch {
-            // Best effort cleanup only.
-        }
+        try { await cancelPendingGoogleSignUp(); } catch { /* best-effort */ }
     };
 
-    const roles = [
-        {
-            key: 'advertiser' as PublicUserRole,
-            emoji: '📢',
-            title: 'Advertiser',
-            description: 'Looking to rent billboard space for campaigns',
-        },
-        {
-            key: 'owner' as PublicUserRole,
-            emoji: '🏢',
-            title: 'Billboard Owner',
-            description: 'I own billboard spaces to rent out',
-        },
-    ];
-
     return (
-        <div className="min-h-screen flex">
-            {/* Left Panel - Branding */}
-            <motion.div
-                initial={{ opacity: 0, x: -40 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.6, ease: 'easeOut' }}
-                className="hidden lg:flex lg:w-5/12 bg-gradient-to-br from-accent-600 via-primary-700 to-primary-800 relative overflow-hidden"
-            >
-                {/* Decorative shapes */}
-                <div className="absolute top-10 -right-16 w-72 h-72 bg-white/5 rounded-full" />
-                <div className="absolute bottom-32 -left-10 w-56 h-56 bg-white/5 rounded-full" />
-                <div className="absolute top-1/3 right-1/4 w-32 h-32 bg-white/5 rounded-full" />
-
-                <div className="relative z-10 flex flex-col justify-between p-12 w-full">
-                    <Link to="/">
-                        <motion.h1
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            transition={{ delay: 0.3 }}
-                            className="text-3xl font-bold text-white"
-                        >
-                            Adspot
-                        </motion.h1>
+        <div className="min-h-screen bg-[#fafaf9] flex flex-col">
+            {/* Top Nav */}
+            <nav className="w-full flex items-center justify-between px-6 sm:px-12 py-5">
+                <Link to="/" className="flex items-center gap-1">
+                    <span className="text-xl font-bold tracking-tight text-neutral-900">adspot</span>
+                    <span className="text-xl font-bold text-neutral-900">.</span>
+                </Link>
+                <div className="flex items-center gap-5">
+                    <span className="hidden sm:block text-sm text-neutral-400">support@adspot.ng</span>
+                    <div className="w-px h-4 bg-neutral-200 hidden sm:block" />
+                    <Link to="/login" className="text-sm font-medium text-neutral-600 hover:text-neutral-900 transition-colors">
+                        Sign In
                     </Link>
-
-                    <div>
-                        <motion.h2
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.4, duration: 0.5 }}
-                            className="text-4xl font-bold text-white leading-tight mb-4"
-                        >
-                            Start your
-                            <br />
-                            advertising journey
-                            <br />
-                            today.
-                        </motion.h2>
-                        <motion.p
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.5, duration: 0.5 }}
-                            className="text-lg text-white/70 max-w-md"
-                        >
-                            Create an account to access premium billboard spaces across Nigeria's busiest locations.
-                        </motion.p>
-                    </div>
-
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ delay: 0.7 }}
-                        className="space-y-4"
+                    <Link
+                        to="/listings"
+                        className="text-sm font-semibold px-4 py-2 rounded-full bg-[#d4f34a] text-neutral-900 hover:bg-[#c8e840] transition-colors"
                     >
-                        {[
-                            'Access to 5,000+ billboard locations',
-                            'Secure payments with Korapay',
-                            'Real-time campaign tracking',
-                        ].map((feature, i) => (
-                            <motion.div
-                                key={i}
-                                initial={{ opacity: 0, x: -10 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                transition={{ delay: 0.8 + i * 0.1 }}
-                                className="flex items-center gap-3"
-                            >
-                                <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
-                                    <MdCheck size={14} className="text-white" />
-                                </div>
-                                <span className="text-white/80 text-sm">{feature}</span>
-                            </motion.div>
-                        ))}
-                    </motion.div>
+                        Browse Billboards
+                    </Link>
                 </div>
-            </motion.div>
+            </nav>
 
-            {/* Right Panel - Signup Form */}
-            <div className="w-full lg:w-7/12 flex items-start justify-center p-4 sm:p-8 py-12 bg-white overflow-y-auto">
+            {/* Main Content */}
+            <div className="flex-1 flex flex-col items-center justify-start px-4 pb-16 pt-6">
                 <motion.div
-                    initial={{ opacity: 0, y: 20 }}
+                    initial={{ opacity: 0, y: 24 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5, delay: 0.2 }}
-                    className="max-w-lg w-full px-4 sm:px-0"
+                    transition={{ duration: 0.55, ease: 'easeOut' }}
+                    className="w-full max-w-2xl"
                 >
-                    {/* Mobile Logo */}
-                    <div className="lg:hidden text-center mb-8">
-                        <Link to="/">
-                            <h1 className="text-3xl font-bold text-primary-600">Adspot</h1>
-                        </Link>
-                    </div>
-
-                    {/* Header */}
+                    {/* Eyebrow badge */}
                     <motion.div
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.3 }}
-                        className="mb-8"
+                        transition={{ delay: 0.1 }}
+                        className="flex justify-center mb-6"
                     >
-                        <h2 className="text-3xl font-bold text-neutral-900 mb-2">Create your account</h2>
-                        <p className="text-neutral-500">Join Nigeria's premier billboard marketplace</p>
+                        <Link
+                            to="/login"
+                            className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-neutral-200 bg-white text-sm text-neutral-600 hover:border-neutral-300 transition-colors shadow-sm"
+                        >
+                            Already have an account?{' '}
+                            <span className="font-medium text-neutral-900">Sign in here</span>
+                            <span className="flex items-center justify-center w-5 h-5 rounded-full bg-neutral-900 text-white">
+                                <MdArrowRightAlt size={14} />
+                            </span>
+                        </Link>
                     </motion.div>
 
-                    {/* Role Selection */}
+                    {/* Heading */}
                     <motion.div
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.35 }}
-                        className="mb-8"
+                        transition={{ delay: 0.15 }}
+                        className="text-center mb-8"
                     >
-                        <label className="block text-sm font-semibold text-neutral-700 mb-3">
-                            I am a...
-                        </label>
-                        <div className="grid grid-cols-2 gap-4">
+                        <h1 className="text-5xl sm:text-6xl font-bold leading-tight text-neutral-900 tracking-tight">
+                            <span className="italic font-light">Create Your</span>{' '}Free
+                            <br />
+                            <span className="italic font-light">Account</span>
+                        </h1>
+                        <p className="mt-4 text-neutral-500 text-base">
+                            Join Nigeria's Premier Marketplace for Outdoor Advertising
+                        </p>
+                    </motion.div>
+
+                    {/* Role selector */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.2 }}
+                        className="mb-7"
+                    >
+                        <p className="text-xs font-semibold text-neutral-500 uppercase tracking-widest text-center mb-3">I am a...</p>
+                        <div className="grid grid-cols-2 gap-3">
                             {roles.map((role) => (
                                 <motion.button
                                     key={role.key}
@@ -243,8 +191,8 @@ const Signup: React.FC = () => {
                                     onClick={() => setSelectedRole(role.key)}
                                     whileHover={{ y: -2 }}
                                     whileTap={{ scale: 0.97 }}
-                                    className={`relative p-6 rounded-2xl border-2 transition-all duration-200 text-left ${selectedRole === role.key
-                                        ? 'border-primary-600 bg-primary-50 shadow-soft'
+                                    className={`relative p-4 rounded-2xl border-2 transition-all duration-200 text-left ${selectedRole === role.key
+                                        ? 'border-neutral-900 bg-neutral-900 shadow-md'
                                         : 'border-neutral-200 hover:border-neutral-300 bg-white'
                                         }`}
                                 >
@@ -252,194 +200,167 @@ const Signup: React.FC = () => {
                                         <motion.div
                                             initial={{ scale: 0 }}
                                             animate={{ scale: 1 }}
-                                            className="absolute top-3 right-3 w-6 h-6 bg-primary-600 rounded-full flex items-center justify-center"
+                                            className="absolute top-3 right-3 w-5 h-5 bg-[#d4f34a] rounded-full flex items-center justify-center"
                                         >
-                                            <MdCheck size={14} className="text-white" />
+                                            <MdCheck size={12} className="text-neutral-900" />
                                         </motion.div>
                                     )}
-                                    <div className="text-3xl mb-3">{role.emoji}</div>
-                                    <h3 className="font-semibold text-neutral-900 mb-1">{role.title}</h3>
-                                    <p className="text-xs text-neutral-500 leading-relaxed">{role.description}</p>
+                                    <div className="text-2xl mb-2">{role.emoji}</div>
+                                    <h3 className={`font-semibold text-sm mb-0.5 ${selectedRole === role.key ? 'text-white' : 'text-neutral-900'}`}>
+                                        {role.title}
+                                    </h3>
+                                    <p className={`text-xs leading-relaxed ${selectedRole === role.key ? 'text-white/70' : 'text-neutral-500'}`}>
+                                        {role.description}
+                                    </p>
                                 </motion.button>
                             ))}
                         </div>
                     </motion.div>
 
-                    {/* Google Sign Up */}
+                    {/* Two-column form layout */}
                     <motion.div
-                        initial={{ opacity: 0, y: 10 }}
+                        initial={{ opacity: 0, y: 12 }}
                         animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.4 }}
-                        className="mb-6"
+                        transition={{ delay: 0.28 }}
+                        className="flex flex-col sm:flex-row items-start gap-0"
                     >
-                        <motion.div whileHover={{ y: -1 }} whileTap={{ scale: 0.98 }}>
-                            <Button
+                        {/* Left col — email form */}
+                        <div className="w-full sm:flex-1 sm:pr-8">
+                            <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
+                                <Input
+                                    type="text"
+                                    placeholder="Full Name"
+                                    icon={<MdPerson />}
+                                    error={errors.displayName?.message}
+                                    {...register('displayName', {
+                                        required: 'Full name is required',
+                                        minLength: { value: 2, message: 'Name must be at least 2 characters' },
+                                    })}
+                                />
+                                <Input
+                                    type="email"
+                                    placeholder="Email Address"
+                                    icon={<MdEmail />}
+                                    error={errors.email?.message}
+                                    {...register('email', {
+                                        required: 'Email is required',
+                                        pattern: {
+                                            value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
+                                            message: 'Invalid email address',
+                                        },
+                                    })}
+                                />
+                                <Input
+                                    type="tel"
+                                    placeholder="Phone Number (Optional)"
+                                    icon={<MdPhone />}
+                                    error={errors.phoneNumber?.message}
+                                    {...register('phoneNumber', {
+                                        pattern: {
+                                            value: /^(\+?234|0)[789]\d{9}$/,
+                                            message: 'Invalid Nigerian phone number',
+                                        },
+                                    })}
+                                />
+                                <Input
+                                    type="password"
+                                    placeholder="Password"
+                                    icon={<MdLock />}
+                                    error={errors.password?.message}
+                                    {...register('password', {
+                                        required: 'Password is required',
+                                        minLength: { value: 6, message: 'Password must be at least 6 characters' },
+                                    })}
+                                />
+                                <Input
+                                    type="password"
+                                    placeholder="Confirm Password"
+                                    icon={<MdLock />}
+                                    error={errors.confirmPassword?.message}
+                                    {...register('confirmPassword', {
+                                        required: 'Please confirm your password',
+                                        validate: (value) => value === password || 'Passwords do not match',
+                                    })}
+                                />
+
+                                <label className="flex items-start gap-3 pt-1 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        id="agreeToTerms"
+                                        {...register('agreeToTerms', { required: true })}
+                                        className="mt-0.5 h-4 w-4 rounded border-neutral-300 text-neutral-900 focus:ring-neutral-900 flex-shrink-0"
+                                    />
+                                    <span className="text-xs text-neutral-500 leading-relaxed">
+                                        I agree to the{' '}
+                                        <Link to="/terms-of-service" className="text-neutral-900 underline hover:no-underline font-medium">Terms of Service</Link>
+                                        {' '}and{' '}
+                                        <Link to="/privacy-policy" className="text-neutral-900 underline hover:no-underline font-medium">Privacy Policy</Link>
+                                    </span>
+                                </label>
+
+                                <motion.button
+                                    type="submit"
+                                    disabled={loading}
+                                    whileHover={{ scale: 1.01 }}
+                                    whileTap={{ scale: 0.98 }}
+                                    className="w-full flex items-center justify-between gap-3 px-6 py-4 rounded-full bg-neutral-900 text-white font-semibold text-sm hover:bg-neutral-800 disabled:opacity-60 transition-colors"
+                                >
+                                    <span>{loading ? 'Creating account...' : 'Create Your Account'}</span>
+                                    <span className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
+                                        <MdArrowForward size={15} />
+                                    </span>
+                                </motion.button>
+                            </form>
+                        </div>
+
+                        {/* Divider */}
+                        <div className="flex sm:flex-col items-center justify-center gap-3 my-5 sm:my-0 w-full sm:w-auto">
+                            <div className="flex-1 sm:flex-none sm:h-32 w-full sm:w-px bg-neutral-200" />
+                            <span className="text-sm text-neutral-400 font-medium">/</span>
+                            <div className="flex-1 sm:flex-none sm:h-32 w-full sm:w-px bg-neutral-200" />
+                        </div>
+
+                        {/* Right col — Google */}
+                        <div className="w-full sm:flex-1 sm:pl-8 space-y-3">
+                            <motion.button
                                 type="button"
-                                variant="outline"
-                                fullWidth
                                 onClick={handleGoogleSignUp}
-                                icon={<FcGoogle className="text-xl" />}
-                                disabled={loading}
+                                disabled={googleLoading || loading}
+                                whileHover={{ scale: 1.01 }}
+                                whileTap={{ scale: 0.98 }}
+                                className="w-full flex items-center gap-3 px-5 py-3.5 rounded-full border border-neutral-200 bg-white hover:border-neutral-300 hover:shadow-sm disabled:opacity-60 transition-all text-sm font-medium text-neutral-700"
                             >
-                                Continue with Google
-                            </Button>
-                        </motion.div>
+                                <FcGoogle size={20} className="flex-shrink-0" />
+                                <span>{googleLoading ? 'Connecting...' : 'Sign up with Google Account'}</span>
+                            </motion.button>
+                        </div>
                     </motion.div>
-
-                    {/* Divider */}
-                    <div className="relative mb-6">
-                        <div className="absolute inset-0 flex items-center">
-                            <div className="w-full border-t border-neutral-200" />
-                        </div>
-                        <div className="relative flex justify-center text-sm">
-                            <span className="px-4 bg-white text-neutral-400 text-xs font-medium uppercase tracking-wider">
-                                or
-                            </span>
-                        </div>
-                    </div>
-
-                    {/* Signup Form */}
-                    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-                        <motion.div
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.45 }}
-                            className="space-y-4"
-                        >
-                            <Input
-                                type="text"
-                                label="Full Name"
-                                icon={<MdPerson />}
-                                placeholder="John Doe"
-                                error={errors.displayName?.message}
-                                {...register('displayName', {
-                                    required: 'Full name is required',
-                                    minLength: { value: 2, message: 'Name must be at least 2 characters' },
-                                })}
-                            />
-                            <Input
-                                type="email"
-                                label="Email address"
-                                icon={<MdEmail />}
-                                placeholder="you@example.com"
-                                error={errors.email?.message}
-                                {...register('email', {
-                                    required: 'Email is required',
-                                    pattern: {
-                                        value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                                        message: 'Invalid email address',
-                                    },
-                                })}
-                            />
-                            <Input
-                                type="tel"
-                                label="Phone Number (Optional)"
-                                icon={<MdPhone />}
-                                placeholder="0801 234 5678"
-                                helperText="Nigerian phone number"
-                                error={errors.phoneNumber?.message}
-                                {...register('phoneNumber', {
-                                    pattern: {
-                                        value: /^(\+?234|0)[789]\d{9}$/,
-                                        message: 'Invalid Nigerian phone number',
-                                    },
-                                })}
-                            />
-                        </motion.div>
-
-                        <motion.div
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.5 }}
-                            className="space-y-4"
-                        >
-                            <Input
-                                type="password"
-                                label="Password"
-                                icon={<MdLock />}
-                                placeholder="Create a strong password"
-                                helperText="At least 6 characters"
-                                error={errors.password?.message}
-                                {...register('password', {
-                                    required: 'Password is required',
-                                    minLength: { value: 6, message: 'Password must be at least 6 characters' },
-                                })}
-                            />
-                            <Input
-                                type="password"
-                                label="Confirm Password"
-                                icon={<MdLock />}
-                                placeholder="Re-enter your password"
-                                error={errors.confirmPassword?.message}
-                                {...register('confirmPassword', {
-                                    required: 'Please confirm your password',
-                                    validate: (value) => value === password || 'Passwords do not match',
-                                })}
-                            />
-                        </motion.div>
-
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            transition={{ delay: 0.55 }}
-                            className="flex items-start pt-2"
-                        >
-                            <input
-                                type="checkbox"
-                                id="agreeToTerms"
-                                {...register('agreeToTerms', { required: true })}
-                                className="mt-1 h-4 w-4 rounded border-neutral-300 text-primary-600 focus:ring-primary-500"
-                            />
-                            <label htmlFor="agreeToTerms" className="ml-3 text-sm text-neutral-600 leading-relaxed">
-                                I agree to the{' '}
-                                <Link to="/terms-of-service" className="text-primary-600 hover:text-primary-700 font-medium">Terms of Service</Link>{' '}
-                                and{' '}
-                                <Link to="/privacy-policy" className="text-primary-600 hover:text-primary-700 font-medium">Privacy Policy</Link>
-                            </label>
-                        </motion.div>
-
-                        <motion.div
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.6 }}
-                            className="pt-2"
-                        >
-                            <motion.div whileHover={{ y: -1 }} whileTap={{ scale: 0.98 }}>
-                                <Button type="submit" fullWidth loading={loading} size="lg">
-                                    Create Account
-                                    <MdArrowForward className="ml-2" />
-                                </Button>
-                            </motion.div>
-                        </motion.div>
-
-                        <motion.p
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            transition={{ delay: 0.65 }}
-                            className="text-center text-sm text-neutral-500 pt-4"
-                        >
-                            Already have an account?{' '}
-                            <Link
-                                to="/login"
-                                className="font-semibold text-primary-600 hover:text-primary-700 transition-colors"
-                            >
-                                Sign in
-                            </Link>
-                        </motion.p>
-                    </form>
                 </motion.div>
             </div>
 
+            {/* Footer */}
+            <footer className="w-full flex items-center justify-between px-6 sm:px-12 py-5 border-t border-neutral-100">
+                <div className="flex items-center gap-4 text-xs text-neutral-400">
+                    <Link to="/privacy-policy" className="hover:text-neutral-700 transition-colors">Privacy Policy</Link>
+                    <span>|</span>
+                    <Link to="/terms-of-service" className="hover:text-neutral-700 transition-colors">Terms &amp; Conditions</Link>
+                </div>
+                <p className="text-xs text-neutral-400">Copyrights @adspot.ng {new Date().getFullYear()}</p>
+            </footer>
+
+            {/* Google Role Selection Modal */}
             <Modal
                 isOpen={!!pendingGoogleProfile}
                 onClose={handleCloseGoogleRoleModal}
-                title="Choose Your Role"
+                title="One last step — pick your role"
                 size="md"
             >
-                <div className="space-y-5">
+                <div className="space-y-5 p-2">
                     <div className="rounded-2xl bg-neutral-50 border border-neutral-200 p-4">
-                        <p className="text-sm font-semibold text-neutral-900">Continue Google signup as</p>
-                        <p className="text-sm text-neutral-600 mt-1">{pendingGoogleProfile?.displayName || pendingGoogleProfile?.email || 'Google user'}</p>
+                        <p className="text-sm font-semibold text-neutral-900">Continuing as</p>
+                        <p className="text-sm text-neutral-600 mt-1">
+                            {pendingGoogleProfile?.displayName || pendingGoogleProfile?.email || 'Google user'}
+                        </p>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -449,18 +370,22 @@ const Signup: React.FC = () => {
                                 type="button"
                                 onClick={() => setSelectedRole(role.key)}
                                 className={`rounded-2xl border-2 p-4 text-left transition-all ${selectedRole === role.key
-                                    ? 'border-primary-600 bg-primary-50'
+                                    ? 'border-neutral-900 bg-neutral-900'
                                     : 'border-neutral-200 hover:border-neutral-300 bg-white'
                                     }`}
                             >
                                 <div className="text-2xl mb-2">{role.emoji}</div>
-                                <p className="font-semibold text-neutral-900">{role.title}</p>
-                                <p className="text-xs text-neutral-500 mt-1">{role.description}</p>
+                                <p className={`font-semibold text-sm ${selectedRole === role.key ? 'text-white' : 'text-neutral-900'}`}>
+                                    {role.title}
+                                </p>
+                                <p className={`text-xs mt-1 leading-relaxed ${selectedRole === role.key ? 'text-white/70' : 'text-neutral-500'}`}>
+                                    {role.description}
+                                </p>
                             </button>
                         ))}
                     </div>
 
-                    <div className="flex gap-3 pt-2">
+                    <div className="flex gap-3 pt-1">
                         <Button type="button" variant="outline" fullWidth onClick={handleCloseGoogleRoleModal}>
                             Cancel
                         </Button>

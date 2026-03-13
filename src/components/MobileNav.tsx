@@ -116,7 +116,7 @@ const MobileNav: React.FC<MobileNavProps> = ({ userRole }) => {
                                         onClick={() => setMoreOpen(false)}
                                         className={({ isActive }) =>
                                             `flex flex-col items-center gap-1.5 p-4 rounded-2xl transition-all duration-200 ${isActive
-                                                ? 'bg-primary-50 text-primary-600'
+                                                ? 'bg-neutral-900 text-white'
                                                 : 'bg-neutral-50 text-neutral-600 hover:bg-neutral-100'
                                             }`
                                         }
@@ -149,14 +149,14 @@ const MobileNav: React.FC<MobileNavProps> = ({ userRole }) => {
                 transition={{ type: 'spring', damping: 25, stiffness: 200 }}
                 className="fixed bottom-0 left-0 right-0 z-40 lg:hidden px-3 pb-5 pt-1"
             >
-                <div className="bg-white/75 backdrop-blur-2xl border border-white/40 shadow-[0_8px_32px_rgba(0,0,0,0.12)] rounded-2xl flex items-center justify-around px-2 py-2">
+                <div className="bg-white border border-neutral-200 shadow-[0_8px_32px_rgba(0,0,0,0.08)] rounded-2xl flex items-center justify-around px-2 py-2">
                     {primaryItems.map((item) => (
                         <NavLink
                             key={item.href}
                             to={item.href}
                             end={item.href === '/dashboard/owner' || item.href === '/dashboard/advertiser' || item.href === '/dashboard/admin'}
                             className={({ isActive }) =>
-                                `relative flex flex-col items-center gap-1 py-1.5 px-3 rounded-xl transition-all duration-300 min-w-[56px] ${isActive ? 'text-primary-600' : 'text-neutral-500'}`
+                                `relative flex flex-col items-center gap-1 py-1.5 px-3 rounded-xl transition-all duration-300 min-w-[56px] ${isActive ? 'text-white' : 'text-neutral-500'}`
                             }
                         >
                             {({ isActive }) => (
@@ -164,7 +164,7 @@ const MobileNav: React.FC<MobileNavProps> = ({ userRole }) => {
                                     {isActive && (
                                         <motion.div
                                             layoutId="mobile-pill"
-                                            className="absolute inset-0 bg-primary-50 rounded-xl"
+                                            className="absolute inset-0 bg-neutral-900 rounded-xl"
                                             transition={{ type: 'spring', damping: 22, stiffness: 300 }}
                                         />
                                     )}

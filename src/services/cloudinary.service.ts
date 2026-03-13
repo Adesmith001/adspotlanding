@@ -27,7 +27,7 @@ export const uploadFile = async (
   try {
     if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_UPLOAD_PRESET) {
       throw new Error(
-        "Cloudinary configuration missing. Please set VITE_CLOUDINARY_CLOUD_NAME and VITE_CLOUDINARY_UPLOAD_PRESET in your .env file",
+        "Cloudinary configuration missing.",
       );
     }
 
@@ -130,15 +130,9 @@ export const uploadImages = async (
   return uploadFiles(files, onProgress);
 };
 
-/**
- * Delete an image from Cloudinary (requires backend/signed request)
- * Note: This is a placeholder. Deleting images requires a signed request
- * which should be done from your backend for security.
- */
 export const deleteImage = async (publicId: string): Promise<void> => {
   console.warn(
     "Image deletion requires backend implementation for security. Public ID:",
     publicId,
   );
-  // TODO: Implement backend endpoint for image deletion
 };

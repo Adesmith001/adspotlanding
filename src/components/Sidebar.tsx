@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useAppSelector, useAppDispatch } from '@/hooks/useRedux';
 import { selectUser, signOutUser } from '@/store/authSlice';
 import {
@@ -18,6 +18,10 @@ import {
     MdPeople,
     MdVerifiedUser,
     MdAdminPanelSettings,
+    MdChevronLeft,
+    MdChevronRight,
+    MdSearch,
+    MdSupportAgent,
 } from 'react-icons/md';
 
 interface SidebarProps {
@@ -34,6 +38,7 @@ const Sidebar: React.FC<SidebarProps> = ({ userRole }) => {
     const location = useLocation();
     const dispatch = useAppDispatch();
     const user = useAppSelector(selectUser);
+    const [collapsed, setCollapsed] = useState(false);
 
     const handleSignOut = async () => {
         await dispatch(signOutUser());
@@ -42,7 +47,7 @@ const Sidebar: React.FC<SidebarProps> = ({ userRole }) => {
     const ownerNavItems: NavItem[] = [
         { label: 'Dashboard', href: '/dashboard/owner', icon: <MdDashboard size={20} /> },
         { label: 'My Listings', href: '/dashboard/owner/listings', icon: <MdList size={20} /> },
-        { label: 'Create Listing', href: '/dashboard/owner/create', icon: <MdAddCircle size={20} /> },
+        { label: 'Add Listing', href: '/dashboard/owner/create', icon: <MdAddCircle size={20} /> },
         { label: 'Bookings', href: '/dashboard/owner/bookings', icon: <MdBookmarkBorder size={20} /> },
         { label: 'Analytics', href: '/dashboard/owner/analytics', icon: <MdAnalytics size={20} /> },
         { label: 'Messages', href: '/dashboard/owner/messages', icon: <MdMessage size={20} /> },
@@ -51,8 +56,8 @@ const Sidebar: React.FC<SidebarProps> = ({ userRole }) => {
 
     const advertiserNavItems: NavItem[] = [
         { label: 'Dashboard', href: '/dashboard/advertiser', icon: <MdDashboard size={20} /> },
-        { label: 'Browse Billboards', href: '/listings', icon: <MdList size={20} /> },
-        { label: 'My Campaigns', href: '/dashboard/advertiser/campaigns', icon: <MdCampaign size={20} /> },
+        { label: 'Browse', href: '/listings', icon: <MdSearch size={20} /> },
+        { label: 'Campaigns', href: '/dashboard/advertiser/campaigns', icon: <MdCampaign size={20} /> },
         { label: 'Favorites', href: '/dashboard/advertiser/favorites', icon: <MdFavorite size={20} /> },
         { label: 'Payments', href: '/dashboard/advertiser/payments', icon: <MdPayment size={20} /> },
         { label: 'Messages', href: '/dashboard/advertiser/messages', icon: <MdMessage size={20} /> },
@@ -61,13 +66,16 @@ const Sidebar: React.FC<SidebarProps> = ({ userRole }) => {
 
     const adminNavItems: NavItem[] = [
         { label: 'Dashboard', href: '/dashboard/admin', icon: <MdAdminPanelSettings size={20} /> },
-        { label: 'User Management', href: '/dashboard/admin/users', icon: <MdPeople size={20} /> },
-        { label: 'Listing Verification', href: '/dashboard/admin/listings', icon: <MdVerifiedUser size={20} /> },
+        { label: 'Users', href: '/dashboard/admin/users', icon: <MdPeople size={20} /> },
+        { label: 'Verify Listings', href: '/dashboard/admin/listings', icon: <MdVerifiedUser size={20} /> },
         { label: 'Transactions', href: '/dashboard/admin/transactions', icon: <MdPayment size={20} /> },
         { label: 'Settings', href: '/dashboard/admin/settings', icon: <MdSettings size={20} /> },
     ];
 
-    const navItems = userRole === 'owner' ? ownerNavItems : userRole === 'admin' ? adminNavItems : advertiserNavItems;
+    const navItems =
+        userRole === 'owner' ? ownerNavItems
+            : userRole === 'admin' ? adminNavItems
+                : advertiserNavItems;
 
     const isActive = (href: string) => {
         if (href === '/dashboard/owner' || href === '/dashboard/advertiser' || href === '/dashboard/admin') {
@@ -76,80 +84,163 @@ const Sidebar: React.FC<SidebarProps> = ({ userRole }) => {
         return location.pathname.startsWith(href);
     };
 
-    return (
-        // Desktop only — mobile uses MobileNav bottom bar
-        <aside className="hidden lg:flex lg:flex-col lg:w-72 lg:min-h-screen bg-neutral-900 fixed left-0 top-0 bottom-0">
-            <div className="flex flex-col h-full">
-                {/* Logo */}
-                <div className="p-6 border-b border-neutral-800/50">
-                    <Link to="/" className="flex items-center gap-2">
-                        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center">
-                            <span className="text-white font-bold text-lg">A</span>
-                        </div>
-                        <span className="text-2xl font-bold text-white">dspot</span>
-                    </Link>
-                    <p className="text-xs text-neutral-500 mt-2 capitalize">
-                        {userRole === 'owner' ? 'Billboard Owner' : userRole === 'admin' ? 'Administrator' : 'Advertiser'}
-                    </p>
-                </div>
+    const roleLabel =
+        userRole === 'owner' ? 'Billboard Owner'
+            : userRole === 'admin' ? 'Administrator'
+                : 'Advertiser';
 
-                {/* Navigation */}
-                <nav className="flex-1 px-4 py-6 overflow-y-auto">
-                    <ul className="space-y-1">
+    const sidebarWidth = collapsed ? 'lg:w-[72px]' : 'lg:w-60';
+
+    return (
+        <>
+            {/* Inject padding class for main via CSS var trick — expose via data attr */}
+            <aside
+                data-collapsed={collapsed}
+                className={`hidden lg:flex flex-col fixed left-0 top-0 bottom-0 bg-white border-r border-neutral-100 z-50 transition-all duration-300 ${sidebarWidth} overflow-hidden`}
+            >
+                <div className="flex flex-col h-full">
+                    {/* Logo */}
+                    <div className={`flex items-center border-b border-neutral-100 h-16 flex-shrink-0 ${collapsed ? 'px-4 justify-center' : 'px-5 gap-2'}`}>
+                        <Link to="/" className="flex items-center gap-2 min-w-0">
+                            <div className="w-8 h-8 rounded-xl bg-neutral-900 flex items-center justify-center flex-shrink-0">
+                                <span className="text-[#d4f34a] font-bold text-base">A</span>
+                            </div>
+                            <AnimatePresence>
+                                {!collapsed && (
+                                    <motion.span
+                                        initial={{ opacity: 0, width: 0 }}
+                                        animate={{ opacity: 1, width: 'auto' }}
+                                        exit={{ opacity: 0, width: 0 }}
+                                        className="font-bold text-lg text-neutral-900 overflow-hidden whitespace-nowrap"
+                                    >
+                                        adspot
+                                    </motion.span>
+                                )}
+                            </AnimatePresence>
+                        </Link>
+                    </div>
+
+                    {/* Navigation */}
+                    <nav className="flex-1 px-3 py-4 overflow-y-auto space-y-0.5">
+                        {!collapsed && (
+                            <p className="px-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest mb-2">
+                                {roleLabel}
+                            </p>
+                        )}
                         {navItems.map((item) => {
                             const active = isActive(item.href);
                             return (
-                                <li key={item.href}>
-                                    <Link
-                                        to={item.href}
-                                        className={`relative flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${active
-                                            ? 'text-white'
-                                            : 'text-neutral-400 hover:bg-neutral-800/50 hover:text-white'
-                                            }`}
-                                    >
-                                        {active && (
-                                            <motion.div
-                                                layoutId="sidebar-active"
-                                                className="absolute inset-0 bg-gradient-to-r from-primary-600 to-primary-500 rounded-xl shadow-lg shadow-primary-500/20"
-                                                transition={{ type: 'spring', stiffness: 350, damping: 30 }}
-                                            />
+                                <Link
+                                    key={item.href}
+                                    to={item.href}
+                                    title={collapsed ? item.label : undefined}
+                                    className={`relative flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group ${collapsed ? 'justify-center' : ''
+                                        } ${active
+                                            ? 'bg-neutral-900 text-white'
+                                            : 'text-neutral-500 hover:bg-neutral-50 hover:text-neutral-900'
+                                        }`}
+                                >
+                                    <span className="flex-shrink-0">{item.icon}</span>
+                                    <AnimatePresence>
+                                        {!collapsed && (
+                                            <motion.span
+                                                initial={{ opacity: 0 }}
+                                                animate={{ opacity: 1 }}
+                                                exit={{ opacity: 0 }}
+                                                className="text-sm font-medium whitespace-nowrap overflow-hidden"
+                                            >
+                                                {item.label}
+                                            </motion.span>
                                         )}
-                                        <span className="relative z-10">{item.icon}</span>
-                                        <span className="relative z-10 font-medium">{item.label}</span>
-                                    </Link>
-                                </li>
+                                    </AnimatePresence>
+                                    {/* Active accent dot */}
+                                    {active && !collapsed && (
+                                        <span className="ml-auto w-1.5 h-1.5 rounded-full bg-[#d4f34a] flex-shrink-0" />
+                                    )}
+                                    {/* Tooltip when collapsed */}
+                                    {collapsed && (
+                                        <span className="absolute left-full ml-2 px-2 py-1 bg-neutral-900 text-white text-xs rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
+                                            {item.label}
+                                        </span>
+                                    )}
+                                </Link>
                             );
                         })}
-                    </ul>
-                </nav>
+                    </nav>
 
-                {/* User Section */}
-                <div className="p-4 border-t border-neutral-800/50">
-                    <div className="flex items-center gap-3 px-4 py-3 mb-2">
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white font-bold ring-2 ring-neutral-700/50 ring-offset-2 ring-offset-neutral-900">
-                            {user?.displayName?.charAt(0).toUpperCase() || 'U'}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-white truncate">
-                                {user?.displayName || 'User'}
-                            </p>
-                            <p className="text-xs text-neutral-500 truncate">
-                                {user?.email}
-                            </p>
-                        </div>
+                    {/* Support link */}
+                    <div className="px-3 pb-2">
+                        <Link
+                            to={`/dashboard/${userRole}/settings`}
+                            title={collapsed ? 'Support' : undefined}
+                            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-neutral-400 hover:bg-neutral-50 hover:text-neutral-700 transition-colors ${collapsed ? 'justify-center' : ''}`}
+                        >
+                            <MdSupportAgent size={20} className="flex-shrink-0" />
+                            <AnimatePresence>
+                                {!collapsed && (
+                                    <motion.span
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        exit={{ opacity: 0 }}
+                                        className="text-sm font-medium"
+                                    >
+                                        Support
+                                    </motion.span>
+                                )}
+                            </AnimatePresence>
+                        </Link>
                     </div>
-                    <motion.button
-                        whileHover={{ x: 4 }}
-                        whileTap={{ scale: 0.98 }}
-                        onClick={handleSignOut}
-                        className="flex items-center gap-3 w-full px-4 py-3 text-neutral-400 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-all duration-200"
-                    >
-                        <MdLogout size={20} />
-                        <span className="font-medium">Sign Out</span>
-                    </motion.button>
+
+                    {/* User + Sign out */}
+                    <div className="px-3 pb-4 border-t border-neutral-100 pt-3 space-y-1">
+                        {!collapsed && (
+                            <div className="flex items-center gap-3 px-3 py-2 mb-1">
+                                <div className="w-8 h-8 rounded-full bg-neutral-900 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                                    {user?.displayName?.charAt(0).toUpperCase() || 'U'}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-semibold text-neutral-900 truncate">
+                                        {user?.displayName || 'User'}
+                                    </p>
+                                    <p className="text-[11px] text-neutral-400 truncate">{user?.email}</p>
+                                </div>
+                            </div>
+                        )}
+                        <button
+                            onClick={handleSignOut}
+                            title={collapsed ? 'Sign Out' : undefined}
+                            className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-neutral-400 hover:bg-red-50 hover:text-red-600 transition-colors ${collapsed ? 'justify-center' : ''}`}
+                        >
+                            <MdLogout size={20} className="flex-shrink-0" />
+                            <AnimatePresence>
+                                {!collapsed && (
+                                    <motion.span
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        exit={{ opacity: 0 }}
+                                        className="text-sm font-medium"
+                                    >
+                                        Sign Out
+                                    </motion.span>
+                                )}
+                            </AnimatePresence>
+                        </button>
+
+                        {/* Collapse toggle */}
+                        <button
+                            onClick={() => setCollapsed((c) => !c)}
+                            className={`flex items-center gap-3 w-full px-3 py-2 rounded-xl text-neutral-300 hover:text-neutral-600 hover:bg-neutral-50 transition-colors text-xs ${collapsed ? 'justify-center' : ''}`}
+                        >
+                            {collapsed ? <MdChevronRight size={18} /> : <MdChevronLeft size={18} />}
+                            {!collapsed && <span>Collapse sidebar</span>}
+                        </button>
+                    </div>
                 </div>
-            </div>
-        </aside>
+            </aside>
+
+            {/* Spacer to push content — rendered in the DOM but hidden */}
+            <div className={`hidden lg:block ${sidebarWidth} flex-shrink-0 transition-all duration-300`} />
+        </>
     );
 };
 

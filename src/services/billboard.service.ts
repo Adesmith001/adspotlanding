@@ -48,7 +48,9 @@ const timestampToDate = (timestamp: any): Date => {
 const resolveLiveBookingStatus = (
   booking: Booking,
 ): Pick<Booking, "status" | "campaignStartedAt"> => {
-  if (["cancelled", "completed", "rejected", "pending"].includes(booking.status)) {
+  if (
+    ["cancelled", "completed", "rejected", "pending"].includes(booking.status)
+  ) {
     return {
       status: booking.status,
       campaignStartedAt: booking.campaignStartedAt,
@@ -116,6 +118,7 @@ export const createBillboard = async (
         monthly: data.monthlyPrice,
         currency: "NGN",
       },
+      pricePerDay: data.dailyPrice,
       unavailableDates: [],
       bookingRules: {
         instantBook: data.instantBook,
@@ -440,11 +443,17 @@ export const createBooking = async (
 
     const creativeSummary =
       request.creativeRequirementType === "advertiser_upload"
-        ? `I have uploaded ${creativeAssets.length} design file${creativeAssets.length === 1 ? "" : "s"} for review.`
+        ? `I have uploaded ${creativeAssets.length} design file${
+            creativeAssets.length === 1 ? "" : "s"
+          } for review.`
         : `I would like your company to create the design. Brief: ${request.creativeBrief.trim()}`;
 
     const initialMessage = [
-      `Hi, I just booked \"${billboard.title}\" from ${request.startDate.toLocaleDateString("en-NG")} to ${request.endDate.toLocaleDateString("en-NG")}.`,
+      `Hi, I just booked \"${
+        billboard.title
+      }\" from ${request.startDate.toLocaleDateString(
+        "en-NG",
+      )} to ${request.endDate.toLocaleDateString("en-NG")}.`,
       creativeSummary,
       request.message?.trim() || "",
     ]
@@ -643,6 +652,35 @@ export const updateBookingStatus = async (
         "/dashboard/advertiser/campaigns",
       );
     }
+
+    // Restore billboard availability and prompt review when campaign completes
+    if (status === "completed") {
+      try {
+        await updateBillboard(booking.billboardId, { status: "active" });
+      } catch (err) {
+        console.error("Error restoring billboard status:", err);
+      }
+      await createNotification(
+        booking.advertiserId,
+        "review_prompt",
+        "How was your campaign? ⭐",
+        `Your campaign on "${booking.billboardTitle}" has ended. Share your experience to help others!`,
+        { bookingId, billboardId: booking.billboardId },
+        `/dashboard/advertiser/campaigns?review=${bookingId}`,
+      );
+    }
+
+    // Restore billboard availability on cancellation/rejection as well
+    if (status === "cancelled") {
+      try {
+        await updateBillboard(booking.billboardId, { status: "active" });
+      } catch (err) {
+        console.error(
+          "Error restoring billboard status after cancellation:",
+          err,
+        );
+      }
+    }
   } catch (error) {
     console.error("Error updating booking status:", error);
     throw new Error("Failed to update booking");
@@ -691,6 +729,15 @@ export const syncBookingCampaignStatus = async (
 
   await updateDoc(doc(db, BOOKINGS_COLLECTION, bookingId), updates);
 
+  // Lock the billboard when a campaign goes active to prevent double-booking
+  if (next.status === "active" && booking.status !== "active") {
+    try {
+      await updateBillboard(booking.billboardId, { status: "inactive" });
+    } catch (err) {
+      console.error("Error locking billboard status:", err);
+    }
+  }
+
   return {
     ...booking,
     status: next.status,
@@ -724,7 +771,11 @@ export const updateCreativeApprovalStatus = async (
         booking.advertiserId,
         "creative_approved",
         "Creative Approved",
-        `Your creative for \"${booking.billboardTitle}\" has been approved.${booking.paymentStatus === "paid" ? " The campaign can now go live." : " Complete payment to lock the booking and launch the campaign."}`,
+        `Your creative for \"${booking.billboardTitle}\" has been approved.${
+          booking.paymentStatus === "paid"
+            ? " The campaign can now go live."
+            : " Complete payment to lock the booking and launch the campaign."
+        }`,
         { bookingId, billboardId: booking.billboardId },
         booking.paymentStatus === "paid"
           ? "/dashboard/advertiser/campaigns"
@@ -737,7 +788,8 @@ export const updateCreativeApprovalStatus = async (
         booking.advertiserId,
         "creative_changes_requested",
         "Creative Changes Requested",
-        creativeReviewNotes?.trim() || `The owner requested more detail or revisions for \"${booking.billboardTitle}\".`,
+        creativeReviewNotes?.trim() ||
+          `The owner requested more detail or revisions for \"${booking.billboardTitle}\".`,
         { bookingId, billboardId: booking.billboardId },
         "/dashboard/advertiser/campaigns",
       );
@@ -753,7 +805,7 @@ export const updateCreativeApprovalStatus = async (
 // ==================== REVIEW SERVICES ====================
 
 /**
- * Create a review
+ * Create a review and mark the booking as reviewed
  */
 export const createReview = async (
   bookingId: string,
@@ -781,10 +833,80 @@ export const createReview = async (
     // Update billboard rating
     await updateBillboardRating(billboardId);
 
+    // Mark booking as reviewed so the prompt doesn't re-appear
+    try {
+      await updateDoc(doc(db, BOOKINGS_COLLECTION, bookingId), {
+        reviewedAt: new Date(),
+        updatedAt: new Date(),
+      });
+    } catch (err) {
+      console.error("Error marking booking as reviewed:", err);
+    }
+
     return docRef.id;
   } catch (error) {
     console.error("Error creating review:", error);
     throw new Error("Failed to create review");
+  }
+};
+
+/**
+ * Auto-complete expired active campaigns for an advertiser and send review prompts.
+ * Called client-side when the advertiser visits their campaigns page.
+ */
+export const checkAndCompleteExpiredCampaigns = async (
+  advertiserId: string,
+): Promise<void> => {
+  try {
+    const q = query(
+      collection(db, BOOKINGS_COLLECTION),
+      where("advertiserId", "==", advertiserId),
+      where("status", "==", "active"),
+    );
+    const snapshot = await getDocs(q);
+    const now = new Date();
+
+    await Promise.all(
+      snapshot.docs.map(async (docSnap) => {
+        const data = docSnap.data();
+        const endDate: Date = data.endDate?.toDate
+          ? data.endDate.toDate()
+          : new Date(data.endDate);
+
+        if (endDate < now) {
+          const bookingId = docSnap.id;
+          const billboardId = data.billboardId as string;
+          const billboardTitle = data.billboardTitle as string;
+
+          // Mark completed
+          await updateDoc(doc(db, BOOKINGS_COLLECTION, bookingId), {
+            status: "completed",
+            updatedAt: new Date(),
+          });
+
+          // Restore billboard availability
+          try {
+            await updateBillboard(billboardId, { status: "active" });
+          } catch (err) {
+            console.error("Error restoring billboard:", err);
+          }
+
+          // Only send review notification if not already reviewed
+          if (!data.reviewedAt) {
+            await createNotification(
+              advertiserId,
+              "review_prompt",
+              "How was your campaign? ⭐",
+              `Your campaign on "${billboardTitle}" has ended. Share your experience to help others!`,
+              { bookingId, billboardId },
+              `/dashboard/advertiser/campaigns?review=${bookingId}`,
+            );
+          }
+        }
+      }),
+    );
+  } catch (error) {
+    console.error("Error checking expired campaigns:", error);
   }
 };
 

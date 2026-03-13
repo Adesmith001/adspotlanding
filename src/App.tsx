@@ -68,7 +68,7 @@ function AppContent() {
                 <Route
                     path="/dashboard/owner"
                     element={
-                        <ProtectedRoute>
+                        <ProtectedRoute requiredRole="owner">
                             <OwnerDashboard />
                         </ProtectedRoute>
                     }
@@ -76,7 +76,7 @@ function AppContent() {
                 <Route
                     path="/dashboard/owner/create"
                     element={
-                        <ProtectedRoute>
+                        <ProtectedRoute requiredRole="owner">
                             <CreateListing />
                         </ProtectedRoute>
                     }
@@ -84,7 +84,7 @@ function AppContent() {
                 <Route
                     path="/dashboard/owner/listings"
                     element={
-                        <ProtectedRoute>
+                        <ProtectedRoute requiredRole="owner">
                             <MyListings />
                         </ProtectedRoute>
                     }
@@ -92,7 +92,7 @@ function AppContent() {
                 <Route
                     path="/dashboard/owner/bookings"
                     element={
-                        <ProtectedRoute>
+                        <ProtectedRoute requiredRole="owner">
                             <OwnerBookings />
                         </ProtectedRoute>
                     }
@@ -100,7 +100,7 @@ function AppContent() {
                 <Route
                     path="/dashboard/owner/analytics"
                     element={
-                        <ProtectedRoute>
+                        <ProtectedRoute requiredRole="owner">
                             <OwnerAnalytics />
                         </ProtectedRoute>
                     }
@@ -108,7 +108,7 @@ function AppContent() {
                 <Route
                     path="/dashboard/owner/messages"
                     element={
-                        <ProtectedRoute>
+                        <ProtectedRoute requiredRole="owner">
                             <Messages userRole="owner" />
                         </ProtectedRoute>
                     }
@@ -116,7 +116,7 @@ function AppContent() {
                 <Route
                     path="/dashboard/owner/settings"
                     element={
-                        <ProtectedRoute>
+                        <ProtectedRoute requiredRole="owner">
                             <Settings userRole="owner" />
                         </ProtectedRoute>
                     }
@@ -126,7 +126,7 @@ function AppContent() {
                 <Route
                     path="/dashboard/advertiser"
                     element={
-                        <ProtectedRoute>
+                        <ProtectedRoute requiredRole="advertiser">
                             <AdvertiserDashboard />
                         </ProtectedRoute>
                     }
@@ -134,7 +134,7 @@ function AppContent() {
                 <Route
                     path="/dashboard/advertiser/browse"
                     element={
-                        <ProtectedRoute>
+                        <ProtectedRoute requiredRole="advertiser">
                             <BrowseBillboards />
                         </ProtectedRoute>
                     }
@@ -142,7 +142,7 @@ function AppContent() {
                 <Route
                     path="/dashboard/advertiser/campaigns"
                     element={
-                        <ProtectedRoute>
+                        <ProtectedRoute requiredRole="advertiser">
                             <MyCampaigns />
                         </ProtectedRoute>
                     }
@@ -150,7 +150,7 @@ function AppContent() {
                 <Route
                     path="/dashboard/advertiser/favorites"
                     element={
-                        <ProtectedRoute>
+                        <ProtectedRoute requiredRole="advertiser">
                             <Favorites />
                         </ProtectedRoute>
                     }
@@ -158,7 +158,7 @@ function AppContent() {
                 <Route
                     path="/dashboard/advertiser/payments"
                     element={
-                        <ProtectedRoute>
+                        <ProtectedRoute requiredRole="advertiser">
                             <Payments />
                         </ProtectedRoute>
                     }
@@ -166,7 +166,7 @@ function AppContent() {
                 <Route
                     path="/dashboard/advertiser/messages"
                     element={
-                        <ProtectedRoute>
+                        <ProtectedRoute requiredRole="advertiser">
                             <Messages userRole="advertiser" />
                         </ProtectedRoute>
                     }
@@ -174,7 +174,7 @@ function AppContent() {
                 <Route
                     path="/dashboard/advertiser/settings"
                     element={
-                        <ProtectedRoute>
+                        <ProtectedRoute requiredRole="advertiser">
                             <Settings userRole="advertiser" />
                         </ProtectedRoute>
                     }
@@ -184,7 +184,7 @@ function AppContent() {
                 <Route
                     path="/dashboard/admin"
                     element={
-                        <ProtectedRoute>
+                        <ProtectedRoute requiredRole="admin">
                             <AdminDashboard />
                         </ProtectedRoute>
                     }
@@ -192,7 +192,7 @@ function AppContent() {
                 <Route
                     path="/dashboard/admin/users"
                     element={
-                        <ProtectedRoute>
+                        <ProtectedRoute requiredRole="admin">
                             <UserManagement />
                         </ProtectedRoute>
                     }
@@ -200,7 +200,7 @@ function AppContent() {
                 <Route
                     path="/dashboard/admin/listings"
                     element={
-                        <ProtectedRoute>
+                        <ProtectedRoute requiredRole="admin">
                             <ListingVerification />
                         </ProtectedRoute>
                     }
@@ -208,7 +208,7 @@ function AppContent() {
                 <Route
                     path="/dashboard/admin/transactions"
                     element={
-                        <ProtectedRoute>
+                        <ProtectedRoute requiredRole="admin">
                             <AdminTransactions />
                         </ProtectedRoute>
                     }
@@ -216,7 +216,7 @@ function AppContent() {
                 <Route
                     path="/dashboard/admin/settings"
                     element={
-                        <ProtectedRoute>
+                        <ProtectedRoute requiredRole="admin">
                             <Settings userRole="admin" />
                         </ProtectedRoute>
                     }

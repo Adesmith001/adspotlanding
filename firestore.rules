@@ -142,5 +142,14 @@ service cloud.firestore {
                       request.resource.data.senderId == request.auth.uid;
       allow update, delete: if false;
     }
+
+    // Payments collection
+    match /payments/{paymentId} {
+      allow read: if isAuthenticated() && 
+        (request.auth.uid == resource.data.advertiserId || 
+         request.auth.uid == resource.data.ownerId);
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+    }
   }
 }

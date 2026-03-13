@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     MdCampaign,
@@ -13,6 +13,9 @@ import {
     MdTimer,
     MdPayment,
     MdPictureAsPdf,
+    MdStar,
+    MdStarBorder,
+    MdRateReview,
 } from 'react-icons/md';
 import DashboardLayout from '@/components/DashboardLayout';
 import EmptyState from '@/components/EmptyState';
@@ -21,7 +24,12 @@ import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
 import { useAppSelector } from '@/hooks/useRedux';
 import { selectUser } from '@/store/authSlice';
-import { subscribeToAdvertiserBookings, getBillboard } from '@/services/billboard.service';
+import {
+    subscribeToAdvertiserBookings,
+    getBillboard,
+    createReview,
+    checkAndCompleteExpiredCampaigns,
+} from '@/services/billboard.service';
 import { subscribeToAdvertiserPaidBookings } from '@/services/payment.service';
 import { submitReport, type ReportCategory } from '@/services/admin.service';
 import { startConversation } from '@/services/message.service';
@@ -55,9 +63,37 @@ const itemVariants = {
     visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } },
 };
 
+// Star Rating component
+const StarRating: React.FC<{ value: number; onChange: (v: number) => void }> = ({ value, onChange }) => {
+    const [hovered, setHovered] = useState(0);
+
+    return (
+        <div className="flex gap-1">
+            {[1, 2, 3, 4, 5].map((star) => (
+                <button
+                    key={star}
+                    type="button"
+                    onMouseEnter={() => setHovered(star)}
+                    onMouseLeave={() => setHovered(0)}
+                    onClick={() => onChange(star)}
+                    className="text-amber-400 transition-transform hover:scale-110"
+                >
+                    {star <= (hovered || value) ? (
+                        <MdStar size={32} />
+                    ) : (
+                        <MdStarBorder size={32} />
+                    )}
+                </button>
+            ))}
+        </div>
+    );
+};
+
 const MyCampaigns: React.FC = () => {
     const user = useAppSelector(selectUser);
     const navigate = useNavigate();
+    const [searchParams, setSearchParams] = useSearchParams();
+
     const [bookings, setBookings] = useState<Booking[]>([]);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<TabType>('active');
@@ -75,6 +111,18 @@ const MyCampaigns: React.FC = () => {
 
     // Message owner loading state
     const [messagingBookingId, setMessagingBookingId] = useState<string | null>(null);
+
+    // Review modal state
+    const [reviewBooking, setReviewBooking] = useState<Booking | null>(null);
+    const [reviewRating, setReviewRating] = useState(0);
+    const [reviewComment, setReviewComment] = useState('');
+    const [submittingReview, setSubmittingReview] = useState(false);
+
+    // Auto-complete expired campaigns when the page loads
+    useEffect(() => {
+        if (!user) return;
+        checkAndCompleteExpiredCampaigns(user.uid).catch(console.error);
+    }, [user]);
 
     // Real-time subscription — fires immediately when Firestore updates after payment
     useEffect(() => {
@@ -117,6 +165,22 @@ const MyCampaigns: React.FC = () => {
         });
     }, [bookings]);
 
+    // Handle ?review=<bookingId> from notification action link
+    useEffect(() => {
+        const reviewBookingId = searchParams.get('review');
+        if (!reviewBookingId || bookings.length === 0) return;
+
+        const target = bookings.find((b) => b.id === reviewBookingId);
+        if (target && !target.reviewedAt) {
+            setActiveTab('completed');
+            setReviewBooking(target);
+            setReviewRating(0);
+            setReviewComment('');
+            // Remove the query param so it doesn't re-trigger
+            setSearchParams({}, { replace: true });
+        }
+    }, [searchParams, bookings, setSearchParams]);
+
     const isPaidBooking = (booking: Booking) =>
         booking.paymentStatus === 'paid' || !!paidBookingsById[booking.id];
 
@@ -130,6 +194,9 @@ const MyCampaigns: React.FC = () => {
         !isPaidBooking(booking) &&
         booking.creativeApprovalStatus === 'approved';
 
+    const isCompleted = (booking: Booking) =>
+        booking.status === 'completed' || new Date(booking.endDate) < new Date();
+
     const getFilteredBookings = () => {
         const now = new Date();
         switch (activeTab) {
@@ -142,7 +209,7 @@ const MyCampaigns: React.FC = () => {
                         new Date(b.startDate) > now,
                 );
             case 'completed':
-                return bookings.filter((b) => b.status === 'completed' || new Date(b.endDate) < now);
+                return bookings.filter(isCompleted);
             default:
                 return [];
         }
@@ -226,6 +293,47 @@ const MyCampaigns: React.FC = () => {
         }
     };
 
+    const handleOpenReview = useCallback((booking: Booking) => {
+        setReviewBooking(booking);
+        setReviewRating(0);
+        setReviewComment('');
+    }, []);
+
+    const handleSubmitReview = async () => {
+        if (!user || !reviewBooking) return;
+        if (reviewRating === 0) {
+            toast.error('Please select a star rating.');
+            return;
+        }
+        if (reviewComment.trim().length < 10) {
+            toast.error('Please write a comment of at least 10 characters.');
+            return;
+        }
+        setSubmittingReview(true);
+        try {
+            await createReview(
+                reviewBooking.id,
+                reviewBooking.billboardId,
+                user.uid,
+                user.displayName || 'Advertiser',
+                reviewRating,
+                reviewComment.trim(),
+            );
+            toast.success('Review submitted! Thank you for your feedback. ⭐');
+            // Optimistically mark as reviewed in local state
+            setBookings((prev) =>
+                prev.map((b) =>
+                    b.id === reviewBooking.id ? { ...b, reviewedAt: new Date() } : b,
+                ),
+            );
+            setReviewBooking(null);
+        } catch {
+            toast.error('Failed to submit review. Please try again.');
+        } finally {
+            setSubmittingReview(false);
+        }
+    };
+
     const tabs: { key: TabType; label: string; count: number }[] = [
         { key: 'active', label: 'Active', count: bookings.filter(isActive).length },
         {
@@ -235,7 +343,7 @@ const MyCampaigns: React.FC = () => {
                 (b) => b.status === 'confirmed' && new Date(b.startDate) > new Date(),
             ).length,
         },
-        { key: 'completed', label: 'Completed', count: bookings.filter((b) => b.status === 'completed' || new Date(b.endDate) < new Date()).length },
+        { key: 'completed', label: 'Completed', count: bookings.filter(isCompleted).length },
     ];
 
     const getEmptyStateContent = (tab: TabType) => ({
@@ -295,11 +403,10 @@ const MyCampaigns: React.FC = () => {
                     <button
                         key={tab.key}
                         onClick={() => setActiveTab(tab.key)}
-                        className={`relative px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-200 whitespace-nowrap ${
-                            activeTab === tab.key
-                                ? 'text-white'
-                                : 'text-neutral-600 hover:bg-neutral-100 border border-neutral-200 bg-white'
-                        }`}
+                        className={`relative px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-200 whitespace-nowrap ${activeTab === tab.key
+                            ? 'text-white'
+                            : 'text-neutral-600 hover:bg-neutral-100 border border-neutral-200 bg-white'
+                            }`}
                     >
                         {activeTab === tab.key && (
                             <motion.div
@@ -314,9 +421,8 @@ const MyCampaigns: React.FC = () => {
                                 <motion.span
                                     initial={{ scale: 0 }}
                                     animate={{ scale: 1 }}
-                                    className={`px-1.5 py-0.5 text-xs rounded-full ${
-                                        activeTab === tab.key ? 'bg-white/20 text-white' : 'bg-neutral-100 text-neutral-600'
-                                    }`}
+                                    className={`px-1.5 py-0.5 text-xs rounded-full ${activeTab === tab.key ? 'bg-white/20 text-white' : 'bg-neutral-100 text-neutral-600'
+                                        }`}
                                 >
                                     {tab.count}
                                 </motion.span>
@@ -358,6 +464,7 @@ const MyCampaigns: React.FC = () => {
                             const daysTotal = getDaysTotal(booking.startDate, booking.endDate);
                             const daysRemaining = getDaysRemaining(booking.endDate);
                             const paymentReference = getPaymentReference(booking);
+                            const canReview = isCompleted(booking) && !booking.reviewedAt;
 
                             return (
                                 <motion.div key={booking.id} variants={itemVariants}>
@@ -552,6 +659,34 @@ const MyCampaigns: React.FC = () => {
                                                     )}
                                                 </div>
 
+                                                {/* ===== Review CTA (completed and not yet reviewed) ===== */}
+                                                {canReview && (
+                                                    <motion.div
+                                                        initial={{ opacity: 0, y: 6 }}
+                                                        animate={{ opacity: 1, y: 0 }}
+                                                        className="flex items-center gap-3 p-3 rounded-xl bg-amber-50 border border-amber-200"
+                                                    >
+                                                        <MdRateReview size={20} className="text-amber-500 flex-shrink-0" />
+                                                        <p className="text-sm text-amber-800 font-medium flex-1">
+                                                            How was your campaign? Share your experience!
+                                                        </p>
+                                                        <button
+                                                            onClick={() => handleOpenReview(booking)}
+                                                            className="px-3 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-semibold hover:bg-amber-600 transition-colors whitespace-nowrap"
+                                                        >
+                                                            Leave a Review
+                                                        </button>
+                                                    </motion.div>
+                                                )}
+
+                                                {/* Reviewed indicator */}
+                                                {isCompleted(booking) && booking.reviewedAt && (
+                                                    <div className="flex items-center gap-2 text-xs text-green-600 font-medium">
+                                                        <MdStar size={14} />
+                                                        Review submitted — thank you!
+                                                    </div>
+                                                )}
+
                                                 {/* Action buttons */}
                                                 <div className="flex items-center gap-2 pt-1 mt-auto flex-wrap">
                                                     {isReadyForPayment(booking) && (
@@ -588,6 +723,84 @@ const MyCampaigns: React.FC = () => {
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            {/* ===== Review Modal ===== */}
+            <Modal
+                isOpen={!!reviewBooking}
+                onClose={() => setReviewBooking(null)}
+                title="Leave a Review"
+                size="md"
+            >
+                <div className="p-6 space-y-5">
+                    {reviewBooking && (
+                        <div className="flex items-center gap-3 p-3 bg-neutral-50 rounded-xl border border-neutral-200">
+                            {reviewBooking.billboardPhoto ? (
+                                <img
+                                    src={reviewBooking.billboardPhoto}
+                                    alt={reviewBooking.billboardTitle}
+                                    className="w-12 h-12 rounded-lg object-cover flex-shrink-0"
+                                />
+                            ) : (
+                                <div className="w-12 h-12 rounded-lg bg-neutral-200 flex items-center justify-center flex-shrink-0">
+                                    <MdCampaign size={20} className="text-neutral-400" />
+                                </div>
+                            )}
+                            <div className="min-w-0">
+                                <p className="font-semibold text-neutral-900 text-sm truncate">
+                                    {reviewBooking.billboardTitle}
+                                </p>
+                                <p className="text-xs text-neutral-500">Owner: {reviewBooking.ownerName}</p>
+                            </div>
+                        </div>
+                    )}
+
+                    <div>
+                        <label className="block text-sm font-medium text-neutral-700 mb-3">
+                            Your Rating <span className="text-red-500">*</span>
+                        </label>
+                        <StarRating value={reviewRating} onChange={setReviewRating} />
+                        {reviewRating > 0 && (
+                            <p className="text-sm text-neutral-500 mt-1">
+                                {['', 'Poor', 'Fair', 'Good', 'Very Good', 'Excellent'][reviewRating]}
+                            </p>
+                        )}
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-neutral-700 mb-1.5">
+                            Your Comment <span className="text-red-500">*</span>
+                        </label>
+                        <textarea
+                            value={reviewComment}
+                            onChange={(e) => setReviewComment(e.target.value)}
+                            placeholder="Share your experience — was the billboard well-maintained? Was the owner responsive? Would you recommend this billboard?"
+                            rows={4}
+                            maxLength={500}
+                            className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 text-sm text-neutral-800 resize-none focus:outline-none focus:ring-2 focus:ring-neutral-900"
+                        />
+                        <p className="text-xs text-neutral-400 mt-1 text-right">
+                            {reviewComment.length}/500
+                        </p>
+                    </div>
+
+                    <div className="flex gap-3 pt-1">
+                        <button
+                            onClick={() => setReviewBooking(null)}
+                            className="flex-1 px-4 py-2.5 rounded-xl border border-neutral-200 text-sm font-medium text-neutral-700 hover:bg-neutral-50 transition-colors"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleSubmitReview}
+                            disabled={submittingReview || reviewRating === 0 || reviewComment.trim().length < 10}
+                            className="flex-1 px-4 py-2.5 rounded-xl bg-amber-500 text-white text-sm font-semibold hover:bg-amber-600 disabled:opacity-60 transition-colors flex items-center justify-center gap-2"
+                        >
+                            <MdStar size={15} />
+                            {submittingReview ? 'Submitting...' : 'Submit Review'}
+                        </button>
+                    </div>
+                </div>
+            </Modal>
 
             {/* ===== Report Modal ===== */}
             <Modal

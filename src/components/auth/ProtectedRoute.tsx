@@ -1,15 +1,26 @@
 import React from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAppSelector } from '@/hooks/useRedux';
-import { selectIsAuthenticated, selectAuthLoading } from '@/store/authSlice';
+import { selectIsAuthenticated, selectAuthLoading, selectUser } from '@/store/authSlice';
+import type { UserRole } from '@/types/user.types';
 
 interface ProtectedRouteProps {
     children: React.ReactElement;
+    /** If provided, the user must have this role to access the route. */
+    requiredRole?: UserRole | UserRole[];
 }
 
-const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
+const ROLE_HOME: Record<UserRole, string> = {
+    owner: '/dashboard/owner',
+    advertiser: '/dashboard/advertiser',
+    admin: '/dashboard/admin',
+};
+
+const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requiredRole }) => {
     const isAuthenticated = useAppSelector(selectIsAuthenticated);
     const loading = useAppSelector(selectAuthLoading);
+    const user = useAppSelector(selectUser);
+    const location = useLocation();
 
     if (loading) {
         return (
@@ -22,8 +33,17 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
         );
     }
 
-    if (!isAuthenticated) {
-        return <Navigate to="/login" replace />;
+    // Not logged in → send to login, preserving the attempted path
+    if (!isAuthenticated || !user) {
+        return <Navigate to="/login" state={{ from: location }} replace />;
+    }
+
+    // Logged in but wrong role → redirect to their own dashboard
+    if (requiredRole) {
+        const allowed = Array.isArray(requiredRole) ? requiredRole : [requiredRole];
+        if (!allowed.includes(user.role)) {
+            return <Navigate to={ROLE_HOME[user.role]} replace />;
+        }
     }
 
     return children;

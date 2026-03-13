@@ -586,7 +586,7 @@ const BillboardDetails: React.FC = () => {
                         </motion.div>
 
                         {/* Location Map */}
-                        {billboard.location.lat !== 0 && billboard.location.lng !== 0 && (
+                        {(billboard.location.lat !== 0 || billboard.location.lng !== 0 || billboard.location.address) && (
                             <motion.div
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
@@ -598,25 +598,35 @@ const BillboardDetails: React.FC = () => {
                                         Billboard Location
                                     </h2>
                                     <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                                        <GoogleMapPanel
-                                            latitude={billboard.location.lat}
-                                            longitude={billboard.location.lng}
-                                            title="Billboard Location"
-                                            subtitle="Review the exact placement on Google Maps before booking."
-                                            heightClassName="h-[350px]"
-                                        />
+                                        {billboard.location.lat !== 0 && billboard.location.lng !== 0 && (
+                                            <GoogleMapPanel
+                                                latitude={billboard.location.lat}
+                                                longitude={billboard.location.lng}
+                                                title="Billboard Location"
+                                                subtitle="Review the exact placement on Google Maps before booking."
+                                                heightClassName="h-[350px]"
+                                            />
+                                        )}
 
                                         <StreetViewPanel
-                                            latitude={billboard.location.lat}
-                                            longitude={billboard.location.lng}
+                                            latitude={billboard.location.lat !== 0 ? billboard.location.lat : undefined}
+                                            longitude={billboard.location.lng !== 0 ? billboard.location.lng : undefined}
+                                            addressFallback={[
+                                                billboard.location.address,
+                                                billboard.location.city,
+                                                billboard.location.state,
+                                                billboard.location.country,
+                                            ].filter(Boolean).join(', ')}
                                             title="Street-Level View"
                                             subtitle="See the billboard from the road instead of relying on the pin alone."
                                             heightClassName="h-[350px]"
                                         />
                                     </div>
-                                    <p className="text-xs text-neutral-400 mt-3 font-mono">
-                                        Lat: {billboard.location.lat.toFixed(6)} • Lng: {billboard.location.lng.toFixed(6)}
-                                    </p>
+                                    {billboard.location.lat !== 0 && billboard.location.lng !== 0 && (
+                                        <p className="text-xs text-neutral-400 mt-3 font-mono">
+                                            Lat: {billboard.location.lat.toFixed(6)} • Lng: {billboard.location.lng.toFixed(6)}
+                                        </p>
+                                    )}
                                 </Card>
                             </motion.div>
                         )}
