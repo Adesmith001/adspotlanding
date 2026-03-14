@@ -16,7 +16,7 @@ import {
 import DashboardLayout from '@/components/DashboardLayout';
 import { useAppSelector } from '@/hooks/useRedux';
 import { selectUser } from '@/store/authSlice';
-import { getOwnerBillboards, getOwnerBookings } from '@/services/billboard.service';
+import { subscribeToOwnerBillboards, subscribeToOwnerBookings } from '@/services/billboard.service';
 import type { Billboard, Booking } from '@/types/billboard.types';
 
 const formatPrice = (price: number) =>
@@ -37,22 +37,39 @@ const OwnerDashboard: React.FC = () => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const fetchData = async () => {
-            if (!user) return;
-            try {
-                const [billboardsData, bookingsData] = await Promise.all([
-                    getOwnerBillboards(user.uid),
-                    getOwnerBookings(user.uid),
-                ]);
-                setBillboards(billboardsData);
-                setBookings(bookingsData);
-            } catch (error) {
-                console.error('Error fetching data:', error);
-            } finally {
+        if (!user) {
+            setBillboards([]);
+            setBookings([]);
+            setLoading(false);
+            return;
+        }
+
+        setLoading(true);
+        let receivedBillboards = false;
+        let receivedBookings = false;
+
+        const completeInitialLoad = () => {
+            if (receivedBillboards && receivedBookings) {
                 setLoading(false);
             }
         };
-        fetchData();
+
+        const unsubscribeBillboards = subscribeToOwnerBillboards(user.uid, (data) => {
+            setBillboards(data);
+            receivedBillboards = true;
+            completeInitialLoad();
+        });
+
+        const unsubscribeBookings = subscribeToOwnerBookings(user.uid, (data) => {
+            setBookings(data);
+            receivedBookings = true;
+            completeInitialLoad();
+        });
+
+        return () => {
+            unsubscribeBillboards();
+            unsubscribeBookings();
+        };
     }, [user]);
 
     const stats = {

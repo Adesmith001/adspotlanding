@@ -324,6 +324,41 @@ export const getOwnerBillboards = async (
 };
 
 /**
+ * Real-time subscription to owner billboards
+ */
+export const subscribeToOwnerBillboards = (
+  ownerId: string,
+  callback: (billboards: Billboard[]) => void,
+): (() => void) => {
+  const q = query(
+    collection(db, BILLBOARDS_COLLECTION),
+    where("ownerId", "==", ownerId),
+  );
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const billboards = snapshot.docs
+        .map((doc) => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ...data,
+            createdAt: timestampToDate(data.createdAt),
+            updatedAt: timestampToDate(data.updatedAt),
+          } as Billboard;
+        })
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+      callback(billboards);
+    },
+    (error) => {
+      console.error("Error subscribing to owner billboards:", error);
+    },
+  );
+};
+
+/**
  * Update billboard
  */
 export const updateBillboard = async (
@@ -623,6 +658,43 @@ export const getOwnerBookings = async (ownerId: string): Promise<Booking[]> => {
     console.error("Error getting owner bookings:", error);
     throw new Error("Failed to fetch bookings");
   }
+};
+
+/**
+ * Real-time subscription to owner bookings
+ */
+export const subscribeToOwnerBookings = (
+  ownerId: string,
+  callback: (bookings: Booking[]) => void,
+): (() => void) => {
+  const q = query(
+    collection(db, BOOKINGS_COLLECTION),
+    where("ownerId", "==", ownerId),
+  );
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const bookings = snapshot.docs
+        .map((doc) => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ...data,
+            startDate: timestampToDate(data.startDate),
+            endDate: timestampToDate(data.endDate),
+            createdAt: timestampToDate(data.createdAt),
+            updatedAt: timestampToDate(data.updatedAt),
+          } as Booking;
+        })
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+      callback(bookings);
+    },
+    (error) => {
+      console.error("Error subscribing to owner bookings:", error);
+    },
+  );
 };
 
 /**

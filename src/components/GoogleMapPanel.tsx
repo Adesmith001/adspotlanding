@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { MdLocationOn } from "react-icons/md";
+import { MdDirections, MdLocationOn } from "react-icons/md";
 
 interface GoogleMapPanelProps {
   latitude: number;
@@ -20,6 +20,8 @@ const GoogleMapPanel: React.FC<GoogleMapPanelProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [isReady, setIsReady] = useState(false);
+
+  const directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${latitude},${longitude}`)}`;
 
   // Wait for the keyless Google Maps script to populate window.google
   useEffect(() => {
@@ -55,10 +57,20 @@ const GoogleMapPanel: React.FC<GoogleMapPanelProps> = ({
         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-neutral-100 text-neutral-700">
           <MdLocationOn size={20} />
         </div>
-        <div>
+        <div className="flex-1 min-w-0">
           <h3 className="text-sm font-semibold text-neutral-900">{title}</h3>
           <p className="text-xs text-neutral-500">{subtitle}</p>
         </div>
+        <a
+          href={directionsUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 rounded-lg border border-neutral-200 px-2.5 py-1.5 text-xs font-semibold text-neutral-700 hover:bg-neutral-100 transition-colors"
+          aria-label="Open Google Maps directions"
+        >
+          <MdDirections size={16} />
+          Directions
+        </a>
       </div>
 
       <div className={`relative w-full ${heightClassName}`}>
