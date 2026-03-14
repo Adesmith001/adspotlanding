@@ -105,6 +105,7 @@ export const createBillboard = async (
         height: data.height,
         unit: data.unit,
       },
+      category: data.category || "billboard",
       type: data.type,
       hasLighting: data.hasLighting,
       trafficScore: data.trafficScore,
@@ -113,12 +114,14 @@ export const createBillboard = async (
       photos: photoUrls,
       streetViewAvailable: Boolean(data.latitude && data.longitude),
       pricing: {
+        hourly: data.hourlyPrice || 0,
         daily: data.dailyPrice,
         weekly: data.weeklyPrice,
         monthly: data.monthlyPrice,
         currency: "NGN",
       },
-      pricePerDay: data.dailyPrice,
+      pricePerDay: data.dailyPrice, // Keeping for backward compatibility
+      pricePerHour: data.hourlyPrice,
       unavailableDates: [],
       bookingRules: {
         instantBook: data.instantBook,
@@ -389,22 +392,36 @@ export const createBooking = async (
       throw new Error("Billboard not found");
     }
 
-    // Calculate duration and price
-    const duration = Math.ceil(
-      (request.endDate.getTime() - request.startDate.getTime()) /
-        (1000 * 60 * 60 * 24),
-    );
+    // Calculate duration and price based on category/unit
+    const isHourly = request.durationUnit === "hours" || billboard.category === "screen";
+    
+    let duration = 0;
+    let pricePerUnit = 0;
+    let totalAmount = 0;
 
-    let pricePerDay = billboard.pricing.daily;
-    let totalAmount = pricePerDay * duration;
+    if (isHourly) {
+      duration = Math.ceil(
+        (request.endDate.getTime() - request.startDate.getTime()) /
+          (1000 * 60 * 60),
+      );
+      pricePerUnit = billboard.pricing.hourly || 0;
+      totalAmount = pricePerUnit * duration;
+    } else {
+      duration = Math.ceil(
+        (request.endDate.getTime() - request.startDate.getTime()) /
+          (1000 * 60 * 60 * 24),
+      );
+      pricePerUnit = billboard.pricing.daily;
+      totalAmount = pricePerUnit * duration;
 
-    // Apply weekly/monthly pricing if applicable
-    if (duration >= 30) {
-      totalAmount = billboard.pricing.monthly * Math.ceil(duration / 30);
-      pricePerDay = totalAmount / duration;
-    } else if (duration >= 7) {
-      totalAmount = billboard.pricing.weekly * Math.ceil(duration / 7);
-      pricePerDay = totalAmount / duration;
+      // Apply weekly/monthly pricing if applicable
+      if (duration >= 30) {
+        totalAmount = billboard.pricing.monthly * Math.ceil(duration / 30);
+        pricePerUnit = totalAmount / duration;
+      } else if (duration >= 7) {
+        totalAmount = billboard.pricing.weekly * Math.ceil(duration / 7);
+        pricePerUnit = totalAmount / duration;
+      }
     }
 
     const creativeAssets = request.designFiles?.length
@@ -424,7 +441,9 @@ export const createBooking = async (
       startDate: request.startDate,
       endDate: request.endDate,
       duration,
-      pricePerDay,
+      durationUnit: isHourly ? "hours" : "days",
+      pricePerDay: pricePerUnit, // Keep for backward compatibility
+      pricePerUnit,
       totalAmount,
       currency: "NGN",
       status: billboard.bookingRules.instantBook ? "confirmed" : "pending",

@@ -18,7 +18,7 @@ import { toggleFavorite, isBillboardFavorited } from '@/services/billboard.servi
 import { useAppSelector } from '@/hooks/useRedux';
 import { selectUser, selectIsAuthenticated } from '@/store/authSlice';
 import toast from 'react-hot-toast';
-import type { SearchFilters, SortOption, BillboardType } from '@/types/billboard.types';
+import type { SearchFilters, SortOption, BillboardType, ListingCategory } from '@/types/billboard.types';
 
 const defaultCenter: [number, number] = [6.5244, 3.3792];
 
@@ -39,6 +39,7 @@ const BrowseBillboards: React.FC = () => {
 
 
     // Filter states
+    const [selectedCategory, setSelectedCategory] = useState<ListingCategory | ''>('');
     const [selectedCity, setSelectedCity] = useState('');
     const [selectedTypes, setSelectedTypes] = useState<BillboardType[]>([]);
     const [priceRange, setPriceRange] = useState<[number, number]>([0, 1000000]);
@@ -51,6 +52,7 @@ const BrowseBillboards: React.FC = () => {
     // Build filters object
     const filters: SearchFilters = useMemo(() => {
         const f: SearchFilters = {};
+        if (selectedCategory) f.category = selectedCategory;
         if (selectedCity) f.city = selectedCity;
         if (selectedTypes.length > 0) f.billboardType = selectedTypes;
         if (priceRange[0] > 0) f.minPrice = priceRange[0];
@@ -321,6 +323,26 @@ const BrowseBillboards: React.FC = () => {
                                 </motion.button>
                             </div>
 
+                            <div className="mb-6">
+                                <label className="block text-sm font-medium text-neutral-700 mb-2">
+                                    Category
+                                </label>
+                                <div className="flex gap-4">
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input type="radio" name="category" value="" checked={selectedCategory === ''} onChange={() => setSelectedCategory('')} className="text-primary-600" />
+                                        <span>All</span>
+                                    </label>
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input type="radio" name="category" value="billboard" checked={selectedCategory === 'billboard'} onChange={() => setSelectedCategory('billboard')} className="text-primary-600" />
+                                        <span>Billboards</span>
+                                    </label>
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input type="radio" name="category" value="screen" checked={selectedCategory === 'screen'} onChange={() => setSelectedCategory('screen')} className="text-primary-600" />
+                                        <span>Indoor Screens</span>
+                                    </label>
+                                </div>
+                            </div>
+
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                                 {/* City */}
                                 <div>
@@ -347,7 +369,7 @@ const BrowseBillboards: React.FC = () => {
                                         Type
                                     </label>
                                     <div className="space-y-2.5">
-                                        {(['flex', 'digital', 'led', 'screen'] as BillboardType[]).map((type) => (
+                                        {(['flex', 'digital', 'led'] as BillboardType[]).map((type) => (
                                             <label key={type} className="flex items-center gap-2.5 cursor-pointer group">
                                                 <input
                                                     type="checkbox"

@@ -91,18 +91,24 @@ const BillboardDetails: React.FC = () => {
         if (startDate && endDate && billboard) {
             const start = new Date(startDate);
             const end = new Date(endDate);
-            const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+            const isHourly = billboard.category === 'screen';
+            const unitMs = isHourly ? (1000 * 60 * 60) : (1000 * 60 * 60 * 24);
+            const duration = Math.ceil((end.getTime() - start.getTime()) / unitMs);
 
-            if (days > 0) {
-                setBookingDuration(days);
+            if (duration > 0) {
+                setBookingDuration(duration);
 
                 let price = 0;
-                if (days >= 30) {
-                    price = billboard.pricing.monthly * Math.ceil(days / 30);
-                } else if (days >= 7) {
-                    price = billboard.pricing.weekly * Math.ceil(days / 7);
+                if (isHourly) {
+                    price = (billboard.pricing.hourly || 0) * duration;
                 } else {
-                    price = billboard.pricing.daily * days;
+                    if (duration >= 30) {
+                        price = billboard.pricing.monthly * Math.ceil(duration / 30);
+                    } else if (duration >= 7) {
+                        price = billboard.pricing.weekly * Math.ceil(duration / 7);
+                    } else {
+                        price = billboard.pricing.daily * duration;
+                    }
                 }
                 setTotalPrice(price);
             } else {
@@ -197,6 +203,7 @@ const BillboardDetails: React.FC = () => {
                     billboardId: billboard.id,
                     startDate: new Date(startDate),
                     endDate: new Date(endDate),
+                    durationUnit: billboard.category === 'screen' ? 'hours' : 'days',
                     creativeRequirementType,
                     creativeBrief: creativeRequirementType === 'advertiser_upload'
                         ? (creativeBrief.trim() || 'Advertiser uploaded a ready-to-use design for approval.')
@@ -486,9 +493,9 @@ const BillboardDetails: React.FC = () => {
                                     whileHover={{ scale: 1.05 }}
                                     className="px-3 py-1 bg-neutral-900 text-white rounded-full text-sm font-semibold capitalize"
                                 >
-                                    {billboard.type}
+                                    {billboard.category === 'screen' ? 'Screen' : billboard.type}
                                 </motion.span>
-                                {billboard.hasLighting && (
+                                {billboard.hasLighting && billboard.category !== 'screen' && (
                                     <motion.span
                                         initial={{ opacity: 0, scale: 0.9 }}
                                         animate={{ opacity: 1, scale: 1 }}
@@ -730,34 +737,34 @@ const BillboardDetails: React.FC = () => {
                                 transition={{ duration: 0.3, delay: 0.86 }}
                                 className="mb-6"
                             >
-                                <p className="text-lg text-neutral-500 mb-1">Price per day</p>
+                                <p className="text-lg text-neutral-500 mb-1">Price per {billboard.category === 'screen' ? 'hour' : 'day'}</p>
                                 <p className="text-3xl sm:text-4xl font-extrabold text-neutral-900">
-                                    {formatPrice(billboard.pricing.daily)}
+                                    {formatPrice(billboard.category === 'screen' ? (billboard.pricing.hourly || 0) : billboard.pricing.daily)}
                                 </p>
                             </motion.div>
 
                             <div className="space-y-4 mb-6">
                                 <div>
                                     <label className="block text-sm font-medium text-neutral-700 mb-2">
-                                        Start Date
+                                        Start Date {billboard.category === 'screen' && '& Time'}
                                     </label>
                                     <input
-                                        type="date"
+                                        type={billboard.category === 'screen' ? "datetime-local" : "date"}
                                         value={startDate}
                                         onChange={(e) => setStartDate(e.target.value)}
-                                        min={new Date().toISOString().split('T')[0]}
+                                        min={billboard.category === 'screen' ? new Date().toISOString().slice(0, 16) : new Date().toISOString().split('T')[0]}
                                         className="w-full px-4 py-3 rounded-xl border border-neutral-300 focus:outline-none focus:ring-2 focus:ring-primary-500"
                                     />
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-neutral-700 mb-2">
-                                        End Date
+                                        End Date {billboard.category === 'screen' && '& Time'}
                                     </label>
                                     <input
-                                        type="date"
+                                        type={billboard.category === 'screen' ? "datetime-local" : "date"}
                                         value={endDate}
                                         onChange={(e) => setEndDate(e.target.value)}
-                                        min={startDate || new Date().toISOString().split('T')[0]}
+                                        min={startDate || (billboard.category === 'screen' ? new Date().toISOString().slice(0, 16) : new Date().toISOString().split('T')[0])}
                                         className="w-full px-4 py-3 rounded-xl border border-neutral-300 focus:outline-none focus:ring-2 focus:ring-primary-500"
                                     />
                                 </div>
@@ -883,7 +890,7 @@ const BillboardDetails: React.FC = () => {
                                 <div className="bg-neutral-50 rounded-xl p-4 mb-6">
                                     <div className="flex justify-between mb-2">
                                         <span className="text-neutral-600">Duration</span>
-                                        <span className="font-medium text-neutral-900">{bookingDuration} days</span>
+                                        <span className="font-medium text-neutral-900">{bookingDuration} {billboard.category === 'screen' ? 'hours' : 'days'}</span>
                                     </div>
                                     <div className="flex justify-between text-lg font-bold">
                                         <span className="text-neutral-900">Total</span>
@@ -903,21 +910,23 @@ const BillboardDetails: React.FC = () => {
                             </p>
 
                             {/* Pricing Info */}
-                            <motion.div
-                                initial={{ opacity: 0, y: 10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ duration: 0.3, delay: 0.88 }}
-                                className="mt-6 pt-6 border-t border-neutral-100 space-y-3 text-sm bg-gradient-to-br from-neutral-50 to-neutral-100 p-4 rounded-2xl"
-                            >
-                                <div className="flex justify-between items-center">
-                                    <span className="text-neutral-600 font-medium">Weekly rate</span>
-                                    <span className="font-bold text-neutral-900">{formatPrice(billboard.pricing.weekly)}</span>
-                                </div>
-                                <div className="flex justify-between items-center">
-                                    <span className="text-neutral-600 font-medium">Monthly rate</span>
-                                    <span className="font-bold text-neutral-900">{formatPrice(billboard.pricing.monthly)}</span>
-                                </div>
-                            </motion.div>
+                            {billboard.category !== 'screen' && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: 10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ duration: 0.3, delay: 0.88 }}
+                                    className="mt-6 pt-6 border-t border-neutral-100 space-y-3 text-sm bg-gradient-to-br from-neutral-50 to-neutral-100 p-4 rounded-2xl"
+                                >
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-neutral-600 font-medium">Weekly rate</span>
+                                        <span className="font-bold text-neutral-900">{formatPrice(billboard.pricing.weekly)}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-neutral-600 font-medium">Monthly rate</span>
+                                        <span className="font-bold text-neutral-900">{formatPrice(billboard.pricing.monthly)}</span>
+                                    </div>
+                                </motion.div>
+                            )}
                         </div>
                     </motion.div>
                 </div>

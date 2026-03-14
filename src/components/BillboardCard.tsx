@@ -81,10 +81,10 @@ const BillboardCard: React.FC<BillboardCardProps> = ({ billboard, onFavorite, is
 
                 {/* Overlay badges */}
                 <div className="absolute top-3 left-3 flex flex-wrap gap-2">
-                    <span className="px-3 py-1 bg-white/95 backdrop-blur-sm rounded-full text-xs font-semibold text-neutral-900 shadow-lg">
-                        {getBillboardTypeLabel(billboard.type)}
+                    <span className="px-3 py-1 bg-white/95 backdrop-blur-sm rounded-full text-xs font-semibold text-neutral-900 shadow-lg capitalize">
+                        {billboard.category === 'screen' ? 'Screen' : getBillboardTypeLabel(billboard.type || '')}
                     </span>
-                    {billboard.hasLighting && (
+                    {billboard.hasLighting && billboard.category !== 'screen' && (
                         <span className="px-3 py-1 bg-amber-500/95 backdrop-blur-sm rounded-full text-xs font-semibold text-white shadow-lg flex items-center gap-1">
                             <MdLightMode size={12} />
                             Lit
@@ -190,9 +190,9 @@ const BillboardCard: React.FC<BillboardCardProps> = ({ billboard, onFavorite, is
                 <div className="flex items-center justify-between">
                     <div>
                         <p className="text-2xl font-bold text-neutral-900">
-                            {formatPrice(billboard.pricing.daily)}
+                            {formatPrice(billboard.category === 'screen' ? (billboard.pricing.hourly || 0) : billboard.pricing.daily)}
                         </p>
-                        <p className="text-xs text-neutral-500">per day</p>
+                        <p className="text-xs text-neutral-500">per {billboard.category === 'screen' ? 'hour' : 'day'}</p>
                     </div>
                     <Link
                         to={`/billboards/${billboard.id}`}

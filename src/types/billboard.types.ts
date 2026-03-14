@@ -1,5 +1,6 @@
 // Billboard Types
-export type BillboardType = "flex" | "digital" | "led" | "screen";
+export type ListingCategory = "billboard" | "screen";
+export type BillboardType = "flex" | "digital" | "led";
 export type BillboardStatus = "active" | "inactive" | "pending" | "rejected";
 
 export interface Location {
@@ -19,6 +20,7 @@ export interface Dimensions {
 }
 
 export interface Pricing {
+  hourly?: number;
   daily: number;
   weekly: number;
   monthly: number;
@@ -32,8 +34,8 @@ export interface AvailabilityPeriod {
 
 export interface BookingRules {
   instantBook: boolean;
-  minDuration: number; // in days
-  maxDuration: number; // in days
+  minDuration: number; // in days or hours
+  maxDuration: number; // in days or hours
   cancellationPolicy: "flexible" | "moderate" | "strict";
   advanceNotice: number; // days before booking
 }
@@ -53,8 +55,9 @@ export interface Billboard {
   location: Location;
 
   // Specifications
+  category?: ListingCategory; // Optional for backward compatibility, defaults to billboard
   dimensions: Dimensions;
-  type: BillboardType;
+  type?: BillboardType; // Optional because Screens might not have a type like "flex"
   hasLighting: boolean;
   trafficScore: number; // 1-10
   visibilityRating: number; // 1-5
@@ -66,7 +69,8 @@ export interface Billboard {
 
   // Pricing
   pricing: Pricing;
-  pricePerDay: number;
+  pricePerDay?: number; // Deprecated, use priceForDisplay or check category
+  pricePerHour?: number;
 
   // Availability
   unavailableDates: AvailabilityPeriod[];
@@ -121,10 +125,12 @@ export interface Booking {
   // Booking Details
   startDate: Date;
   endDate: Date;
-  duration: number; // in days
+  duration: number; // in days or hours
+  durationUnit?: "days" | "hours";
 
   // Pricing
-  pricePerDay: number;
+  pricePerDay?: number; // Deprecated
+  pricePerUnit?: number; // Replace pricePerDay
   totalAmount: number;
   currency: string;
 
@@ -221,6 +227,7 @@ export interface Review {
 // Search & Filter Types
 export interface SearchFilters {
   query?: string;
+  category?: ListingCategory;
   city?: string;
   state?: string;
   minPrice?: number;
@@ -349,6 +356,7 @@ export interface Payout {
 
 // Form Types
 export interface CreateBillboardForm {
+  category: ListingCategory;
   title: string;
   description: string;
   address: string;
@@ -358,10 +366,11 @@ export interface CreateBillboardForm {
   width: number;
   height: number;
   unit: "ft" | "m";
-  type: BillboardType;
+  type?: BillboardType;
   hasLighting: boolean;
   trafficScore: number;
   orientation: "portrait" | "landscape";
+  hourlyPrice?: number;
   dailyPrice: number;
   weeklyPrice: number;
   monthlyPrice: number;
@@ -378,6 +387,7 @@ export interface BookingRequest {
   billboardId: string;
   startDate: Date;
   endDate: Date;
+  durationUnit?: "days" | "hours";
   message?: string;
   creativeRequirementType: CreativeRequirementType;
   creativeBrief: string;

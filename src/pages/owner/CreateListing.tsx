@@ -54,6 +54,7 @@ const CreateListing: React.FC = () => {
     const lastResolvedAddressQueryRef = useRef('');
 
     const [formData, setFormData] = useState<CreateBillboardForm>({
+        category: 'billboard',
         title: '',
         description: '',
         address: '',
@@ -67,6 +68,7 @@ const CreateListing: React.FC = () => {
         hasLighting: false,
         trafficScore: 5,
         orientation: 'landscape',
+        hourlyPrice: 0,
         dailyPrice: 0,
         weeklyPrice: 0,
         monthlyPrice: 0,
@@ -278,13 +280,24 @@ const CreateListing: React.FC = () => {
                 return (
                     <div className="space-y-6">
                         <div>
-                            <label className="block text-sm font-medium text-neutral-700 mb-2">Billboard Title *</label>
-                            <Input type="text" placeholder="e.g., Premium LED Billboard - Lekki Phase 1" value={formData.title} onChange={(e) => updateFormData('title', e.target.value)} />
+                            <label className="block text-sm font-medium text-neutral-700 mb-2">Listing Category *</label>
+                            <div className="flex gap-4">
+                                {(['billboard', 'screen'] as const).map((category) => (
+                                    <motion.button key={category} type="button" onClick={() => updateFormData('category', category)} whileHover={{ y: -2 }} whileTap={{ scale: 0.97 }}
+                                        className={`flex-1 p-4 rounded-xl border-2 transition-all ${formData.category === category ? 'border-primary-600 bg-primary-50 shadow-soft' : 'border-neutral-200 hover:border-neutral-300'}`}>
+                                        <span className="capitalize font-bold text-neutral-900">{category}</span>
+                                    </motion.button>
+                                ))}
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-neutral-700 mb-2">{formData.category === 'billboard' ? 'Billboard' : 'Screen'} Title *</label>
+                            <Input type="text" placeholder={`e.g., Premium LED ${formData.category === 'billboard' ? 'Billboard' : 'Screen'} - Lekki Phase 1`} value={formData.title} onChange={(e) => updateFormData('title', e.target.value)} />
                             <p className="text-xs text-neutral-500 mt-2">Minimum 5 characters. Be descriptive and specific.</p>
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-neutral-700 mb-2">Description *</label>
-                            <textarea className="w-full px-4 py-3 rounded-xl border border-neutral-300 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none transition-all duration-200" rows={4} placeholder="Describe your billboard location, visibility, nearby landmarks, traffic volume, and any special features..." value={formData.description} onChange={(e) => updateFormData('description', e.target.value)} />
+                            <textarea className="w-full px-4 py-3 rounded-xl border border-neutral-300 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none transition-all duration-200" rows={4} placeholder={`Describe your ${formData.category} location, visibility, nearby landmarks, traffic volume, and any special features...`} value={formData.description} onChange={(e) => updateFormData('description', e.target.value)} />
                             <p className="text-xs text-neutral-500 mt-2">Minimum 20 characters. The more detail, the better.</p>
                         </div>
                     </div>
@@ -299,9 +312,9 @@ const CreateListing: React.FC = () => {
                                     <MdMyLocation size={22} className="text-primary-600" />
                                 </div>
                                 <div>
-                                    <h4 className="font-semibold text-neutral-900 mb-1">Auto-detect billboard location</h4>
+                                    <h4 className="font-semibold text-neutral-900 mb-1">Auto-detect location</h4>
                                     <p className="text-sm text-neutral-600">
-                                        Upload or take a photo at your billboard site. We'll automatically extract the GPS coordinates to pinpoint its exact location on the map.
+                                        Upload or take a photo at your site. We'll automatically extract the GPS coordinates to pinpoint its exact location on the map.
                                     </p>
                                 </div>
                             </div>
@@ -446,7 +459,7 @@ const CreateListing: React.FC = () => {
                         {/* Interactive Map */}
                         <div>
                             <label className="block text-sm font-medium text-neutral-700 mb-2">
-                                Billboard Location on Map
+                                {formData.category === 'billboard' ? 'Billboard' : 'Screen'} Location on Map
                             </label>
                             {formData.latitude && formData.longitude ? (
                                 <p className="text-xs text-neutral-500 mb-3">
@@ -454,7 +467,7 @@ const CreateListing: React.FC = () => {
                                 </p>
                             ) : (
                                 <p className="text-xs text-neutral-500 mb-3">
-                                    No GPS data extracted yet. Click anywhere on the map to set the location, or go back and upload a photo taken at the billboard site.
+                                    No GPS data extracted yet. Click anywhere on the map to set the location, or go back and upload a photo taken at the site.
                                 </p>
                             )}
 
@@ -487,8 +500,8 @@ const CreateListing: React.FC = () => {
                                     <StreetViewPanel
                                         latitude={formData.latitude}
                                         longitude={formData.longitude}
-                                        title="Street-Level Billboard Preview"
-                                        subtitle="This helps confirm the billboard is positioned on the actual road, not just on the map."
+                                        title="Street-Level Preview"
+                                        subtitle="This helps confirm the location is positioned correctly on the map."
                                         heightClassName="h-[280px]"
                                     />
                                 </div>
@@ -520,17 +533,21 @@ const CreateListing: React.FC = () => {
                                 ))}
                             </div>
                         </div>
-                        <div>
-                            <label className="block text-sm font-medium text-neutral-700 mb-2">Billboard Type *</label>
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                                {(['flex', 'digital', 'led', 'screen'] as BillboardType[]).map((type) => (
-                                    <motion.button key={type} type="button" onClick={() => updateFormData('type', type)} whileHover={{ y: -2 }} whileTap={{ scale: 0.97 }}
-                                        className={`p-4 rounded-xl border-2 transition-all ${formData.type === type ? 'border-primary-600 bg-primary-50 shadow-soft' : 'border-neutral-200 hover:border-neutral-300'}`}>
-                                        <span className="capitalize font-medium text-neutral-900">{type}</span>
-                                    </motion.button>
-                                ))}
+
+                        {formData.category === 'billboard' && (
+                            <div>
+                                <label className="block text-sm font-medium text-neutral-700 mb-2">Billboard Type *</label>
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                    {(['flex', 'digital', 'led'] as BillboardType[]).map((type) => (
+                                        <motion.button key={type} type="button" onClick={() => updateFormData('type', type)} whileHover={{ y: -2 }} whileTap={{ scale: 0.97 }}
+                                            className={`p-4 rounded-xl border-2 transition-all ${formData.type === type ? 'border-primary-600 bg-primary-50 shadow-soft' : 'border-neutral-200 hover:border-neutral-300'}`}>
+                                            <span className="capitalize font-medium text-neutral-900">{type}</span>
+                                        </motion.button>
+                                    ))}
+                                </div>
                             </div>
-                        </div>
+                        )}
+
                         <div>
                             <label className="block text-sm font-medium text-neutral-700 mb-2">Orientation</label>
                             <div className="flex gap-4">
@@ -542,10 +559,12 @@ const CreateListing: React.FC = () => {
                                 ))}
                             </div>
                         </div>
-                        <div className="flex items-center gap-3">
-                            <input type="checkbox" id="hasLighting" checked={formData.hasLighting} onChange={(e) => updateFormData('hasLighting', e.target.checked)} className="w-5 h-5 rounded text-primary-600 focus:ring-primary-500" />
-                            <label htmlFor="hasLighting" className="text-neutral-700">Has lighting (visible at night)</label>
-                        </div>
+                        {formData.category === 'billboard' && (
+                            <div className="flex items-center gap-3">
+                                <input type="checkbox" id="hasLighting" checked={formData.hasLighting} onChange={(e) => updateFormData('hasLighting', e.target.checked)} className="w-5 h-5 rounded text-primary-600 focus:ring-primary-500" />
+                                <label htmlFor="hasLighting" className="text-neutral-700">Has lighting (visible at night)</label>
+                            </div>
+                        )}
                         <div>
                             <label className="block text-sm font-medium text-neutral-700 mb-2">
                                 Traffic Score (1-10): <span className="text-primary-600 font-bold">{formData.trafficScore}</span>
@@ -558,29 +577,45 @@ const CreateListing: React.FC = () => {
             case 5:
                 return (
                     <div className="space-y-6">
-                        <div>
-                            <label className="block text-sm font-medium text-neutral-700 mb-2">Daily Rate (₦) *</label>
-                            <Input type="number" placeholder="e.g., 50000" value={formData.dailyPrice || ''} onChange={(e) => updateFormData('dailyPrice', Number(e.target.value))} />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-neutral-700 mb-2">Weekly Rate (₦) - Optional discount</label>
-                            <Input type="number" placeholder="e.g., 300000" value={formData.weeklyPrice || ''} onChange={(e) => updateFormData('weeklyPrice', Number(e.target.value))} />
-                            <p className="text-xs text-neutral-500 mt-2">Leave empty to auto-calculate as 7× daily rate</p>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-neutral-700 mb-2">Monthly Rate (₦) - Optional discount</label>
-                            <Input type="number" placeholder="e.g., 1000000" value={formData.monthlyPrice || ''} onChange={(e) => updateFormData('monthlyPrice', Number(e.target.value))} />
-                            <p className="text-xs text-neutral-500 mt-2">Leave empty to auto-calculate as 30× daily rate</p>
-                        </div>
-                        {formData.dailyPrice > 0 && (
+                        {formData.category === 'screen' ? (
+                            <div>
+                                <label className="block text-sm font-medium text-neutral-700 mb-2">Hourly Rate (₦) *</label>
+                                <Input type="number" placeholder="e.g., 5000" value={formData.hourlyPrice || ''} onChange={(e) => updateFormData('hourlyPrice', Number(e.target.value))} />
+                                <p className="text-xs text-neutral-500 mt-2">Set the price per hour for renting this screen.</p>
+                            </div>
+                        ) : (
+                            <>
+                                <div>
+                                    <label className="block text-sm font-medium text-neutral-700 mb-2">Daily Rate (₦) *</label>
+                                    <Input type="number" placeholder="e.g., 50000" value={formData.dailyPrice || ''} onChange={(e) => updateFormData('dailyPrice', Number(e.target.value))} />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-neutral-700 mb-2">Weekly Rate (₦) - Optional discount</label>
+                                    <Input type="number" placeholder="e.g., 300000" value={formData.weeklyPrice || ''} onChange={(e) => updateFormData('weeklyPrice', Number(e.target.value))} />
+                                    <p className="text-xs text-neutral-500 mt-2">Leave empty to auto-calculate as 7× daily rate</p>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-neutral-700 mb-2">Monthly Rate (₦) - Optional discount</label>
+                                    <Input type="number" placeholder="e.g., 1000000" value={formData.monthlyPrice || ''} onChange={(e) => updateFormData('monthlyPrice', Number(e.target.value))} />
+                                    <p className="text-xs text-neutral-500 mt-2">Leave empty to auto-calculate as 30× daily rate</p>
+                                </div>
+                            </>
+                        )}
+                        {(formData.dailyPrice > 0 || (formData.category === 'screen' && (formData.hourlyPrice || 0) > 0)) && (
                             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
                                 <Card className="p-5 bg-neutral-50">
                                     <p className="text-sm font-semibold text-neutral-700 mb-3">Pricing Preview</p>
-                                    <div className="space-y-1.5 text-sm text-neutral-600">
-                                        <p>Daily: <span className="font-bold text-neutral-900">₦{formData.dailyPrice.toLocaleString()}</span></p>
-                                        <p>Weekly: <span className="font-bold text-neutral-900">₦{(formData.weeklyPrice || formData.dailyPrice * 7).toLocaleString()}</span></p>
-                                        <p>Monthly: <span className="font-bold text-neutral-900">₦{(formData.monthlyPrice || formData.dailyPrice * 30).toLocaleString()}</span></p>
-                                    </div>
+                                    {formData.category === 'screen' ? (
+                                        <div className="space-y-1.5 text-sm text-neutral-600">
+                                            <p>Hourly: <span className="font-bold text-neutral-900">₦{(formData.hourlyPrice || 0).toLocaleString()}</span></p>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-1.5 text-sm text-neutral-600">
+                                            <p>Daily: <span className="font-bold text-neutral-900">₦{formData.dailyPrice.toLocaleString()}</span></p>
+                                            <p>Weekly: <span className="font-bold text-neutral-900">₦{(formData.weeklyPrice || formData.dailyPrice * 7).toLocaleString()}</span></p>
+                                            <p>Monthly: <span className="font-bold text-neutral-900">₦{(formData.monthlyPrice || formData.dailyPrice * 30).toLocaleString()}</span></p>
+                                        </div>
+                                    )}
                                 </Card>
                             </motion.div>
                         )}
@@ -598,18 +633,18 @@ const CreateListing: React.FC = () => {
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-sm font-medium text-neutral-700 mb-2">Minimum Duration (days)</label>
+                                <label className="block text-sm font-medium text-neutral-700 mb-2">Minimum Duration ({formData.category === 'screen' ? 'hours' : 'days'})</label>
                                 <Input type="number" min="1" value={formData.minDuration} onChange={(e) => updateFormData('minDuration', Number(e.target.value))} />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-neutral-700 mb-2">Maximum Duration (days)</label>
+                                <label className="block text-sm font-medium text-neutral-700 mb-2">Maximum Duration ({formData.category === 'screen' ? 'hours' : 'days'})</label>
                                 <Input type="number" min="1" value={formData.maxDuration} onChange={(e) => updateFormData('maxDuration', Number(e.target.value))} />
                             </div>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-neutral-700 mb-2">Advance Notice (days)</label>
+                            <label className="block text-sm font-medium text-neutral-700 mb-2">Advance Notice ({formData.category === 'screen' ? 'hours' : 'days'})</label>
                             <Input type="number" min="0" value={formData.advanceNotice} onChange={(e) => updateFormData('advanceNotice', Number(e.target.value))} />
-                            <p className="text-xs text-neutral-500 mt-2">How many days in advance must bookings be made?</p>
+                            <p className="text-xs text-neutral-500 mt-2">How much time in advance must bookings be made?</p>
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-neutral-700 mb-3">Cancellation Policy</label>
@@ -639,11 +674,12 @@ const CreateListing: React.FC = () => {
                             <h3 className="text-lg font-bold text-neutral-900 mb-6">Review Your Listing</h3>
                             <div className="space-y-5">
                                 {[
+                                    { label: 'Category', value: formData.category === 'screen' ? 'Screen' : 'Billboard' },
                                     { label: 'Title', value: formData.title },
                                     { label: 'Location', value: `${formData.address}, ${formData.city}, ${formData.state}` },
                                     { label: 'GPS', value: formData.latitude && formData.longitude ? `${formData.latitude.toFixed(6)}, ${formData.longitude.toFixed(6)}` : 'Not set' },
-                                    { label: 'Specifications', value: `${formData.width}×${formData.height} ${formData.unit} • ${formData.type.toUpperCase()} • ${formData.hasLighting ? 'With Lighting' : 'No Lighting'}` },
-                                    { label: 'Pricing', value: `₦${formData.dailyPrice.toLocaleString()}/day` },
+                                    { label: 'Specifications', value: `${formData.width}×${formData.height} ${formData.unit} ${formData.type ? `• ${formData.type.toUpperCase()}` : ''} ${formData.category === 'billboard' ? (formData.hasLighting ? '• With Lighting' : '• No Lighting') : ''}` },
+                                    { label: 'Pricing', value: formData.category === 'screen' ? `₦${(formData.hourlyPrice || 0).toLocaleString()}/hr` : `₦${formData.dailyPrice.toLocaleString()}/day` },
                                     { label: 'Photos', value: `${photos.length} image(s) uploaded` },
                                     { label: 'Booking', value: formData.instantBook ? 'Instant Book Enabled' : 'Requires Approval' },
                                 ].map((item, i) => (
@@ -682,7 +718,7 @@ const CreateListing: React.FC = () => {
                             )}
                         </Card>
                         <p className="text-sm text-neutral-500 text-center">
-                            By submitting, you confirm that all information is accurate and you have the right to list this billboard.
+                            By submitting, you confirm that all information is accurate and you have the right to list this {formData.category}.
                         </p>
                     </motion.div>
                 );
@@ -694,7 +730,7 @@ const CreateListing: React.FC = () => {
     const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.05 } } };
 
     return (
-        <DashboardLayout userRole="owner" title="Create New Listing" subtitle="Add a new billboard to your inventory">
+        <DashboardLayout userRole="owner" title="Create New Listing" subtitle="Add a new billboard or screen to your inventory">
             <div className="max-w-6xl mx-auto flex flex-col lg:flex-row gap-6 lg:gap-10 pb-10">
                 {/* Left: Vertical Progress Steps */}
                 <div className="w-full lg:w-72 flex-shrink-0">
