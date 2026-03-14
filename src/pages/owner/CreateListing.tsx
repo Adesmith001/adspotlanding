@@ -11,22 +11,7 @@ import {
     MdCameraAlt,
     MdMyLocation,
 } from 'react-icons/md';
-import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
-
-// Fix for default Leaflet icon marker
-import markerIcon from 'leaflet/dist/images/marker-icon.png';
-import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
-import markerShadow from 'leaflet/dist/images/marker-shadow.png';
-
-// @ts-expect-error - Icon scaling fix
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-    iconUrl: markerIcon,
-    iconRetinaUrl: markerIcon2x,
-    shadowUrl: markerShadow,
-});
+import GoogleMapInteractive from '@/components/GoogleMapInteractive';
 import DashboardLayout from '@/components/DashboardLayout';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
@@ -50,26 +35,8 @@ const STEPS = [
     { id: 7, name: 'Review', description: 'Confirm and submit' },
 ];
 
-const defaultCenter: [number, number] = [6.5244, 3.3792]; // Lagos
-
-// Helper to handle map clicks
-const MapEvents = ({ onClick }: { onClick: (lat: number, lng: number) => void }) => {
-    useMapEvents({
-        click(e) {
-            onClick(e.latlng.lat, e.latlng.lng);
-        },
-    });
-    return null;
-};
-
-// Helper to update map view when center changes
-const MapViewUpdater = ({ center }: { center: [number, number] }) => {
-    const map = useMapEvents({});
-    React.useEffect(() => {
-        map.setView(center, map.getZoom());
-    }, [center, map]);
-    return null;
-};
+// default Lagos center points
+const defaultCenter: [number, number] = [6.5244, 3.3792];
 
 const CreateListing: React.FC = () => {
     const navigate = useNavigate();
@@ -254,22 +221,7 @@ const CreateListing: React.FC = () => {
         }
     };
 
-    const nigerianStates = [
-        'Lagos', 'Abuja FCT', 'Rivers', 'Kano', 'Oyo', 'Kaduna', 'Edo', 'Enugu', 'Delta', 'Anambra'
-    ];
-
-    const nigerianCities: Record<string, string[]> = {
-        'Lagos': ['Lagos Island', 'Victoria Island', 'Lekki', 'Ikeja', 'Surulere', 'Ikoyi', 'Yaba'],
-        'Abuja FCT': ['Garki', 'Wuse', 'Maitama', 'Asokoro', 'Central Area'],
-        'Rivers': ['Port Harcourt', 'Obio-Akpor'],
-        'Kano': ['Kano Municipal', 'Nassarawa', 'Tarauni'],
-        'Oyo': ['Ibadan North', 'Ibadan South', 'Oluyole'],
-        'Kaduna': ['Kaduna North', 'Kaduna South', 'Zaria'],
-        'Edo': ['Benin City', 'Ikpoba-Okha'],
-        'Enugu': ['Enugu North', 'Enugu South', 'Enugu East'],
-        'Delta': ['Warri', 'Asaba', 'Sapele'],
-        'Anambra': ['Awka', 'Onitsha', 'Nnewi'],
-    };
+    // Remove nigerianStates and nigerianCities constants to use standard text input
 
     const stepContentVariants = {
         initial: { opacity: 0, x: 30 },
@@ -277,11 +229,6 @@ const CreateListing: React.FC = () => {
         exit: { opacity: 0, x: -30, transition: { duration: 0.2 } },
     };
 
-    const mapCenter: [number, number] = formData.latitude && formData.longitude
-        ? [formData.latitude, formData.longitude]
-        : defaultCenter;
-
-    const mapZoom = formData.latitude && formData.longitude ? 16 : 11;
 
     const onMapClick = (lat: number, lng: number) => {
         void applyCoordinates(lat, lng, 'map');
@@ -471,27 +418,21 @@ const CreateListing: React.FC = () => {
                     <div className="space-y-6">
                         <div>
                             <label className="block text-sm font-medium text-neutral-700 mb-2">State *</label>
-                            <select className="w-full px-4 py-3 rounded-xl border border-neutral-300 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all cursor-pointer" value={formData.state} onChange={(e) => { updateFormData('state', e.target.value); updateFormData('city', ''); }}>
-                                <option value="">Select State</option>
-                                {nigerianStates.map((state) => (<option key={state} value={state}>{state}</option>))}
-                            </select>
+                            <Input
+                                type="text"
+                                placeholder="e.g., Lagos"
+                                value={formData.state}
+                                onChange={(e) => updateFormData('state', e.target.value)}
+                            />
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-neutral-700 mb-2">City/Area *</label>
                             <Input
                                 type="text"
-                                placeholder={formData.state && nigerianCities[formData.state]?.length
-                                    ? `e.g., ${nigerianCities[formData.state][0]}`
-                                    : 'e.g., Lekki Phase 1'}
+                                placeholder="e.g., Lekki Phase 1"
                                 value={formData.city}
                                 onChange={(e) => updateFormData('city', e.target.value)}
-                                disabled={!formData.state}
                             />
-                            {formData.state && nigerianCities[formData.state]?.length > 0 && (
-                                <p className="text-xs text-neutral-500 -mt-2">
-                                    Common areas in {formData.state}: {nigerianCities[formData.state].join(', ')}
-                                </p>
-                            )}
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-neutral-700 mb-2">Full Address *</label>
@@ -518,32 +459,13 @@ const CreateListing: React.FC = () => {
                             )}
 
                             <div className="rounded-2xl overflow-hidden border-2 border-neutral-200 shadow-soft relative z-0">
-                                <MapContainer
-                                    center={mapCenter}
-                                    zoom={mapZoom}
-                                    scrollWheelZoom={false}
-                                    style={{ height: '350px', width: '100%' }}
-                                >
-                                    <TileLayer
-                                        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                                    />
-                                    <MapEvents onClick={onMapClick} />
-                                    <MapViewUpdater center={mapCenter} />
-                                    {formData.latitude && formData.longitude && (
-                                        <Marker
-                                            position={[formData.latitude, formData.longitude]}
-                                            draggable={true}
-                                            eventHandlers={{
-                                                dragend: (e) => {
-                                                    const marker = e.target;
-                                                    const position = marker.getLatLng();
-                                                    onMapClick(position.lat, position.lng);
-                                                },
-                                            }}
-                                        />
-                                    )}
-                                </MapContainer>
+                                <GoogleMapInteractive
+                                    latitude={formData.latitude}
+                                    longitude={formData.longitude}
+                                    defaultCenter={defaultCenter}
+                                    onLocationChange={onMapClick}
+                                    heightClassName="h-[350px]"
+                                />
                             </div>
 
                             {/* Coordinates display */}
@@ -600,8 +522,8 @@ const CreateListing: React.FC = () => {
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-neutral-700 mb-2">Billboard Type *</label>
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                {(['flex', 'digital', 'led'] as BillboardType[]).map((type) => (
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                {(['flex', 'digital', 'led', 'screen'] as BillboardType[]).map((type) => (
                                     <motion.button key={type} type="button" onClick={() => updateFormData('type', type)} whileHover={{ y: -2 }} whileTap={{ scale: 0.97 }}
                                         className={`p-4 rounded-xl border-2 transition-all ${formData.type === type ? 'border-primary-600 bg-primary-50 shadow-soft' : 'border-neutral-200 hover:border-neutral-300'}`}>
                                         <span className="capitalize font-medium text-neutral-900">{type}</span>
@@ -739,22 +661,13 @@ const CreateListing: React.FC = () => {
                                     <div>
                                         <p className="text-sm text-neutral-500 mb-2">Map Preview</p>
                                         <div className="rounded-xl overflow-hidden border border-neutral-200 z-0">
-                                            <MapContainer
-                                                center={[formData.latitude, formData.longitude]}
-                                                zoom={15}
-                                                scrollWheelZoom={false}
-                                                dragging={false}
-                                                zoomControl={false}
-                                                touchZoom={false}
-                                                doubleClickZoom={false}
-                                                style={{ height: '200px', width: '100%' }}
-                                            >
-                                                <TileLayer
-                                                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                                                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                                                />
-                                                <Marker position={[formData.latitude, formData.longitude]} />
-                                            </MapContainer>
+                                            <GoogleMapInteractive
+                                                latitude={formData.latitude}
+                                                longitude={formData.longitude}
+                                                defaultCenter={defaultCenter}
+                                                heightClassName="h-[200px]"
+                                                readOnly={true}
+                                            />
                                         </div>
                                     </div>
 

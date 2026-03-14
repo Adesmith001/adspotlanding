@@ -9,22 +9,7 @@ import {
     MdMap,
     MdViewList,
 } from 'react-icons/md';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
-
-// Fix for default Leaflet icon marker
-import markerIcon from 'leaflet/dist/images/marker-icon.png';
-import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
-import markerShadow from 'leaflet/dist/images/marker-shadow.png';
-
-// @ts-expect-error - Icon scaling fix
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-    iconUrl: markerIcon,
-    iconRetinaUrl: markerIcon2x,
-    shadowUrl: markerShadow,
-});
+import GoogleMultiPointMap from '@/components/GoogleMultiPointMap';
 import DashboardLayout from '@/components/DashboardLayout';
 import { useBillboards } from '@/hooks/useBillboards';
 import BillboardCard from '@/components/BillboardCard';
@@ -37,14 +22,7 @@ import type { SearchFilters, SortOption, BillboardType } from '@/types/billboard
 
 const defaultCenter: [number, number] = [6.5244, 3.3792];
 
-// Helper to update map view
-const MapViewUpdater = ({ center }: { center: [number, number] }) => {
-    const map = useMap();
-    useEffect(() => {
-        map.setView(center, map.getZoom());
-    }, [center, map]);
-    return null;
-};
+
 
 const BrowseBillboards: React.FC = () => {
     const user = useAppSelector(selectUser);
@@ -369,7 +347,7 @@ const BrowseBillboards: React.FC = () => {
                                         Type
                                     </label>
                                     <div className="space-y-2.5">
-                                        {(['flex', 'digital', 'led'] as BillboardType[]).map((type) => (
+                                        {(['flex', 'digital', 'led', 'screen'] as BillboardType[]).map((type) => (
                                             <label key={type} className="flex items-center gap-2.5 cursor-pointer group">
                                                 <input
                                                     type="checkbox"
@@ -468,56 +446,7 @@ const BrowseBillboards: React.FC = () => {
                     className="mb-8"
                 >
                     <div className="rounded-2xl overflow-hidden border-2 border-neutral-200 shadow-soft relative z-0">
-                        <MapContainer
-                            center={mapCenterCalc}
-                            zoom={12}
-                            scrollWheelZoom={true}
-                            className="h-[420px] md:h-[600px]"
-                            style={{ width: '100%' }}
-                        >
-                            <TileLayer
-                                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                            />
-                            <MapViewUpdater center={mapCenterCalc} />
-                            {billboards
-                                .filter(b => b.location.lat !== 0 && b.location.lng !== 0)
-                                .map((billboard) => (
-                                    <Marker
-                                        key={billboard.id}
-                                        position={[billboard.location.lat, billboard.location.lng]}
-                                    >
-                                        <Popup>
-                                            <div className="max-w-[200px] p-0">
-                                                {billboard.photos[0] && (
-                                                    <img
-                                                        src={billboard.photos[0]}
-                                                        alt={billboard.title}
-                                                        className="w-full h-24 object-cover rounded-lg mb-2"
-                                                    />
-                                                )}
-                                                <h4 className="font-bold text-sm text-neutral-900 mb-1 line-clamp-1">
-                                                    {billboard.title}
-                                                </h4>
-                                                <p className="text-xs text-neutral-500 mb-1">
-                                                    {billboard.location.address}, {billboard.location.city}
-                                                </p>
-                                                <p className="text-sm font-bold text-primary-600">
-                                                    ₦{billboard.pricing.daily.toLocaleString()}/day
-                                                </p>
-                                                <div className="flex items-center gap-2 mt-1">
-                                                    <span className="text-[10px] px-2 py-0.5 bg-neutral-100 rounded-full text-neutral-600 uppercase">
-                                                        {billboard.type}
-                                                    </span>
-                                                    <span className="text-[10px] text-neutral-400">
-                                                        Traffic: {billboard.trafficScore}/10
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </Popup>
-                                    </Marker>
-                                ))}
-                        </MapContainer>
+                        <GoogleMultiPointMap billboards={billboards} center={mapCenterCalc} heightClassName="h-[420px] md:h-[600px] w-full" />
                     </div>
                 </motion.div>
             )}

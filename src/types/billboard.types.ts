@@ -1,5 +1,5 @@
 // Billboard Types
-export type BillboardType = "flex" | "digital" | "led";
+export type BillboardType = "flex" | "digital" | "led" | "screen";
 export type BillboardStatus = "active" | "inactive" | "pending" | "rejected";
 
 export interface Location {

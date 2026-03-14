@@ -127,7 +127,7 @@ export const createBillboard = async (
         cancellationPolicy: data.cancellationPolicy,
         advanceNotice: data.advanceNotice,
       },
-      status: "pending",
+      status: "active",
       rating: 0,
       reviewCount: 0,
       totalBookings: 0,
