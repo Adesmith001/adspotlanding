@@ -95,7 +95,7 @@ const NotificationBell: React.FC = () => {
                     />
 
                     {/* Dropdown */}
-                    <Card className="absolute right-0 mt-2 w-[min(24rem,calc(100vw-2rem))] sm:w-96 z-50 shadow-xl border border-neutral-200 overflow-hidden flex flex-col max-h-[500px]">
+                    <Card className="fixed left-1/2 top-16 z-50 w-[min(24rem,calc(100vw-2rem))] -translate-x-1/2 shadow-xl border border-neutral-200 overflow-hidden flex max-h-[500px] flex-col sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-96 sm:translate-x-0">
                         <div className="p-4 border-b border-neutral-100 flex items-center justify-between">
                             <h3 className="font-bold text-neutral-900">Notifications</h3>
                             {unreadCount > 0 && (

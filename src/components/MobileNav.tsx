@@ -26,8 +26,8 @@ const MobileNav: React.FC<MobileNavProps> = ({ userRole }) => {
 
     const ownerAllItems: NavItem[] = [
         { label: 'Dashboard', href: '/dashboard/owner', icon: <MdDashboard size={22} /> },
-        { label: 'Listings', href: '/dashboard/owner/listings', icon: <MdList size={22} /> },
-        { label: 'Create', href: '/dashboard/owner/create', icon: <MdAddCircle size={22} /> },
+        { label: 'My Listings', href: '/dashboard/owner/listings', icon: <MdList size={22} /> },
+        { label: 'Add Listing', href: '/dashboard/owner/create', icon: <MdAddCircle size={22} /> },
         { label: 'Bookings', href: '/dashboard/owner/bookings', icon: <MdBookmarkBorder size={22} /> },
         { label: 'Analytics', href: '/dashboard/owner/analytics', icon: <MdAnalytics size={22} /> },
         { label: 'Messages', href: '/dashboard/owner/messages', icon: <MdMessage size={22} /> },
@@ -36,7 +36,7 @@ const MobileNav: React.FC<MobileNavProps> = ({ userRole }) => {
 
     const advertiserAllItems: NavItem[] = [
         { label: 'Dashboard', href: '/dashboard/advertiser', icon: <MdDashboard size={22} /> },
-        { label: 'Explore', href: '/listings', icon: <MdList size={22} /> },
+        { label: 'Browse', href: '/listings', icon: <MdList size={22} /> },
         { label: 'Campaigns', href: '/dashboard/advertiser/campaigns', icon: <MdCampaign size={22} /> },
         { label: 'Favorites', href: '/dashboard/advertiser/favorites', icon: <MdFavorite size={22} /> },
         { label: 'Payments', href: '/dashboard/advertiser/payments', icon: <MdPayment size={22} /> },
@@ -45,14 +45,15 @@ const MobileNav: React.FC<MobileNavProps> = ({ userRole }) => {
     ];
 
     const adminAllItems: NavItem[] = [
-        { label: 'Overview', href: '/dashboard/admin', icon: <MdAdminPanelSettings size={22} /> },
+        { label: 'Dashboard', href: '/dashboard/admin', icon: <MdAdminPanelSettings size={22} /> },
         { label: 'Users', href: '/dashboard/admin/users', icon: <MdPeople size={22} /> },
-        { label: 'Verify', href: '/dashboard/admin/listings', icon: <MdVerifiedUser size={22} /> },
-        { label: 'Payments', href: '/dashboard/admin/transactions', icon: <MdPayment size={22} /> },
+        { label: 'Verify Listings', href: '/dashboard/admin/listings', icon: <MdVerifiedUser size={22} /> },
+        { label: 'Transactions', href: '/dashboard/admin/transactions', icon: <MdPayment size={22} /> },
         { label: 'Settings', href: '/dashboard/admin/settings', icon: <MdSettings size={22} /> },
     ];
 
     const allItems = userRole === 'owner' ? ownerAllItems : userRole === 'admin' ? adminAllItems : advertiserAllItems;
+    const roleLabel = userRole === 'owner' ? 'Billboard Owner' : userRole === 'admin' ? 'Administrator' : 'Advertiser';
 
     // Show 4 primary items in bar, rest go in "More"
     const primaryItems = allItems.slice(0, 4);
@@ -82,47 +83,57 @@ const MobileNav: React.FC<MobileNavProps> = ({ userRole }) => {
                             animate={{ y: 0 }}
                             exit={{ y: '100%' }}
                             transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-                            className="fixed bottom-0 left-0 right-0 z-50 lg:hidden bg-white/95 backdrop-blur-xl rounded-t-3xl shadow-2xl pb-36"
+                            className="fixed bottom-0 left-0 right-0 z-50 lg:hidden bg-white rounded-t-3xl shadow-2xl border-t border-neutral-100 pb-36"
                         >
                             {/* Handle bar */}
                             <div className="flex justify-center pt-3 pb-1">
-                                <div className="w-10 h-1 rounded-full bg-neutral-300" />
+                                <div className="w-10 h-1 rounded-full bg-neutral-200" />
                             </div>
 
                             {/* User info */}
                             <div className="flex items-center gap-3 px-6 py-4 border-b border-neutral-100">
-                                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white font-bold text-lg shadow-lg">
+                                <div className="w-10 h-10 rounded-full bg-neutral-900 flex items-center justify-center text-white font-bold text-sm">
                                     {user?.displayName?.charAt(0).toUpperCase() || 'U'}
                                 </div>
-                                <div>
-                                    <p className="font-bold text-neutral-900">{user?.displayName || 'User'}</p>
-                                    <p className="text-xs text-neutral-500">{user?.email}</p>
+                                <div className="min-w-0">
+                                    <p className="font-semibold text-sm text-neutral-900 truncate">{user?.displayName || 'User'}</p>
+                                    <p className="text-[11px] text-neutral-400 truncate">{user?.email}</p>
                                 </div>
                                 <motion.button
                                     whileTap={{ scale: 0.9 }}
                                     onClick={() => setMoreOpen(false)}
-                                    className="ml-auto p-2 rounded-full bg-neutral-100 text-neutral-600"
+                                    className="ml-auto p-2 rounded-full bg-neutral-50 text-neutral-500 hover:text-neutral-700"
                                 >
                                     <MdClose size={20} />
                                 </motion.button>
                             </div>
 
+                            <p className="px-6 pt-4 pb-2 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">
+                                {roleLabel}
+                            </p>
+
                             {/* Extra nav items */}
-                            <div className="px-4 py-3 grid grid-cols-3 gap-2">
+                            <div className="px-4 py-2 space-y-1">
                                 {moreItems.map((item) => (
                                     <NavLink
                                         key={item.href}
                                         to={item.href}
+                                        end={item.href === '/dashboard/owner' || item.href === '/dashboard/advertiser' || item.href === '/dashboard/admin'}
                                         onClick={() => setMoreOpen(false)}
                                         className={({ isActive }) =>
-                                            `flex flex-col items-center gap-1.5 p-4 rounded-2xl transition-all duration-200 ${isActive
+                                            `relative flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 ${isActive
                                                 ? 'bg-neutral-900 text-white'
-                                                : 'bg-neutral-50 text-neutral-600 hover:bg-neutral-100'
+                                                : 'text-neutral-500 hover:bg-neutral-50 hover:text-neutral-900'
                                             }`
                                         }
                                     >
-                                        {item.icon}
-                                        <span className="text-xs font-semibold">{item.label}</span>
+                                        {({ isActive }) => (
+                                            <>
+                                                <span className="flex-shrink-0">{item.icon}</span>
+                                                <span className="text-sm font-medium truncate">{item.label}</span>
+                                                {isActive && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-white/80" />}
+                                            </>
+                                        )}
                                     </NavLink>
                                 ))}
                             </div>
@@ -131,10 +142,10 @@ const MobileNav: React.FC<MobileNavProps> = ({ userRole }) => {
                             <div className="px-4 pb-4 mt-2 border-t border-neutral-100 pt-3">
                                 <button
                                     onClick={handleSignOut}
-                                    className="w-full flex items-center gap-3 px-5 py-4 rounded-2xl bg-red-50 text-red-600 font-semibold hover:bg-red-100 transition-colors"
+                                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-neutral-400 hover:bg-red-50 hover:text-red-600 transition-colors"
                                 >
                                     <MdLogout size={22} />
-                                    Sign Out
+                                    <span className="text-sm font-medium">Sign Out</span>
                                 </button>
                             </div>
                         </motion.div>
@@ -149,27 +160,21 @@ const MobileNav: React.FC<MobileNavProps> = ({ userRole }) => {
                 transition={{ type: 'spring', damping: 25, stiffness: 200 }}
                 className="fixed bottom-0 left-0 right-0 z-40 lg:hidden px-3 pb-5 pt-1"
             >
-                <div className="bg-white border border-neutral-200 shadow-[0_8px_32px_rgba(0,0,0,0.08)] rounded-2xl flex items-center justify-around px-2 py-2">
+                <div className="mx-auto max-w-xl bg-white border border-neutral-200 shadow-[0_10px_28px_rgba(10,10,10,0.09)] rounded-[1.4rem] flex items-center justify-between px-2 py-2">
                     {primaryItems.map((item) => (
                         <NavLink
                             key={item.href}
                             to={item.href}
                             end={item.href === '/dashboard/owner' || item.href === '/dashboard/advertiser' || item.href === '/dashboard/admin'}
                             className={({ isActive }) =>
-                                `relative flex flex-col items-center gap-1 py-1.5 px-3 rounded-xl transition-all duration-300 min-w-[56px] ${isActive ? 'text-white' : 'text-neutral-500'}`
+                                `relative flex flex-col items-center justify-center gap-1 px-3 py-2 rounded-2xl transition-all duration-250 min-w-[70px] ${isActive ? 'bg-neutral-900 text-white shadow-sm' : 'text-neutral-500 hover:text-neutral-700'}`
                             }
                         >
                             {({ isActive }) => (
                                 <>
-                                    {isActive && (
-                                        <motion.div
-                                            layoutId="mobile-pill"
-                                            className="absolute inset-0 bg-neutral-900 rounded-xl"
-                                            transition={{ type: 'spring', damping: 22, stiffness: 300 }}
-                                        />
-                                    )}
                                     <span className="relative z-10">{item.icon}</span>
-                                    <span className="relative z-10 text-[10px] font-bold tracking-tight">{item.label}</span>
+                                    <span className="relative z-10 text-[10px] font-semibold tracking-tight leading-none whitespace-nowrap">{item.label}</span>
+                                    {isActive && <span className="absolute -bottom-[6px] left-1/2 h-2 w-2 -translate-x-1/2 rounded-full bg-neutral-400" />}
                                 </>
                             )}
                         </NavLink>
@@ -180,10 +185,10 @@ const MobileNav: React.FC<MobileNavProps> = ({ userRole }) => {
                         <motion.button
                             whileTap={{ scale: 0.9 }}
                             onClick={() => setMoreOpen(true)}
-                            className="flex flex-col items-center gap-1 py-1.5 px-3 rounded-xl min-w-[56px] text-neutral-500 hover:text-neutral-800 transition-colors"
+                            className="flex flex-col items-center justify-center gap-1 px-3 py-2 rounded-2xl min-w-[70px] text-neutral-500 hover:text-neutral-700 transition-colors"
                         >
                             <MdGridView size={22} />
-                            <span className="text-[10px] font-bold tracking-tight">More</span>
+                            <span className="text-[10px] font-semibold tracking-tight leading-none">More</span>
                         </motion.button>
                     )}
                 </div>

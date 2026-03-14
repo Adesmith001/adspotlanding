@@ -37,6 +37,44 @@ const STEPS = [
 
 // default Lagos center points
 const defaultCenter: [number, number] = [6.5244, 3.3792];
+const MAX_PHOTOS = 12;
+const MAX_PHOTO_SIZE_MB = 12;
+const CREATE_LISTING_DRAFT_KEY_PREFIX = 'create-listing-draft:';
+
+const INITIAL_FORM_DATA: CreateBillboardForm = {
+    category: 'billboard',
+    title: '',
+    description: '',
+    address: '',
+    city: '',
+    state: '',
+    landmark: '',
+    width: 0,
+    height: 0,
+    unit: 'ft',
+    type: 'flex',
+    hasLighting: false,
+    trafficScore: 5,
+    orientation: 'landscape',
+    hourlyPrice: 0,
+    dailyPrice: 0,
+    weeklyPrice: 0,
+    monthlyPrice: 0,
+    instantBook: false,
+    minDuration: 1,
+    maxDuration: 365,
+    cancellationPolicy: 'moderate',
+    advanceNotice: 1,
+    latitude: undefined,
+    longitude: undefined,
+};
+
+interface CreateListingDraft {
+    version: 1;
+    currentStep: number;
+    formData: CreateBillboardForm;
+    savedAt: number;
+}
 
 const CreateListing: React.FC = () => {
     const navigate = useNavigate();
@@ -49,40 +87,49 @@ const CreateListing: React.FC = () => {
     const [resolvingAddress, setResolvingAddress] = useState(false);
     const [geocodingAddress, setGeocodingAddress] = useState(false);
     const [locationLookupNote, setLocationLookupNote] = useState('');
+    const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
     const skipNextAddressLookupRef = useRef(false);
     const lastResolvedAddressQueryRef = useRef('');
+    const previewUrlsRef = useRef<string[]>([]);
 
-    const [formData, setFormData] = useState<CreateBillboardForm>({
-        category: 'billboard',
-        title: '',
-        description: '',
-        address: '',
-        city: '',
-        state: '',
-        landmark: '',
-        width: 0,
-        height: 0,
-        unit: 'ft',
-        type: 'flex',
-        hasLighting: false,
-        trafficScore: 5,
-        orientation: 'landscape',
-        hourlyPrice: 0,
-        dailyPrice: 0,
-        weeklyPrice: 0,
-        monthlyPrice: 0,
-        instantBook: false,
-        minDuration: 1,
-        maxDuration: 365,
-        cancellationPolicy: 'moderate',
-        advanceNotice: 1,
-        latitude: undefined,
-        longitude: undefined,
-    });
+    const [formData, setFormData] = useState<CreateBillboardForm>(INITIAL_FORM_DATA);
+
+    const getDraftKey = () => `${CREATE_LISTING_DRAFT_KEY_PREFIX}${user?.uid || 'anonymous'}`;
 
     const updateFormData = (field: keyof CreateBillboardForm, value: any) => {
         setFormData((prev) => ({ ...prev, [field]: value }));
+        setHasUnsavedChanges(true);
+    };
+
+    const saveDraft = () => {
+        const draft: CreateListingDraft = {
+            version: 1,
+            currentStep,
+            formData,
+            savedAt: Date.now(),
+        };
+
+        localStorage.setItem(getDraftKey(), JSON.stringify(draft));
+        setHasUnsavedChanges(false);
+        toast.success('Draft saved. You can continue later.');
+    };
+
+    const startOver = () => {
+        const confirmReset = window.confirm('Start over and clear this draft? This cannot be undone.');
+        if (!confirmReset) {
+            return;
+        }
+
+        photoPreviewUrls.forEach((url) => URL.revokeObjectURL(url));
+        setPhotos([]);
+        setPhotoPreviewUrls([]);
+        setFormData(INITIAL_FORM_DATA);
+        setCurrentStep(1);
+        setLocationLookupNote('');
+        localStorage.removeItem(getDraftKey());
+        setHasUnsavedChanges(false);
+        toast.success('Listing form reset.');
     };
 
     const applyCoordinates = async (lat: number, lng: number, source: 'photo' | 'camera' | 'map' | 'address') => {
@@ -132,8 +179,25 @@ const CreateListing: React.FC = () => {
     const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
         if (files) {
-            const newPhotos = Array.from(files);
+            const selectedFiles = Array.from(files);
+            const availableSlots = Math.max(0, MAX_PHOTOS - photos.length);
+
+            if (availableSlots === 0) {
+                toast.error(`Maximum of ${MAX_PHOTOS} photos reached.`);
+                e.target.value = '';
+                return;
+            }
+
+            const oversized = selectedFiles.find((file) => file.size > MAX_PHOTO_SIZE_MB * 1024 * 1024);
+            if (oversized) {
+                toast.error(`Some photos are too large. Max size is ${MAX_PHOTO_SIZE_MB}MB per photo.`);
+                e.target.value = '';
+                return;
+            }
+
+            const newPhotos = selectedFiles.slice(0, availableSlots);
             setPhotos((prev) => [...prev, ...newPhotos]);
+            setHasUnsavedChanges(true);
             newPhotos.forEach((file) => {
                 const url = URL.createObjectURL(file);
                 setPhotoPreviewUrls((prev) => [...prev, url]);
@@ -154,14 +218,33 @@ const CreateListing: React.FC = () => {
                     setExtractingLocation(false);
                 }
             }
+
+            e.target.value = '';
         }
     };
 
     const handleCameraCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
         if (files && files.length > 0) {
-            const newPhotos = Array.from(files);
+            const selectedFiles = Array.from(files);
+            const availableSlots = Math.max(0, MAX_PHOTOS - photos.length);
+
+            if (availableSlots === 0) {
+                toast.error(`Maximum of ${MAX_PHOTOS} photos reached.`);
+                e.target.value = '';
+                return;
+            }
+
+            const oversized = selectedFiles.find((file) => file.size > MAX_PHOTO_SIZE_MB * 1024 * 1024);
+            if (oversized) {
+                toast.error(`Some photos are too large. Max size is ${MAX_PHOTO_SIZE_MB}MB per photo.`);
+                e.target.value = '';
+                return;
+            }
+
+            const newPhotos = selectedFiles.slice(0, availableSlots);
             setPhotos((prev) => [...prev, ...newPhotos]);
+            setHasUnsavedChanges(true);
             newPhotos.forEach((file) => {
                 const url = URL.createObjectURL(file);
                 setPhotoPreviewUrls((prev) => [...prev, url]);
@@ -185,12 +268,19 @@ const CreateListing: React.FC = () => {
             } finally {
                 setExtractingLocation(false);
             }
+
+            e.target.value = '';
         }
     };
 
     const removePhoto = (index: number) => {
+        const urlToRevoke = photoPreviewUrls[index];
+        if (urlToRevoke) {
+            URL.revokeObjectURL(urlToRevoke);
+        }
         setPhotos((prev) => prev.filter((_, i) => i !== index));
         setPhotoPreviewUrls((prev) => prev.filter((_, i) => i !== index));
+        setHasUnsavedChanges(true);
     };
 
     const handleSubmit = async () => {
@@ -202,6 +292,8 @@ const CreateListing: React.FC = () => {
         try {
             await createBillboard(user.uid, user.displayName || 'Unknown', formData, photos);
             toast.success('Billboard listing created successfully!');
+            localStorage.removeItem(getDraftKey());
+            setHasUnsavedChanges(false);
             navigate('/dashboard/owner/listings');
         } catch (error: any) {
             toast.error(error.message || 'Failed to create listing');
@@ -216,7 +308,7 @@ const CreateListing: React.FC = () => {
             case 2: return photos.length >= 1;
             case 3: return formData.address && formData.city && formData.state;
             case 4: return formData.width > 0 && formData.height > 0;
-            case 5: return formData.dailyPrice > 0;
+            case 5: return formData.category === 'screen' ? (formData.hourlyPrice || 0) > 0 : formData.dailyPrice > 0;
             case 6: return true;
             case 7: return true;
             default: return true;
@@ -273,6 +365,57 @@ const CreateListing: React.FC = () => {
 
         return () => window.clearTimeout(timeoutId);
     }, [formData.address, formData.city, formData.state]);
+
+    useEffect(() => {
+        previewUrlsRef.current = photoPreviewUrls;
+    }, [photoPreviewUrls]);
+
+    useEffect(() => {
+        return () => {
+            previewUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+        };
+    }, []);
+
+    useEffect(() => {
+        const serializedDraft = localStorage.getItem(getDraftKey());
+        if (!serializedDraft) {
+            return;
+        }
+
+        try {
+            const parsedDraft = JSON.parse(serializedDraft) as CreateListingDraft;
+            if (!parsedDraft?.formData) {
+                return;
+            }
+
+            const shouldRestore = window.confirm('You have an unsent listing draft. Restore it now?');
+            if (!shouldRestore) {
+                return;
+            }
+
+            setFormData({ ...INITIAL_FORM_DATA, ...parsedDraft.formData });
+            setCurrentStep(Math.min(Math.max(parsedDraft.currentStep || 1, 1), 7));
+            setHasUnsavedChanges(false);
+            toast.success('Draft restored. Re-upload photos before submitting.');
+        } catch {
+            localStorage.removeItem(getDraftKey());
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [user?.uid]);
+
+    useEffect(() => {
+        const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+            if (!hasUnsavedChanges) {
+                return;
+            }
+
+            event.preventDefault();
+            event.returnValue = '';
+        };
+
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    }, [hasUnsavedChanges]);
 
     const renderStepContent = () => {
         switch (currentStep) {
@@ -807,34 +950,54 @@ const CreateListing: React.FC = () => {
                         </div>
 
                         {/* Navigation Footer */}
-                        <div className="mt-12 pt-6 border-t border-neutral-100 flex items-center justify-between gap-3">
-                            <Button
-                                variant="outline"
-                                onClick={() => setCurrentStep((prev) => Math.max(1, prev - 1))}
-                                disabled={currentStep === 1}
-                                className="!rounded-xl px-6"
-                            >
-                                <MdArrowBack className="mr-2" /> Back
-                            </Button>
+                        <div className="mt-12 pt-6 border-t border-neutral-100">
+                            <div className="grid grid-cols-2 gap-3 md:flex md:items-center md:justify-between">
+                                <Button
+                                    variant="outline"
+                                    onClick={() => setCurrentStep((prev) => Math.max(1, prev - 1))}
+                                    disabled={currentStep === 1}
+                                    className="!rounded-xl w-full md:w-auto md:px-6"
+                                >
+                                    <MdArrowBack className="mr-2" /> Back
+                                </Button>
 
-                            {currentStep < 7 ? (
                                 <Button
-                                    onClick={() => setCurrentStep((prev) => Math.min(7, prev + 1))}
-                                    disabled={!canProceed()}
-                                    className="!bg-[#d4f34a] !text-green-900 hover:!bg-[#c5e53a] !rounded-xl px-8 font-semibold"
+                                    variant="ghost"
+                                    onClick={startOver}
+                                    className="!rounded-xl w-full md:w-auto"
                                 >
-                                    Continue <MdArrowForward className="ml-2" />
+                                    Start Over
                                 </Button>
-                            ) : (
                                 <Button
-                                    onClick={handleSubmit}
-                                    loading={isSubmitting}
-                                    disabled={!canProceed() || isSubmitting}
-                                    className="!bg-neutral-900 !text-white hover:!bg-neutral-800 !rounded-xl px-8 font-semibold"
+                                    variant="outline"
+                                    onClick={saveDraft}
+                                    className="!rounded-xl w-full md:w-auto"
                                 >
-                                    Submit Listing <MdCheck className="ml-2" />
+                                    Save Draft
                                 </Button>
-                            )}
+
+                                {currentStep < 7 ? (
+                                    <Button
+                                        onClick={() => {
+                                            setHasUnsavedChanges(true);
+                                            setCurrentStep((prev) => Math.min(7, prev + 1));
+                                        }}
+                                        disabled={!canProceed()}
+                                        className="!bg-[#d4f34a] !text-green-900 hover:!bg-[#c5e53a] !rounded-xl w-full md:w-auto md:px-8 font-semibold"
+                                    >
+                                        Continue <MdArrowForward className="ml-2" />
+                                    </Button>
+                                ) : (
+                                    <Button
+                                        onClick={handleSubmit}
+                                        loading={isSubmitting}
+                                        disabled={!canProceed() || isSubmitting}
+                                        className="!bg-neutral-900 !text-white hover:!bg-neutral-800 !rounded-xl col-span-2 md:col-span-1 w-full md:w-auto md:px-8 font-semibold"
+                                    >
+                                        Submit Listing <MdCheck className="ml-2" />
+                                    </Button>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>

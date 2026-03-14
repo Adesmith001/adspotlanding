@@ -204,6 +204,101 @@ export const searchBillboards = async (
   pageSize: number = 20,
   lastDoc?: DocumentSnapshot,
 ): Promise<{ billboards: Billboard[]; lastDoc: DocumentSnapshot | null }> => {
+  const mapDocsToBillboards = (docs: Array<{ id: string; data: () => any }>) =>
+    docs.map((entry) => {
+      const data = entry.data();
+      return {
+        id: entry.id,
+        ...data,
+        createdAt: timestampToDate(data.createdAt),
+        updatedAt: timestampToDate(data.updatedAt),
+      } as Billboard;
+    });
+
+  const applyClientFilters = (items: Billboard[]): Billboard[] => {
+    const queryText = filters.query?.trim().toLowerCase();
+
+    return items.filter((item) => {
+      if (filters.city && item.location.city !== filters.city) return false;
+      if (filters.state && item.location.state !== filters.state) return false;
+      if (filters.category && item.category !== filters.category) return false;
+      if (
+        filters.billboardType?.length &&
+        (!item.type || !filters.billboardType.includes(item.type))
+      )
+        return false;
+      if (
+        filters.hasLighting !== undefined &&
+        item.hasLighting !== filters.hasLighting
+      )
+        return false;
+      if (
+        filters.instantBookOnly &&
+        item.bookingRules?.instantBook !== true
+      )
+        return false;
+      if (
+        typeof filters.minRating === "number" &&
+        item.rating < filters.minRating
+      )
+        return false;
+      if (
+        typeof filters.minTrafficScore === "number" &&
+        item.trafficScore < filters.minTrafficScore
+      )
+        return false;
+
+      const itemPrice = item.category === "screen"
+        ? item.pricing.hourly || 0
+        : item.pricing.daily;
+      if (typeof filters.minPrice === "number" && itemPrice < filters.minPrice)
+        return false;
+      if (typeof filters.maxPrice === "number" && itemPrice > filters.maxPrice)
+        return false;
+
+      if (queryText) {
+        const haystack = [
+          item.title,
+          item.description,
+          item.location.address,
+          item.location.city,
+          item.location.state,
+          item.location.landmark,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+
+        if (!haystack.includes(queryText)) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  };
+
+  const sortItems = (items: Billboard[]): Billboard[] => {
+    const getComparablePrice = (item: Billboard) =>
+      item.category === "screen" ? item.pricing.hourly || 0 : item.pricing.daily;
+
+    return [...items].sort((a, b) => {
+      switch (sortBy) {
+        case "price-asc":
+          return getComparablePrice(a) - getComparablePrice(b);
+        case "price-desc":
+          return getComparablePrice(b) - getComparablePrice(a);
+        case "traffic-desc":
+          return b.trafficScore - a.trafficScore;
+        case "rating-desc":
+          return b.rating - a.rating;
+        case "newest":
+        default:
+          return b.createdAt.getTime() - a.createdAt.getTime();
+      }
+    });
+  };
+
   try {
     const constraints: QueryConstraint[] = [];
 
@@ -213,6 +308,11 @@ export const searchBillboards = async (
     // City filter
     if (filters.city) {
       constraints.push(where("location.city", "==", filters.city));
+    }
+
+    // Category filter
+    if (filters.category) {
+      constraints.push(where("category", "==", filters.category));
     }
 
     // State filter
@@ -274,15 +374,7 @@ export const searchBillboards = async (
     const q = query(collection(db, BILLBOARDS_COLLECTION), ...constraints);
     const querySnapshot = await getDocs(q);
 
-    const billboards: Billboard[] = querySnapshot.docs.map((doc) => {
-      const data = doc.data();
-      return {
-        id: doc.id,
-        ...data,
-        createdAt: timestampToDate(data.createdAt),
-        updatedAt: timestampToDate(data.updatedAt),
-      } as Billboard;
-    });
+    const billboards = mapDocsToBillboards(querySnapshot.docs);
 
     const lastVisible =
       querySnapshot.docs[querySnapshot.docs.length - 1] || null;
@@ -290,7 +382,36 @@ export const searchBillboards = async (
     return { billboards, lastDoc: lastVisible };
   } catch (error) {
     console.error("Error searching billboards:", error);
-    throw new Error("Failed to search billboards");
+
+    // Firestore may reject queries while a required index is still building.
+    // Fallback to a broader indexed query and apply filters client-side.
+    try {
+      const fallbackQuery = query(
+        collection(db, BILLBOARDS_COLLECTION),
+        where("status", "==", "active"),
+        orderBy("createdAt", "desc"),
+        limit(200),
+      );
+
+      const fallbackSnapshot = await getDocs(fallbackQuery);
+      const fallbackItems = mapDocsToBillboards(fallbackSnapshot.docs);
+      const filteredItems = sortItems(applyClientFilters(fallbackItems));
+
+      let startIndex = 0;
+      if (lastDoc?.id) {
+        const cursorIndex = filteredItems.findIndex((item) => item.id === lastDoc.id);
+        startIndex = cursorIndex >= 0 ? cursorIndex + 1 : 0;
+      }
+
+      const pagedItems = filteredItems.slice(startIndex, startIndex + pageSize);
+      return {
+        billboards: pagedItems,
+        lastDoc: null,
+      };
+    } catch (fallbackError) {
+      console.error("Fallback billboard search failed:", fallbackError);
+      throw new Error("Failed to search billboards");
+    }
   }
 };
 
@@ -425,6 +546,10 @@ export const createBooking = async (
     const billboard = await getBillboard(request.billboardId);
     if (!billboard) {
       throw new Error("Billboard not found");
+    }
+
+    if (billboard.ownerId === advertiserId) {
+      throw new Error("You cannot book your own listing");
     }
 
     // Calculate duration and price based on category/unit
@@ -1058,6 +1183,15 @@ export const toggleFavorite = async (
   billboardId: string,
 ): Promise<boolean> => {
   try {
+    const billboard = await getBillboard(billboardId);
+    if (!billboard) {
+      throw new Error("Billboard not found");
+    }
+
+    if (billboard.ownerId === userId) {
+      throw new Error("You cannot favorite your own listing");
+    }
+
     const q = query(
       collection(db, FAVORITES_COLLECTION),
       where("userId", "==", userId),

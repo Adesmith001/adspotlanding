@@ -108,6 +108,12 @@ const BrowseBillboards: React.FC = () => {
             return;
         }
 
+        const selectedBillboard = billboards.find((item) => item.id === billboardId);
+        if (selectedBillboard?.ownerId === user.uid) {
+            toast.error('You cannot favorite your own listing');
+            return;
+        }
+
         // Optimistic update
         setFavorites((prev) => {
             const newFavorites = new Set(prev);

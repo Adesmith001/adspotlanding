@@ -108,15 +108,20 @@ export const uploadFiles = async (
   onProgress?: (fileIndex: number, progress: UploadProgress) => void,
 ): Promise<string[]> => {
   try {
-    const uploadPromises = files.map((file, index) =>
-      uploadFile(file, (progress) => {
+    const uploadedUrls: string[] = [];
+
+    // Upload sequentially to avoid memory spikes on low-memory devices.
+    for (let index = 0; index < files.length; index += 1) {
+      const file = files[index];
+      const url = await uploadFile(file, (progress) => {
         if (onProgress) {
           onProgress(index, progress);
         }
-      }),
-    );
+      });
+      uploadedUrls.push(url);
+    }
 
-    return await Promise.all(uploadPromises);
+    return uploadedUrls;
   } catch (error) {
     console.error("Error uploading files to Cloudinary:", error);
     throw new Error("Failed to upload files");

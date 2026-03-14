@@ -17,14 +17,16 @@ import {
     MdChevronRight,
     MdUpload,
     MdPictureAsPdf,
+    MdPlace,
 } from 'react-icons/md';
 import Button from '@/components/ui/Button';
 import EmptyState from '@/components/EmptyState';
 import GoogleMapPanel from '@/components/GoogleMapPanel';
 import StreetViewPanel from '@/components/StreetViewPanel';
+import BillboardCard from '@/components/BillboardCard';
 import { useAppSelector } from '@/hooks/useRedux';
 import { selectUser, selectIsAuthenticated } from '@/store/authSlice';
-import { getBillboard, createBooking, incrementBillboardViews, getBillboardReviews, toggleFavorite, isBillboardFavorited } from '@/services/billboard.service';
+import { getBillboard, createBooking, incrementBillboardViews, getBillboardReviews, toggleFavorite, isBillboardFavorited, searchBillboards } from '@/services/billboard.service';
 import { startConversation } from '@/services/message.service';
 import { syncUserProfile, getUserProfile } from '@/services/user.service';
 import type { Billboard, CreativeRequirementType, Review } from '@/types/billboard.types';
@@ -39,6 +41,8 @@ const BillboardDetails: React.FC = () => {
 
     const [billboard, setBillboard] = useState<Billboard | null>(null);
     const [reviews, setReviews] = useState<Review[]>([]);
+    const [relatedBillboards, setRelatedBillboards] = useState<Billboard[]>([]);
+    const [loadingRelated, setLoadingRelated] = useState(false);
     const [loading, setLoading] = useState(true);
     const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
     const [isFavorited, setIsFavorited] = useState(false);
@@ -53,6 +57,7 @@ const BillboardDetails: React.FC = () => {
     const [creativeBrief, setCreativeBrief] = useState('');
     const [designFiles, setDesignFiles] = useState<File[]>([]);
     const [designPreviewUrls, setDesignPreviewUrls] = useState<string[]>([]);
+    const isOwnerListing = Boolean(user && billboard && user.uid === billboard.ownerId);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -173,6 +178,11 @@ const BillboardDetails: React.FC = () => {
             return;
         }
 
+        if (billboard && billboard.ownerId === user.uid) {
+            toast.error('You cannot book your own listing');
+            return;
+        }
+
         if (!startDate || !endDate) {
             toast.error('Please select booking dates');
             return;
@@ -246,6 +256,69 @@ const BillboardDetails: React.FC = () => {
         loadFavoriteStatus();
     }, [user, id]);
 
+    useEffect(() => {
+        const fetchRelatedBillboards = async () => {
+            if (!billboard) {
+                setRelatedBillboards([]);
+                return;
+            }
+
+            setLoadingRelated(true);
+            try {
+                const cityMatch = await searchBillboards({ city: billboard.location.city }, 'newest', 12);
+
+                // Priority: same city first, then same state, then same category.
+                const citySorted = cityMatch.billboards
+                    .filter((item) => item.id !== billboard.id)
+                    .sort((a, b) => {
+                        const aScore = (a.location.city === billboard.location.city ? 2 : 0) + (a.category === billboard.category ? 1 : 0);
+                        const bScore = (b.location.city === billboard.location.city ? 2 : 0) + (b.category === billboard.category ? 1 : 0);
+                        return bScore - aScore;
+                    });
+
+                const merged = new Map<string, Billboard>();
+                citySorted.forEach((item) => merged.set(item.id, item));
+
+                if (merged.size < 8) {
+                    const stateMatch = await searchBillboards({ state: billboard.location.state }, 'newest', 12);
+                    const stateSorted = stateMatch.billboards
+                        .filter((item) => item.id !== billboard.id && !merged.has(item.id))
+                        .sort((a, b) => {
+                            const aScore = (a.location.state === billboard.location.state ? 2 : 0) + (a.category === billboard.category ? 1 : 0);
+                            const bScore = (b.location.state === billboard.location.state ? 2 : 0) + (b.category === billboard.category ? 1 : 0);
+                            return bScore - aScore;
+                        });
+
+                    stateSorted.forEach((item) => {
+                        if (!merged.has(item.id)) {
+                            merged.set(item.id, item);
+                        }
+                    });
+                }
+
+                if (merged.size < 8 && billboard.category) {
+                    const categoryMatch = await searchBillboards({ category: billboard.category }, 'newest', 12);
+                    categoryMatch.billboards
+                        .filter((item) => item.id !== billboard.id)
+                        .forEach((item) => {
+                            if (!merged.has(item.id)) {
+                                merged.set(item.id, item);
+                            }
+                        });
+                }
+
+                setRelatedBillboards(Array.from(merged.values()).slice(0, 8));
+            } catch (error) {
+                console.error('Error fetching related billboards:', error);
+                setRelatedBillboards([]);
+            } finally {
+                setLoadingRelated(false);
+            }
+        };
+
+        void fetchRelatedBillboards();
+    }, [billboard]);
+
     useEffect(() => () => {
         designPreviewUrls.forEach((url) => URL.revokeObjectURL(url));
     }, [designPreviewUrls]);
@@ -253,6 +326,11 @@ const BillboardDetails: React.FC = () => {
     const handleToggleFavorite = async () => {
         if (!isAuthenticated || !user) {
             toast.error('Please sign in to save favorites');
+            return;
+        }
+
+        if (billboard && billboard.ownerId === user.uid) {
+            toast.error('You cannot favorite your own listing');
             return;
         }
 
@@ -361,13 +439,13 @@ const BillboardDetails: React.FC = () => {
     }
 
     return (
-        <div className="min-h-screen bg-[#f7f7f6]">
+        <div className="min-h-screen bg-[#f6f6f4]">
             {/* Header */}
             <motion.header
                 initial={{ y: -20, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
                 transition={{ duration: 0.4 }}
-                className="bg-[#f7f7f6] border-b border-neutral-200/60 sticky top-0 z-40"
+                className="bg-[#f6f6f4]/95 backdrop-blur border-b border-neutral-200/70 sticky top-0 z-40"
             >
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
                     <div className="flex items-center justify-between">
@@ -382,18 +460,20 @@ const BillboardDetails: React.FC = () => {
                         </motion.button>
 
                         <div className="flex items-center gap-2">
-                            <motion.button
-                                whileHover={{ scale: 1.05 }}
-                                whileTap={{ scale: 0.95 }}
-                                onClick={handleToggleFavorite}
-                                className="p-2.5 rounded-full hover:bg-neutral-100 transition-colors shadow-soft"
-                            >
-                                {isFavorited ? (
-                                    <MdFavorite size={24} className="text-red-500" />
-                                ) : (
-                                    <MdFavoriteBorder size={24} className="text-neutral-600" />
-                                )}
-                            </motion.button>
+                            {!isOwnerListing && (
+                                <motion.button
+                                    whileHover={{ scale: 1.05 }}
+                                    whileTap={{ scale: 0.95 }}
+                                    onClick={handleToggleFavorite}
+                                    className="p-2.5 rounded-full hover:bg-neutral-100 transition-colors shadow-soft"
+                                >
+                                    {isFavorited ? (
+                                        <MdFavorite size={24} className="text-red-500" />
+                                    ) : (
+                                        <MdFavoriteBorder size={24} className="text-neutral-600" />
+                                    )}
+                                </motion.button>
+                            )}
                             <motion.button
                                 whileHover={{ scale: 1.05 }}
                                 whileTap={{ scale: 0.95 }}
@@ -410,69 +490,84 @@ const BillboardDetails: React.FC = () => {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ duration: 0.3, delay: 0.2 }}
-                className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8"
+                className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8"
             >
                 {/* Photo Gallery */}
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5, delay: 0.3 }}
-                    className="relative h-[300px] sm:h-[400px] md:h-[500px] rounded-[2rem] overflow-hidden mb-8 bg-neutral-200 border border-neutral-100"
+                    className="relative rounded-3xl overflow-hidden mb-8 bg-white border border-neutral-200 shadow-sm p-3"
                 >
                     {billboard.photos.length > 0 ? (
-                        <>
-                            <motion.img
-                                key={currentPhotoIndex}
-                                src={billboard.photos[currentPhotoIndex]}
-                                alt={billboard.title}
-                                className="w-full h-full object-cover"
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                transition={{ duration: 0.3 }}
-                            />
+                        <div className="grid grid-cols-1 lg:grid-cols-[1fr_220px] gap-3">
+                            <div className="relative h-[300px] sm:h-[420px] md:h-[520px] rounded-2xl overflow-hidden bg-neutral-200">
+                                <motion.img
+                                    key={currentPhotoIndex}
+                                    src={billboard.photos[currentPhotoIndex]}
+                                    alt={billboard.title}
+                                    className="w-full h-full object-cover"
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    transition={{ duration: 0.3 }}
+                                />
 
-                            {billboard.photos.length > 1 && (
-                                <>
-                                    <motion.button
-                                        whileHover={{ scale: 1.1 }}
-                                        whileTap={{ scale: 0.9 }}
-                                        onClick={prevPhoto}
-                                        className="absolute left-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-white/90 backdrop-blur-md rounded-full flex items-center justify-center hover:bg-white transition-colors shadow-lg"
-                                    >
-                                        <MdChevronLeft size={24} />
-                                    </motion.button>
-                                    <motion.button
-                                        whileHover={{ scale: 1.1 }}
-                                        whileTap={{ scale: 0.9 }}
-                                        onClick={nextPhoto}
-                                        className="absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-white/90 backdrop-blur-md rounded-full flex items-center justify-center hover:bg-white transition-colors shadow-lg"
-                                    >
-                                        <MdChevronRight size={24} />
-                                    </motion.button>
+                                {billboard.photos.length > 1 && (
+                                    <>
+                                        <motion.button
+                                            whileHover={{ scale: 1.1 }}
+                                            whileTap={{ scale: 0.9 }}
+                                            onClick={prevPhoto}
+                                            className="absolute left-4 top-1/2 -translate-y-1/2 w-11 h-11 bg-white/90 backdrop-blur rounded-full flex items-center justify-center hover:bg-white transition-colors shadow"
+                                        >
+                                            <MdChevronLeft size={22} />
+                                        </motion.button>
+                                        <motion.button
+                                            whileHover={{ scale: 1.1 }}
+                                            whileTap={{ scale: 0.9 }}
+                                            onClick={nextPhoto}
+                                            className="absolute right-4 top-1/2 -translate-y-1/2 w-11 h-11 bg-white/90 backdrop-blur rounded-full flex items-center justify-center hover:bg-white transition-colors shadow"
+                                        >
+                                            <MdChevronRight size={22} />
+                                        </motion.button>
 
-                                    {/* Photo indicators */}
-                                    <motion.div
-                                        initial={{ opacity: 0, y: 10 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        transition={{ duration: 0.3, delay: 0.6 }}
-                                        className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2"
+                                        {/* Photo indicators */}
+                                        <motion.div
+                                            initial={{ opacity: 0, y: 10 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            transition={{ duration: 0.3, delay: 0.6 }}
+                                            className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2"
+                                        >
+                                            {billboard.photos.map((_, index) => (
+                                                <motion.button
+                                                    key={index}
+                                                    whileHover={{ scale: 1.2 }}
+                                                    whileTap={{ scale: 0.9 }}
+                                                    onClick={() => setCurrentPhotoIndex(index)}
+                                                    className={`h-2 rounded-full transition-all ${index === currentPhotoIndex ? 'bg-white w-6 shadow' : 'bg-white/50 hover:bg-white/70'
+                                                        }`}
+                                                />
+                                            ))}
+                                        </motion.div>
+                                    </>
+                                )}
+                            </div>
+
+                            <div className="hidden lg:flex flex-col gap-3">
+                                {billboard.photos.slice(0, 4).map((photo, index) => (
+                                    <button
+                                        key={`${photo}-${index}`}
+                                        type="button"
+                                        onClick={() => setCurrentPhotoIndex(index)}
+                                        className={`h-[122px] rounded-xl overflow-hidden border transition-all ${currentPhotoIndex === index ? 'border-neutral-900 ring-2 ring-neutral-900/15' : 'border-neutral-200 hover:border-neutral-300'}`}
                                     >
-                                        {billboard.photos.map((_, index) => (
-                                            <motion.button
-                                                key={index}
-                                                whileHover={{ scale: 1.2 }}
-                                                whileTap={{ scale: 0.9 }}
-                                                onClick={() => setCurrentPhotoIndex(index)}
-                                                className={`h-2 rounded-full transition-all ${index === currentPhotoIndex ? 'bg-white w-6 shadow-lg' : 'bg-white/50 hover:bg-white/70'
-                                                    }`}
-                                            />
-                                        ))}
-                                    </motion.div>
-                                </>
-                            )}
-                        </>
+                                        <img src={photo} alt={`${billboard.title} ${index + 1}`} className="h-full w-full object-cover" />
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
                     ) : (
-                        <div className="w-full h-full flex items-center justify-center">
+                        <div className="h-[300px] sm:h-[420px] md:h-[520px] w-full flex items-center justify-center rounded-2xl bg-neutral-100">
                             <p className="text-neutral-500">No photos available</p>
                         </div>
                     )}
@@ -533,11 +628,28 @@ const BillboardDetails: React.FC = () => {
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ duration: 0.5, delay: 0.6 }}
-                                className="flex items-start sm:items-center gap-2 text-neutral-500 text-lg"
+                                className="flex items-start sm:items-center gap-2 text-neutral-500 text-base md:text-lg"
                             >
                                 <MdLocationOn size={24} className="text-neutral-400" />
                                 <span className="font-medium break-words">
                                     {billboard.location.address}, {billboard.location.city}, {billboard.location.state}
+                                </span>
+                            </motion.div>
+
+                            <motion.div
+                                initial={{ opacity: 0, y: 16 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ duration: 0.4, delay: 0.62 }}
+                                className="mt-4 flex flex-wrap items-center gap-3 text-sm"
+                            >
+                                <span className="inline-flex items-center gap-1 rounded-full bg-green-600 px-2 py-1 text-xs font-semibold text-white">
+                                    {Math.max(1, Math.round((billboard.rating || 4) * 10) / 10)}
+                                    <MdStar size={12} />
+                                </span>
+                                <span className="font-medium text-neutral-500">{billboard.reviewCount} reviews</span>
+                                <span className="inline-flex items-center gap-1 text-neutral-500">
+                                    <MdPlace size={16} className="text-neutral-400" />
+                                    {billboard.location.city}
                                 </span>
                             </motion.div>
                         </div>
@@ -548,7 +660,7 @@ const BillboardDetails: React.FC = () => {
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ duration: 0.5, delay: 0.65 }}
                         >
-                            <div className="bg-white rounded-[2rem] border border-neutral-100 p-6 md:p-8 shadow-sm">
+                            <div className="bg-white rounded-[1.75rem] border border-neutral-200 p-6 md:p-8 shadow-sm">
                                 <h2 className="text-xl font-bold text-neutral-900 mb-6">Specifications</h2>
                                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
                                     <div className="bg-neutral-50 p-4 rounded-2xl">
@@ -585,9 +697,9 @@ const BillboardDetails: React.FC = () => {
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ duration: 0.5, delay: 0.7 }}
                         >
-                            <div className="bg-white rounded-[2rem] border border-neutral-100 p-6 md:p-8 shadow-sm">
+                            <div className="bg-white rounded-[1.75rem] border border-neutral-200 p-6 md:p-8 shadow-sm">
                                 <h2 className="text-xl font-bold text-neutral-900 mb-4">About This Billboard</h2>
-                                <p className="text-neutral-600 leading-relaxed text-lg">{billboard.description}</p>
+                                <p className="text-neutral-600 leading-relaxed">{billboard.description}</p>
                             </div>
                         </motion.div>
 
@@ -598,7 +710,7 @@ const BillboardDetails: React.FC = () => {
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ duration: 0.5, delay: 0.72 }}
                             >
-                                <div className="bg-white rounded-[2rem] border border-neutral-100 p-6 md:p-8 shadow-sm">
+                                <div className="bg-white rounded-[1.75rem] border border-neutral-200 p-6 md:p-8 shadow-sm">
                                     <h2 className="text-xl font-bold text-neutral-900 mb-6 flex items-center gap-2">
                                         <MdLocationOn size={24} className="text-neutral-400" />
                                         Billboard Location
@@ -643,7 +755,7 @@ const BillboardDetails: React.FC = () => {
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ duration: 0.5, delay: 0.75 }}
                         >
-                            <div className="bg-white rounded-[2rem] border border-neutral-100 p-6 md:p-8 shadow-sm">
+                            <div className="bg-white rounded-[1.75rem] border border-neutral-200 p-6 md:p-8 shadow-sm">
                                 <h2 className="text-xl font-bold text-neutral-900 mb-6">Billboard Owner</h2>
                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                                     <div className="flex items-center gap-4">
@@ -662,14 +774,16 @@ const BillboardDetails: React.FC = () => {
                                             </p>
                                         </div>
                                     </div>
-                                    <motion.div
-                                        whileHover={{ scale: 1.05 }}
-                                        whileTap={{ scale: 0.95 }}
-                                    >
-                                        <Button variant="outline" icon={<MdMessage />} onClick={handleContact} className="!rounded-xl">
-                                            Contact
-                                        </Button>
-                                    </motion.div>
+                                    {!isOwnerListing && (
+                                        <motion.div
+                                            whileHover={{ scale: 1.05 }}
+                                            whileTap={{ scale: 0.95 }}
+                                        >
+                                            <Button variant="outline" icon={<MdMessage />} onClick={handleContact} className="!rounded-xl">
+                                                Contact
+                                            </Button>
+                                        </motion.div>
+                                    )}
                                 </div>
                             </div>
                         </motion.div>
@@ -680,7 +794,7 @@ const BillboardDetails: React.FC = () => {
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ duration: 0.5, delay: 0.8 }}
                         >
-                            <div className="bg-white rounded-[2rem] border border-neutral-100 p-6 md:p-8 shadow-sm">
+                            <div className="bg-white rounded-[1.75rem] border border-neutral-200 p-6 md:p-8 shadow-sm">
                                 <h2 className="text-xl font-bold text-neutral-900 mb-6">
                                     Reviews ({reviews.length})
                                 </h2>
@@ -730,7 +844,7 @@ const BillboardDetails: React.FC = () => {
                         transition={{ duration: 0.5, delay: 0.85 }}
                         className="lg:col-span-1 w-full mt-8 lg:mt-0"
                     >
-                        <div className="bg-white rounded-[2.5rem] border border-neutral-100 p-6 lg:p-8 shadow-sm lg:sticky lg:top-24">
+                        <div className="bg-white rounded-[1.75rem] border border-neutral-200 p-6 lg:p-8 shadow-sm lg:sticky lg:top-24">
                             <motion.div
                                 initial={{ opacity: 0, y: 10 }}
                                 animate={{ opacity: 1, y: 0 }}
@@ -769,7 +883,7 @@ const BillboardDetails: React.FC = () => {
                                     />
                                 </div>
 
-                                <div className="rounded-[1.5rem] border border-neutral-100 bg-neutral-50 p-5 space-y-4">
+                                <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-5 space-y-4">
                                     <div>
                                         <p className="text-sm font-bold text-neutral-900">Creative Requirements</p>
                                         <p className="text-xs text-neutral-500 mt-1">
@@ -899,9 +1013,15 @@ const BillboardDetails: React.FC = () => {
                                 </div>
                             )}
 
-                            <Button fullWidth size="lg" onClick={handleBooking} disabled={isBooking} className="!bg-[#d4f34a] !text-green-900 hover:!bg-[#c5e53a] !rounded-xl font-bold mt-4 shadow-sm">
-                                {isBooking ? 'Processing...' : 'Submit For Review'}
-                            </Button>
+                            {isOwnerListing ? (
+                                <p className="mt-4 rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-600">
+                                    This is your listing. Booking and favorite actions are disabled for owners.
+                                </p>
+                            ) : (
+                                <Button fullWidth size="lg" onClick={handleBooking} disabled={isBooking} className="!bg-[#d4f34a] !text-green-900 hover:!bg-[#c5e53a] !rounded-xl font-bold mt-4 shadow-sm">
+                                    {isBooking ? 'Processing...' : 'Submit For Review'}
+                                </Button>
+                            )}
 
                             <p className="text-xs text-neutral-500 text-center mt-4">
                                 {billboard.bookingRules.instantBook
@@ -930,6 +1050,47 @@ const BillboardDetails: React.FC = () => {
                         </div>
                     </motion.div>
                 </div>
+
+                <motion.section
+                    initial={{ opacity: 0, y: 16 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.35, delay: 0.9 }}
+                    className="mt-12"
+                >
+                    <div className="flex items-start justify-between gap-3 mb-5">
+                        <div>
+                            <h2 className="text-2xl font-bold text-neutral-900">Other Billboards</h2>
+                            <p className="text-sm text-neutral-500 mt-1">
+                                Prioritized by {billboard.location.city} first, then {billboard.location.state}, then matching {billboard.category === 'screen' ? 'screen' : 'billboard'} category.
+                            </p>
+                        </div>
+                    </div>
+
+                    {loadingRelated ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+                            {[1, 2, 3, 4].map((item) => (
+                                <div key={item} className="rounded-2xl border border-neutral-200 bg-white overflow-hidden">
+                                    <div className="h-48 skeleton-shimmer" />
+                                    <div className="p-4 space-y-2">
+                                        <div className="h-4 w-2/3 skeleton-shimmer" />
+                                        <div className="h-3 w-1/2 skeleton-shimmer" />
+                                        <div className="h-3 w-1/3 skeleton-shimmer" />
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : relatedBillboards.length === 0 ? (
+                        <div className="rounded-2xl border border-neutral-200 bg-white p-6 text-sm text-neutral-500">
+                            No related listings found nearby right now.
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+                            {relatedBillboards.map((item) => (
+                                <BillboardCard key={item.id} billboard={item} />
+                            ))}
+                        </div>
+                    )}
+                </motion.section>
             </motion.main>
         </div >
     );

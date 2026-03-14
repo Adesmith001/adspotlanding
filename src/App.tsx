@@ -20,6 +20,7 @@ import AdvertiserDashboard from './pages/AdvertiserDashboard';
 
 // Pages - Owner
 import CreateListing from './pages/owner/CreateListing';
+import EditListing from './pages/owner/EditListing';
 import MyListings from './pages/owner/MyListings';
 import OwnerBookings from './pages/owner/OwnerBookings';
 import OwnerAnalytics from './pages/owner/OwnerAnalytics';
@@ -86,6 +87,14 @@ function AppContent() {
                     element={
                         <ProtectedRoute requiredRole="owner">
                             <MyListings />
+                        </ProtectedRoute>
+                    }
+                />
+                <Route
+                    path="/dashboard/owner/edit/:id"
+                    element={
+                        <ProtectedRoute requiredRole="owner">
+                            <EditListing />
                         </ProtectedRoute>
                     }
                 />
@@ -225,7 +234,7 @@ function AppContent() {
 
             {/* Toast Notifications */}
             <Toaster
-                position="top-right"
+                position="top-center"
                 toastOptions={{
                     duration: 4000,
                     style: {
