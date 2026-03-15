@@ -1,1099 +1,1525 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import React, { useState, useEffect } from "react";
+import { useParams, useNavigate, Link } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
 import {
-    MdArrowBack,
-    MdDesignServices,
-    MdLocationOn,
-    MdStar,
-    MdLightMode,
-    MdTrendingUp,
-    MdVerified,
-    MdFavorite,
-    MdFavoriteBorder,
-    MdShare,
-    MdMessage,
-    MdChevronLeft,
-    MdChevronRight,
-    MdUpload,
-    MdPictureAsPdf,
-    MdPlace,
-} from 'react-icons/md';
-import Button from '@/components/ui/Button';
-import EmptyState from '@/components/EmptyState';
-import GoogleMapPanel from '@/components/GoogleMapPanel';
-import StreetViewPanel from '@/components/StreetViewPanel';
-import BillboardCard from '@/components/BillboardCard';
-import { useAppSelector } from '@/hooks/useRedux';
-import { selectUser, selectIsAuthenticated } from '@/store/authSlice';
-import { getBillboard, createBooking, incrementBillboardViews, getBillboardReviews, toggleFavorite, isBillboardFavorited, searchBillboards } from '@/services/billboard.service';
-import { startConversation } from '@/services/message.service';
-import { syncUserProfile, getUserProfile } from '@/services/user.service';
-import type { Billboard, CreativeRequirementType, Review } from '@/types/billboard.types';
-import { isPdfFile } from '@/utils/media.utils';
-import toast from 'react-hot-toast';
+  MdArrowBack,
+  MdDesignServices,
+  MdLocationOn,
+  MdStar,
+  MdLightMode,
+  MdTrendingUp,
+  MdVerified,
+  MdFavorite,
+  MdFavoriteBorder,
+  MdShare,
+  MdMessage,
+  MdChevronLeft,
+  MdChevronRight,
+  MdUpload,
+  MdPictureAsPdf,
+  MdGridView,
+  MdBolt,
+  MdCropFree,
+  MdScreenRotation,
+  MdOutlineLocalFireDepartment,
+} from "react-icons/md";
+import Button from "@/components/ui/Button";
+import EmptyState from "@/components/EmptyState";
+import GoogleMapPanel from "@/components/GoogleMapPanel";
+import StreetViewPanel from "@/components/StreetViewPanel";
+import BillboardCard from "@/components/BillboardCard";
+import { useAppSelector } from "@/hooks/useRedux";
+import { selectUser, selectIsAuthenticated } from "@/store/authSlice";
+import {
+  getBillboard,
+  createBooking,
+  incrementBillboardViews,
+  getBillboardReviews,
+  toggleFavorite,
+  isBillboardFavorited,
+  searchBillboards,
+} from "@/services/billboard.service";
+import { startConversation } from "@/services/message.service";
+import { syncUserProfile, getUserProfile } from "@/services/user.service";
+import type {
+  Billboard,
+  CreativeRequirementType,
+  Review,
+} from "@/types/billboard.types";
+import { isPdfFile } from "@/utils/media.utils";
+import toast from "react-hot-toast";
+
+/* ─────────────────────────────────────────────────────────────────────────── */
 
 const BillboardDetails: React.FC = () => {
-    const { id } = useParams<{ id: string }>();
-    const navigate = useNavigate();
-    const user = useAppSelector(selectUser);
-    const isAuthenticated = useAppSelector(selectIsAuthenticated);
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const user = useAppSelector(selectUser);
+  const isAuthenticated = useAppSelector(selectIsAuthenticated);
 
-    const [billboard, setBillboard] = useState<Billboard | null>(null);
-    const [reviews, setReviews] = useState<Review[]>([]);
-    const [relatedBillboards, setRelatedBillboards] = useState<Billboard[]>([]);
-    const [loadingRelated, setLoadingRelated] = useState(false);
-    const [loading, setLoading] = useState(true);
-    const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
-    const [isFavorited, setIsFavorited] = useState(false);
-    const [isBooking, setIsBooking] = useState(false);
+  const [billboard, setBillboard] = useState<Billboard | null>(null);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [relatedBillboards, setRelatedBillboards] = useState<Billboard[]>([]);
+  const [loadingRelated, setLoadingRelated] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
+  const [isFavorited, setIsFavorited] = useState(false);
+  const [isBooking, setIsBooking] = useState(false);
+  const [showAllPhotos, setShowAllPhotos] = useState(false);
 
-    // Booking form state
-    const [startDate, setStartDate] = useState('');
-    const [endDate, setEndDate] = useState('');
-    const [bookingDuration, setBookingDuration] = useState(0);
-    const [totalPrice, setTotalPrice] = useState(0);
-    const [creativeRequirementType, setCreativeRequirementType] = useState<CreativeRequirementType>('advertiser_upload');
-    const [creativeBrief, setCreativeBrief] = useState('');
-    const [designFiles, setDesignFiles] = useState<File[]>([]);
-    const [designPreviewUrls, setDesignPreviewUrls] = useState<string[]>([]);
-    const isOwnerListing = Boolean(user && billboard && user.uid === billboard.ownerId);
+  // Booking form state
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [bookingDuration, setBookingDuration] = useState(0);
+  const [totalPrice, setTotalPrice] = useState(0);
+  const [creativeRequirementType, setCreativeRequirementType] =
+    useState<CreativeRequirementType>("advertiser_upload");
+  const [creativeBrief, setCreativeBrief] = useState("");
+  const [designFiles, setDesignFiles] = useState<File[]>([]);
+  const [designPreviewUrls, setDesignPreviewUrls] = useState<string[]>([]);
+  const isOwnerListing = Boolean(
+    user && billboard && user.uid === billboard.ownerId
+  );
 
-    useEffect(() => {
-        const fetchData = async () => {
-            if (!id) return;
+  /* ── Data fetching ─────────────────────────────────────────────────────── */
 
-            try {
-                // Fetch billboard first - this is critical for the page to work
-                const billboardData = await getBillboard(id);
-
-                if (billboardData) {
-                    setBillboard(billboardData);
-                    incrementBillboardViews(id); // Track view
-                }
-
-                // Fetch reviews separately - don't let review failures block the page
-                try {
-                    const reviewsData = await getBillboardReviews(id);
-                    setReviews(reviewsData);
-                } catch (reviewError) {
-                    console.error('Error fetching reviews (non-critical):', reviewError);
-                    // Reviews failed but billboard should still display
-                    setReviews([]);
-                }
-            } catch (error) {
-                console.error('Error fetching billboard:', error);
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchData();
-    }, [id]);
-
-    // Calculate price when dates change
-    useEffect(() => {
-        if (startDate && endDate && billboard) {
-            const start = new Date(startDate);
-            const end = new Date(endDate);
-            const isHourly = billboard.category === 'screen';
-            const unitMs = isHourly ? (1000 * 60 * 60) : (1000 * 60 * 60 * 24);
-            const duration = Math.ceil((end.getTime() - start.getTime()) / unitMs);
-
-            if (duration > 0) {
-                setBookingDuration(duration);
-
-                let price = 0;
-                if (isHourly) {
-                    price = (billboard.pricing.hourly || 0) * duration;
-                } else {
-                    if (duration >= 30) {
-                        price = billboard.pricing.monthly * Math.ceil(duration / 30);
-                    } else if (duration >= 7) {
-                        price = billboard.pricing.weekly * Math.ceil(duration / 7);
-                    } else {
-                        price = billboard.pricing.daily * duration;
-                    }
-                }
-                setTotalPrice(price);
-            } else {
-                setBookingDuration(0);
-                setTotalPrice(0);
-            }
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!id) return;
+      try {
+        const billboardData = await getBillboard(id);
+        if (billboardData) {
+          setBillboard(billboardData);
+          incrementBillboardViews(id);
         }
-    }, [startDate, endDate, billboard]);
-
-    const handleContact = async () => {
-        if (!isAuthenticated || !user) {
-            toast.error('Please sign in to contact the owner');
-            navigate('/login');
-            return;
-        }
-
-        if (!billboard) return;
-
-        // Check if user is trying to contact themselves
-        if (user.uid === billboard.ownerId) {
-            toast.error('You cannot contact yourself');
-            return;
-        }
-
-        const loadingToast = toast.loading('Starting conversation...');
-
         try {
-            // Ensure current user profile exists
-            await syncUserProfile(
-                user.uid,
-                user.email || '',
-                user.displayName || 'User',
-                'advertiser' // Default role for users browsing billboards
-            );
-
-            // Check if owner profile exists (read-only check, we cannot write to another user's profile)
-            await getUserProfile(billboard.ownerId);
-            // If owner profile doesn't exist, startConversation will fall back to billboard.ownerName
-
-            // Start a new conversation with the billboard owner
-            const conversationId = await startConversation(
-                user.uid,
-                billboard.ownerId,
-                `Hi, I'm interested in your "${billboard.title}" billboard.`
-            );
-
-            // Navigate directly to the conversation
-            toast.dismiss(loadingToast);
-            toast.success('Conversation started!');
-            navigate(`/dashboard/advertiser/messages?conversation=${conversationId}`);
-        } catch (error) {
-            console.error('Error starting conversation:', error);
-            toast.dismiss(loadingToast);
-            toast.error('Failed to start conversation. Please try again.');
+          const reviewsData = await getBillboardReviews(id);
+          setReviews(reviewsData);
+        } catch (reviewError) {
+          console.error("Error fetching reviews (non-critical):", reviewError);
+          setReviews([]);
         }
+      } catch (error) {
+        console.error("Error fetching billboard:", error);
+      } finally {
+        setLoading(false);
+      }
     };
+    fetchData();
+  }, [id]);
 
-    const handleBooking = async () => {
-        if (!isAuthenticated || !user) {
-            toast.error('Please sign in to book this billboard');
-            navigate('/login');
-            return;
+  useEffect(() => {
+    if (startDate && endDate && billboard) {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      const isHourly = billboard.category === "screen";
+      const unitMs = isHourly ? 1000 * 60 * 60 : 1000 * 60 * 60 * 24;
+      const duration = Math.ceil((end.getTime() - start.getTime()) / unitMs);
+      if (duration > 0) {
+        setBookingDuration(duration);
+        let price = 0;
+        if (isHourly) {
+          price = (billboard.pricing.hourly || 0) * duration;
+        } else {
+          if (duration >= 30) {
+            price = billboard.pricing.monthly * Math.ceil(duration / 30);
+          } else if (duration >= 7) {
+            price = billboard.pricing.weekly * Math.ceil(duration / 7);
+          } else {
+            price = billboard.pricing.daily * duration;
+          }
         }
-
-        if (billboard && billboard.ownerId === user.uid) {
-            toast.error('You cannot book your own listing');
-            return;
-        }
-
-        if (!startDate || !endDate) {
-            toast.error('Please select booking dates');
-            return;
-        }
-
-        if (creativeRequirementType === 'advertiser_upload' && designFiles.length === 0) {
-            toast.error('Upload the design file the owner should review before the campaign starts');
-            return;
-        }
-
-        if (creativeRequirementType === 'owner_design_service' && creativeBrief.trim().length < 20) {
-            toast.error('Describe the design request in more detail so the owner can review it');
-            return;
-        }
-
-        if (!billboard) return;
-
-        setIsBooking(true);
-        const toastId = toast.loading('Processing booking request...');
-
-        try {
-            // 1. Create Booking
-            await createBooking(
-                user.uid,
-                user.displayName || 'Advertiser',
-                user.email || '',
-                {
-                    billboardId: billboard.id,
-                    startDate: new Date(startDate),
-                    endDate: new Date(endDate),
-                    durationUnit: billboard.category === 'screen' ? 'hours' : 'days',
-                    creativeRequirementType,
-                    creativeBrief: creativeRequirementType === 'advertiser_upload'
-                        ? (creativeBrief.trim() || 'Advertiser uploaded a ready-to-use design for approval.')
-                        : creativeBrief.trim(),
-                    designFiles,
-                }
-            );
-
-            const isInstantBooking = billboard.bookingRules.instantBook;
-
-            toast.success(
-                isInstantBooking
-                    ? 'Booking created. The owner will review the creative before payment is due.'
-                    : 'Booking request sent. Payment will be unlocked after owner approval.',
-                { id: toastId },
-            );
-
-            navigate('/dashboard/advertiser/campaigns');
-
-        } catch (error: any) {
-            console.error('Booking failed:', error);
-            toast.error(error.message || 'Failed to process booking', { id: toastId });
-        } finally {
-            setIsBooking(false);
-        }
-    };
-
-    // Load initial favorite status
-    useEffect(() => {
-        const loadFavoriteStatus = async () => {
-            if (!user || !id) return;
-            try {
-                const favorited = await isBillboardFavorited(user.uid, id);
-                setIsFavorited(favorited);
-            } catch (err) {
-                console.error('Error loading favorite status:', err);
-            }
-        };
-
-        loadFavoriteStatus();
-    }, [user, id]);
-
-    useEffect(() => {
-        const fetchRelatedBillboards = async () => {
-            if (!billboard) {
-                setRelatedBillboards([]);
-                return;
-            }
-
-            setLoadingRelated(true);
-            try {
-                const cityMatch = await searchBillboards({ city: billboard.location.city }, 'newest', 12);
-
-                // Priority: same city first, then same state, then same category.
-                const citySorted = cityMatch.billboards
-                    .filter((item) => item.id !== billboard.id)
-                    .sort((a, b) => {
-                        const aScore = (a.location.city === billboard.location.city ? 2 : 0) + (a.category === billboard.category ? 1 : 0);
-                        const bScore = (b.location.city === billboard.location.city ? 2 : 0) + (b.category === billboard.category ? 1 : 0);
-                        return bScore - aScore;
-                    });
-
-                const merged = new Map<string, Billboard>();
-                citySorted.forEach((item) => merged.set(item.id, item));
-
-                if (merged.size < 8) {
-                    const stateMatch = await searchBillboards({ state: billboard.location.state }, 'newest', 12);
-                    const stateSorted = stateMatch.billboards
-                        .filter((item) => item.id !== billboard.id && !merged.has(item.id))
-                        .sort((a, b) => {
-                            const aScore = (a.location.state === billboard.location.state ? 2 : 0) + (a.category === billboard.category ? 1 : 0);
-                            const bScore = (b.location.state === billboard.location.state ? 2 : 0) + (b.category === billboard.category ? 1 : 0);
-                            return bScore - aScore;
-                        });
-
-                    stateSorted.forEach((item) => {
-                        if (!merged.has(item.id)) {
-                            merged.set(item.id, item);
-                        }
-                    });
-                }
-
-                if (merged.size < 8 && billboard.category) {
-                    const categoryMatch = await searchBillboards({ category: billboard.category }, 'newest', 12);
-                    categoryMatch.billboards
-                        .filter((item) => item.id !== billboard.id)
-                        .forEach((item) => {
-                            if (!merged.has(item.id)) {
-                                merged.set(item.id, item);
-                            }
-                        });
-                }
-
-                setRelatedBillboards(Array.from(merged.values()).slice(0, 8));
-            } catch (error) {
-                console.error('Error fetching related billboards:', error);
-                setRelatedBillboards([]);
-            } finally {
-                setLoadingRelated(false);
-            }
-        };
-
-        void fetchRelatedBillboards();
-    }, [billboard]);
-
-    useEffect(() => () => {
-        designPreviewUrls.forEach((url) => URL.revokeObjectURL(url));
-    }, [designPreviewUrls]);
-
-    const handleToggleFavorite = async () => {
-        if (!isAuthenticated || !user) {
-            toast.error('Please sign in to save favorites');
-            return;
-        }
-
-        if (billboard && billboard.ownerId === user.uid) {
-            toast.error('You cannot favorite your own listing');
-            return;
-        }
-
-        if (!id) return;
-
-        // Optimistic update
-        setIsFavorited(!isFavorited);
-
-        try {
-            const newFavorited = await toggleFavorite(user.uid, id);
-            toast.success(newFavorited ? 'Added to favorites' : 'Removed from favorites');
-        } catch (err) {
-            // Revert on error
-            setIsFavorited(!isFavorited);
-            toast.error('Failed to update favorite');
-            console.error('Error toggling favorite:', err);
-        }
-    };
-
-    const formatPrice = (price: number) => {
-        return new Intl.NumberFormat('en-NG', {
-            style: 'currency',
-            currency: 'NGN',
-            minimumFractionDigits: 0,
-        }).format(price);
-    };
-
-    const formatDate = (date: Date) => {
-        return new Date(date).toLocaleDateString('en-NG', {
-            day: 'numeric',
-            month: 'long',
-            year: 'numeric',
-        });
-    };
-
-    const nextPhoto = () => {
-        if (billboard && billboard.photos.length > 0) {
-            setCurrentPhotoIndex((prev) => (prev + 1) % billboard.photos.length);
-        }
-    };
-
-    const prevPhoto = () => {
-        if (billboard && billboard.photos.length > 0) {
-            setCurrentPhotoIndex((prev) => (prev - 1 + billboard.photos.length) % billboard.photos.length);
-        }
-    };
-
-    const handleDesignUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-        const files = event.target.files;
-        if (!files) {
-            return;
-        }
-
-        const nextFiles = Array.from(files);
-        setDesignFiles(nextFiles);
-        setDesignPreviewUrls((prev) => {
-            prev.forEach((url) => URL.revokeObjectURL(url));
-            return nextFiles.map((file) => URL.createObjectURL(file));
-        });
-    };
-
-    if (loading) {
-        return (
-            <div className="min-h-screen bg-gradient-to-br from-neutral-50 via-white to-primary-50">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ duration: 0.3 }}
-                        className="space-y-8"
-                    >
-                        <div className="h-8 bg-gradient-to-r from-neutral-200 to-neutral-300 rounded w-32" />
-                        <div className="h-[500px] bg-gradient-to-br from-neutral-200 to-neutral-300 rounded-3xl shadow-soft" />
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                            <div className="lg:col-span-2 space-y-4">
-                                <div className="h-8 bg-gradient-to-r from-neutral-200 to-neutral-300 rounded w-3/4" />
-                                <div className="h-4 bg-gradient-to-r from-neutral-200 to-neutral-300 rounded w-1/2" />
-                            </div>
-                            <div className="h-64 bg-gradient-to-br from-neutral-200 to-neutral-300 rounded-2xl shadow-soft" />
-                        </div>
-                    </motion.div>
-                </div>
-            </div>
-        );
+        setTotalPrice(price);
+      } else {
+        setBookingDuration(0);
+        setTotalPrice(0);
+      }
     }
+  }, [startDate, endDate, billboard]);
 
-    if (!billboard) {
-        return (
-            <div className="min-h-screen bg-gradient-to-br from-neutral-50 via-white to-primary-50 flex items-center justify-center">
-                <motion.div
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.3 }}
-                    className="max-w-lg"
-                >
-                    <EmptyState
-                        icon={<MdLocationOn />}
-                        title="Billboard Not Found"
-                        description="The billboard you're looking for doesn't exist or has been removed."
-                        actionLabel="Browse Billboards"
-                        actionHref="/listings"
-                    />
-                </motion.div>
-            </div>
+  useEffect(() => {
+    const loadFavoriteStatus = async () => {
+      if (!user || !id) return;
+      try {
+        const favorited = await isBillboardFavorited(user.uid, id);
+        setIsFavorited(favorited);
+      } catch (err) {
+        console.error("Error loading favorite status:", err);
+      }
+    };
+    loadFavoriteStatus();
+  }, [user, id]);
+
+  useEffect(() => {
+    const fetchRelatedBillboards = async () => {
+      if (!billboard) {
+        setRelatedBillboards([]);
+        return;
+      }
+      setLoadingRelated(true);
+      try {
+        const cityMatch = await searchBillboards(
+          { city: billboard.location.city },
+          "newest",
+          12
         );
-    }
+        const citySorted = cityMatch.billboards
+          .filter((item) => item.id !== billboard.id)
+          .sort((a, b) => {
+            const aScore =
+              (a.location.city === billboard.location.city ? 2 : 0) +
+              (a.category === billboard.category ? 1 : 0);
+            const bScore =
+              (b.location.city === billboard.location.city ? 2 : 0) +
+              (b.category === billboard.category ? 1 : 0);
+            return bScore - aScore;
+          });
+        const merged = new Map<string, Billboard>();
+        citySorted.forEach((item) => merged.set(item.id, item));
+        if (merged.size < 8) {
+          const stateMatch = await searchBillboards(
+            { state: billboard.location.state },
+            "newest",
+            12
+          );
+          stateMatch.billboards
+            .filter((item) => item.id !== billboard.id && !merged.has(item.id))
+            .sort((a, b) => {
+              const aScore =
+                (a.location.state === billboard.location.state ? 2 : 0) +
+                (a.category === billboard.category ? 1 : 0);
+              const bScore =
+                (b.location.state === billboard.location.state ? 2 : 0) +
+                (b.category === billboard.category ? 1 : 0);
+              return bScore - aScore;
+            })
+            .forEach((item) => {
+              if (!merged.has(item.id)) merged.set(item.id, item);
+            });
+        }
+        if (merged.size < 8 && billboard.category) {
+          const categoryMatch = await searchBillboards(
+            { category: billboard.category },
+            "newest",
+            12
+          );
+          categoryMatch.billboards
+            .filter((item) => item.id !== billboard.id)
+            .forEach((item) => {
+              if (!merged.has(item.id)) merged.set(item.id, item);
+            });
+        }
+        setRelatedBillboards(Array.from(merged.values()).slice(0, 8));
+      } catch (error) {
+        console.error("Error fetching related billboards:", error);
+        setRelatedBillboards([]);
+      } finally {
+        setLoadingRelated(false);
+      }
+    };
+    void fetchRelatedBillboards();
+  }, [billboard]);
 
+  useEffect(
+    () => () => {
+      designPreviewUrls.forEach((url) => URL.revokeObjectURL(url));
+    },
+    [designPreviewUrls]
+  );
+
+  /* ── Handlers ──────────────────────────────────────────────────────────── */
+
+  const handleContact = async () => {
+    if (!isAuthenticated || !user) {
+      toast.error("Please sign in to contact the owner");
+      navigate("/login");
+      return;
+    }
+    if (!billboard) return;
+    if (user.uid === billboard.ownerId) {
+      toast.error("You cannot contact yourself");
+      return;
+    }
+    const loadingToast = toast.loading("Starting conversation...");
+    try {
+      await syncUserProfile(
+        user.uid,
+        user.email || "",
+        user.displayName || "User",
+        "advertiser"
+      );
+      await getUserProfile(billboard.ownerId);
+      const conversationId = await startConversation(
+        user.uid,
+        billboard.ownerId,
+        `Hi, I'm interested in your "${billboard.title}" billboard.`
+      );
+      toast.dismiss(loadingToast);
+      toast.success("Conversation started!");
+      navigate(`/dashboard/advertiser/messages?conversation=${conversationId}`);
+    } catch (error) {
+      console.error("Error starting conversation:", error);
+      toast.dismiss(loadingToast);
+      toast.error("Failed to start conversation. Please try again.");
+    }
+  };
+
+  const handleBooking = async () => {
+    if (!isAuthenticated || !user) {
+      toast.error("Please sign in to book this billboard");
+      navigate("/login");
+      return;
+    }
+    if (billboard && billboard.ownerId === user.uid) {
+      toast.error("You cannot book your own listing");
+      return;
+    }
+    if (!startDate || !endDate) {
+      toast.error("Please select booking dates");
+      return;
+    }
+    if (
+      creativeRequirementType === "advertiser_upload" &&
+      designFiles.length === 0
+    ) {
+      toast.error(
+        "Upload the design file the owner should review before the campaign starts"
+      );
+      return;
+    }
+    if (
+      creativeRequirementType === "owner_design_service" &&
+      creativeBrief.trim().length < 20
+    ) {
+      toast.error(
+        "Describe the design request in more detail so the owner can review it"
+      );
+      return;
+    }
+    if (!billboard) return;
+    setIsBooking(true);
+    const toastId = toast.loading("Processing booking request...");
+    try {
+      await createBooking(
+        user.uid,
+        user.displayName || "Advertiser",
+        user.email || "",
+        {
+          billboardId: billboard.id,
+          startDate: new Date(startDate),
+          endDate: new Date(endDate),
+          durationUnit: billboard.category === "screen" ? "hours" : "days",
+          creativeRequirementType,
+          creativeBrief:
+            creativeRequirementType === "advertiser_upload"
+              ? creativeBrief.trim() ||
+                "Advertiser uploaded a ready-to-use design for approval."
+              : creativeBrief.trim(),
+          designFiles,
+        }
+      );
+      const isInstantBooking = billboard.bookingRules.instantBook;
+      toast.success(
+        isInstantBooking
+          ? "Booking created. The owner will review the creative before payment is due."
+          : "Booking request sent. Payment will be unlocked after owner approval.",
+        { id: toastId }
+      );
+      navigate("/dashboard/advertiser/campaigns");
+    } catch (error: any) {
+      console.error("Booking failed:", error);
+      toast.error(error.message || "Failed to process booking", {
+        id: toastId,
+      });
+    } finally {
+      setIsBooking(false);
+    }
+  };
+
+  const handleToggleFavorite = async () => {
+    if (!isAuthenticated || !user) {
+      toast.error("Please sign in to save favorites");
+      return;
+    }
+    if (billboard && billboard.ownerId === user.uid) {
+      toast.error("You cannot favorite your own listing");
+      return;
+    }
+    if (!id) return;
+    setIsFavorited(!isFavorited);
+    try {
+      const newFavorited = await toggleFavorite(user.uid, id);
+      toast.success(
+        newFavorited ? "Added to favorites" : "Removed from favorites"
+      );
+    } catch (err) {
+      setIsFavorited(!isFavorited);
+      toast.error("Failed to update favorite");
+      console.error("Error toggling favorite:", err);
+    }
+  };
+
+  const formatPrice = (price: number) =>
+    new Intl.NumberFormat("en-NG", {
+      style: "currency",
+      currency: "NGN",
+      minimumFractionDigits: 0,
+    }).format(price);
+
+  const formatDate = (date: Date) =>
+    new Date(date).toLocaleDateString("en-NG", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+
+  const nextPhoto = () => {
+    if (billboard?.photos.length)
+      setCurrentPhotoIndex((prev) => (prev + 1) % billboard.photos.length);
+  };
+  const prevPhoto = () => {
+    if (billboard?.photos.length)
+      setCurrentPhotoIndex(
+        (prev) => (prev - 1 + billboard.photos.length) % billboard.photos.length
+      );
+  };
+
+  const handleDesignUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files) return;
+    const nextFiles = Array.from(files);
+    setDesignFiles(nextFiles);
+    setDesignPreviewUrls((prev) => {
+      prev.forEach((url) => URL.revokeObjectURL(url));
+      return nextFiles.map((file) => URL.createObjectURL(file));
+    });
+  };
+
+  /* ── Loading skeleton ──────────────────────────────────────────────────── */
+
+  if (loading) {
     return (
-        <div className="min-h-screen bg-[#f6f6f4]">
-            {/* Header */}
-            <motion.header
-                initial={{ y: -20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ duration: 0.4 }}
-                className="bg-[#f6f6f4]/95 backdrop-blur border-b border-neutral-200/70 sticky top-0 z-40"
-            >
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-                    <div className="flex items-center justify-between">
-                        <motion.button
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            onClick={() => navigate(-1)}
-                            className="flex items-center gap-2 text-neutral-600 hover:text-neutral-900 transition-colors px-3 py-2 rounded-lg hover:bg-neutral-100"
-                        >
-                            <MdArrowBack size={20} />
-                            <span className="font-medium">Back</span>
-                        </motion.button>
-
-                        <div className="flex items-center gap-2">
-                            {!isOwnerListing && (
-                                <motion.button
-                                    whileHover={{ scale: 1.05 }}
-                                    whileTap={{ scale: 0.95 }}
-                                    onClick={handleToggleFavorite}
-                                    className="p-2.5 rounded-full hover:bg-neutral-100 transition-colors shadow-soft"
-                                >
-                                    {isFavorited ? (
-                                        <MdFavorite size={24} className="text-red-500" />
-                                    ) : (
-                                        <MdFavoriteBorder size={24} className="text-neutral-600" />
-                                    )}
-                                </motion.button>
-                            )}
-                            <motion.button
-                                whileHover={{ scale: 1.05 }}
-                                whileTap={{ scale: 0.95 }}
-                                className="p-2.5 rounded-full hover:bg-neutral-100 transition-colors shadow-soft"
-                            >
-                                <MdShare size={24} className="text-neutral-600" />
-                            </motion.button>
-                        </div>
-                    </div>
-                </div>
-            </motion.header>
-
-            <motion.main
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.3, delay: 0.2 }}
-                className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8"
-            >
-                {/* Photo Gallery */}
-                <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5, delay: 0.3 }}
-                    className="relative rounded-3xl overflow-hidden mb-8 bg-white border border-neutral-200 shadow-sm p-3"
-                >
-                    {billboard.photos.length > 0 ? (
-                        <div className="grid grid-cols-1 lg:grid-cols-[1fr_220px] gap-3">
-                            <div className="relative h-[300px] sm:h-[420px] md:h-[520px] rounded-2xl overflow-hidden bg-neutral-200">
-                                <motion.img
-                                    key={currentPhotoIndex}
-                                    src={billboard.photos[currentPhotoIndex]}
-                                    alt={billboard.title}
-                                    className="w-full h-full object-cover"
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    transition={{ duration: 0.3 }}
-                                />
-
-                                {billboard.photos.length > 1 && (
-                                    <>
-                                        <motion.button
-                                            whileHover={{ scale: 1.1 }}
-                                            whileTap={{ scale: 0.9 }}
-                                            onClick={prevPhoto}
-                                            className="absolute left-4 top-1/2 -translate-y-1/2 w-11 h-11 bg-white/90 backdrop-blur rounded-full flex items-center justify-center hover:bg-white transition-colors shadow"
-                                        >
-                                            <MdChevronLeft size={22} />
-                                        </motion.button>
-                                        <motion.button
-                                            whileHover={{ scale: 1.1 }}
-                                            whileTap={{ scale: 0.9 }}
-                                            onClick={nextPhoto}
-                                            className="absolute right-4 top-1/2 -translate-y-1/2 w-11 h-11 bg-white/90 backdrop-blur rounded-full flex items-center justify-center hover:bg-white transition-colors shadow"
-                                        >
-                                            <MdChevronRight size={22} />
-                                        </motion.button>
-
-                                        {/* Photo indicators */}
-                                        <motion.div
-                                            initial={{ opacity: 0, y: 10 }}
-                                            animate={{ opacity: 1, y: 0 }}
-                                            transition={{ duration: 0.3, delay: 0.6 }}
-                                            className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2"
-                                        >
-                                            {billboard.photos.map((_, index) => (
-                                                <motion.button
-                                                    key={index}
-                                                    whileHover={{ scale: 1.2 }}
-                                                    whileTap={{ scale: 0.9 }}
-                                                    onClick={() => setCurrentPhotoIndex(index)}
-                                                    className={`h-2 rounded-full transition-all ${index === currentPhotoIndex ? 'bg-white w-6 shadow' : 'bg-white/50 hover:bg-white/70'
-                                                        }`}
-                                                />
-                                            ))}
-                                        </motion.div>
-                                    </>
-                                )}
-                            </div>
-
-                            <div className="hidden lg:flex flex-col gap-3">
-                                {billboard.photos.slice(0, 4).map((photo, index) => (
-                                    <button
-                                        key={`${photo}-${index}`}
-                                        type="button"
-                                        onClick={() => setCurrentPhotoIndex(index)}
-                                        className={`h-[122px] rounded-xl overflow-hidden border transition-all ${currentPhotoIndex === index ? 'border-neutral-900 ring-2 ring-neutral-900/15' : 'border-neutral-200 hover:border-neutral-300'}`}
-                                    >
-                                        <img src={photo} alt={`${billboard.title} ${index + 1}`} className="h-full w-full object-cover" />
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    ) : (
-                        <div className="h-[300px] sm:h-[420px] md:h-[520px] w-full flex items-center justify-center rounded-2xl bg-neutral-100">
-                            <p className="text-neutral-500">No photos available</p>
-                        </div>
-                    )}
-                </motion.div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    {/* Main Content */}
-                    <div className="lg:col-span-2 space-y-8">
-                        {/* Title & Location */}
-                        <div>
-                            <motion.div
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ duration: 0.5, delay: 0.4 }}
-                                className="flex items-center gap-2 mb-4 flex-wrap"
-                            >
-                                <motion.span
-                                    whileHover={{ scale: 1.05 }}
-                                    className="px-3 py-1 bg-neutral-900 text-white rounded-full text-sm font-semibold capitalize"
-                                >
-                                    {billboard.category === 'screen' ? 'Screen' : billboard.type}
-                                </motion.span>
-                                {billboard.hasLighting && billboard.category !== 'screen' && (
-                                    <motion.span
-                                        initial={{ opacity: 0, scale: 0.9 }}
-                                        animate={{ opacity: 1, scale: 1 }}
-                                        transition={{ delay: 0.45 }}
-                                        whileHover={{ scale: 1.05 }}
-                                        className="px-3 py-1 bg-[#d4f34a] text-green-900 rounded-full text-sm font-semibold flex items-center gap-1"
-                                    >
-                                        <MdLightMode size={14} />
-                                        Lit
-                                    </motion.span>
-                                )}
-                                {billboard.bookingRules.instantBook && (
-                                    <motion.span
-                                        initial={{ opacity: 0, scale: 0.9 }}
-                                        animate={{ opacity: 1, scale: 1 }}
-                                        transition={{ delay: 0.5 }}
-                                        whileHover={{ scale: 1.05 }}
-                                        className="px-3 py-1 bg-[#d4f34a] text-green-900 rounded-full text-sm font-semibold"
-                                    >
-                                        Instant Book
-                                    </motion.span>
-                                )}
-                            </motion.div>
-
-                            <motion.h1
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ duration: 0.5, delay: 0.55 }}
-                                className="text-3xl md:text-5xl font-extrabold text-neutral-900 mb-4 tracking-tight"
-                            >
-                                {billboard.title}
-                            </motion.h1>
-
-                            <motion.div
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ duration: 0.5, delay: 0.6 }}
-                                className="flex items-start sm:items-center gap-2 text-neutral-500 text-base md:text-lg"
-                            >
-                                <MdLocationOn size={24} className="text-neutral-400" />
-                                <span className="font-medium break-words">
-                                    {billboard.location.address}, {billboard.location.city}, {billboard.location.state}
-                                </span>
-                            </motion.div>
-
-                            <motion.div
-                                initial={{ opacity: 0, y: 16 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ duration: 0.4, delay: 0.62 }}
-                                className="mt-4 flex flex-wrap items-center gap-3 text-sm"
-                            >
-                                <span className="inline-flex items-center gap-1 rounded-full bg-green-600 px-2 py-1 text-xs font-semibold text-white">
-                                    {Math.max(1, Math.round((billboard.rating || 4) * 10) / 10)}
-                                    <MdStar size={12} />
-                                </span>
-                                <span className="font-medium text-neutral-500">{billboard.reviewCount} reviews</span>
-                                <span className="inline-flex items-center gap-1 text-neutral-500">
-                                    <MdPlace size={16} className="text-neutral-400" />
-                                    {billboard.location.city}
-                                </span>
-                            </motion.div>
-                        </div>
-
-                        {/* Specifications */}
-                        <motion.div
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.5, delay: 0.65 }}
-                        >
-                            <div className="bg-white rounded-[1.75rem] border border-neutral-200 p-6 md:p-8 shadow-sm">
-                                <h2 className="text-xl font-bold text-neutral-900 mb-6">Specifications</h2>
-                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
-                                    <div className="bg-neutral-50 p-4 rounded-2xl">
-                                        <p className="text-sm font-medium text-neutral-500 mb-1">Dimensions</p>
-                                        <p className="font-bold text-neutral-900 text-lg">
-                                            {billboard.dimensions.width}×{billboard.dimensions.height} <span className="text-sm font-medium">{billboard.dimensions.unit}</span>
-                                        </p>
-                                    </div>
-                                    <div className="bg-neutral-50 p-4 rounded-2xl">
-                                        <p className="text-sm font-medium text-neutral-500 mb-1">Orientation</p>
-                                        <p className="font-bold text-neutral-900 text-lg capitalize">{billboard.orientation}</p>
-                                    </div>
-                                    <div className="bg-neutral-50 p-4 rounded-2xl">
-                                        <p className="text-sm font-medium text-neutral-500 mb-1">Traffic Score</p>
-                                        <p className="font-bold text-neutral-900 text-lg flex items-center gap-1">
-                                            <MdTrendingUp size={20} className="text-[#d4f34a]" />
-                                            {billboard.trafficScore}/10
-                                        </p>
-                                    </div>
-                                    <div className="bg-neutral-50 p-4 rounded-2xl">
-                                        <p className="text-sm font-medium text-neutral-500 mb-1">Rating</p>
-                                        <p className="font-bold text-neutral-900 text-lg flex items-center gap-1">
-                                            <MdStar size={20} className="text-amber-400" />
-                                            {billboard.rating > 0 ? `${billboard.rating.toFixed(1)} (${billboard.reviewCount})` : 'New'}
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                        </motion.div>
-
-                        {/* Description */}
-                        <motion.div
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.5, delay: 0.7 }}
-                        >
-                            <div className="bg-white rounded-[1.75rem] border border-neutral-200 p-6 md:p-8 shadow-sm">
-                                <h2 className="text-xl font-bold text-neutral-900 mb-4">About This Billboard</h2>
-                                <p className="text-neutral-600 leading-relaxed">{billboard.description}</p>
-                            </div>
-                        </motion.div>
-
-                        {/* Location Map */}
-                        {(billboard.location.lat !== 0 || billboard.location.lng !== 0 || billboard.location.address) && (
-                            <motion.div
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ duration: 0.5, delay: 0.72 }}
-                            >
-                                <div className="bg-white rounded-[1.75rem] border border-neutral-200 p-6 md:p-8 shadow-sm">
-                                    <h2 className="text-xl font-bold text-neutral-900 mb-6 flex items-center gap-2">
-                                        <MdLocationOn size={24} className="text-neutral-400" />
-                                        Billboard Location
-                                    </h2>
-                                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                                        {billboard.location.lat !== 0 && billboard.location.lng !== 0 && (
-                                            <GoogleMapPanel
-                                                latitude={billboard.location.lat}
-                                                longitude={billboard.location.lng}
-                                                title="Billboard Location"
-                                                subtitle="Review the exact placement on Google Maps before booking."
-                                                heightClassName="h-[350px]"
-                                            />
-                                        )}
-
-                                        <StreetViewPanel
-                                            latitude={billboard.location.lat !== 0 ? billboard.location.lat : undefined}
-                                            longitude={billboard.location.lng !== 0 ? billboard.location.lng : undefined}
-                                            addressFallback={[
-                                                billboard.location.address,
-                                                billboard.location.city,
-                                                billboard.location.state,
-                                                billboard.location.country,
-                                            ].filter(Boolean).join(', ')}
-                                            title="Street-Level View"
-                                            subtitle="See the billboard from the road instead of relying on the pin alone."
-                                            heightClassName="h-[350px]"
-                                        />
-                                    </div>
-                                    {billboard.location.lat !== 0 && billboard.location.lng !== 0 && (
-                                        <p className="text-xs text-neutral-400 mt-4 font-mono">
-                                            Lat: {billboard.location.lat.toFixed(6)} • Lng: {billboard.location.lng.toFixed(6)}
-                                        </p>
-                                    )}
-                                </div>
-                            </motion.div>
-                        )}
-
-                        {/* Owner Info */}
-                        <motion.div
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.5, delay: 0.75 }}
-                        >
-                            <div className="bg-white rounded-[1.75rem] border border-neutral-200 p-6 md:p-8 shadow-sm">
-                                <h2 className="text-xl font-bold text-neutral-900 mb-6">Billboard Owner</h2>
-                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-14 h-14 rounded-full bg-neutral-900 flex items-center justify-center text-white text-xl font-bold">
-                                            {billboard.ownerName.charAt(0).toUpperCase()}
-                                        </div>
-                                        <div>
-                                            <p className="font-bold text-neutral-900 flex items-center gap-2">
-                                                {billboard.ownerName}
-                                                {billboard.ownerVerified && (
-                                                    <MdVerified size={18} className="text-green-600" />
-                                                )}
-                                            </p>
-                                            <p className="text-sm text-neutral-500">
-                                                {billboard.totalBookings} successful bookings
-                                            </p>
-                                        </div>
-                                    </div>
-                                    {!isOwnerListing && (
-                                        <motion.div
-                                            whileHover={{ scale: 1.05 }}
-                                            whileTap={{ scale: 0.95 }}
-                                        >
-                                            <Button variant="outline" icon={<MdMessage />} onClick={handleContact} className="!rounded-xl">
-                                                Contact
-                                            </Button>
-                                        </motion.div>
-                                    )}
-                                </div>
-                            </div>
-                        </motion.div>
-
-                        {/* Reviews */}
-                        <motion.div
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.5, delay: 0.8 }}
-                        >
-                            <div className="bg-white rounded-[1.75rem] border border-neutral-200 p-6 md:p-8 shadow-sm">
-                                <h2 className="text-xl font-bold text-neutral-900 mb-6">
-                                    Reviews ({reviews.length})
-                                </h2>
-                                {reviews.length === 0 ? (
-                                    <p className="text-neutral-500 text-center py-8">
-                                        No reviews yet. Be the first to review after your campaign!
-                                    </p>
-                                ) : (
-                                    <div className="space-y-6">
-                                        {reviews.map((review) => (
-                                            <div key={review.id} className="border-b border-neutral-100 pb-6 last:border-0 last:pb-0">
-                                                <div className="flex items-center gap-3 mb-3">
-                                                    <div className="w-10 h-10 rounded-full bg-neutral-100 flex items-center justify-center text-neutral-600 font-bold">
-                                                        {review.advertiserName.charAt(0).toUpperCase()}
-                                                    </div>
-                                                    <div>
-                                                        <p className="font-medium text-neutral-900">{review.advertiserName}</p>
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="flex">
-                                                                {[1, 2, 3, 4, 5].map((star) => (
-                                                                    <MdStar
-                                                                        key={star}
-                                                                        size={14}
-                                                                        className={star <= review.rating ? 'text-amber-500' : 'text-neutral-200'}
-                                                                    />
-                                                                ))}
-                                                            </div>
-                                                            <span className="text-xs text-neutral-500">
-                                                                {formatDate(review.createdAt)}
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                <p className="text-neutral-600">{review.comment}</p>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        </motion.div>
-                    </div>
-
-                    {/* Booking Sidebar */}
-                    <motion.div
-                        initial={{ opacity: 0, x: 20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ duration: 0.5, delay: 0.85 }}
-                        className="lg:col-span-1 w-full mt-8 lg:mt-0"
-                    >
-                        <div className="bg-white rounded-[1.75rem] border border-neutral-200 p-6 lg:p-8 shadow-sm lg:sticky lg:top-24">
-                            <motion.div
-                                initial={{ opacity: 0, y: 10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ duration: 0.3, delay: 0.86 }}
-                                className="mb-6"
-                            >
-                                <p className="text-lg text-neutral-500 mb-1">Price per {billboard.category === 'screen' ? 'hour' : 'day'}</p>
-                                <p className="text-3xl sm:text-4xl font-extrabold text-neutral-900">
-                                    {formatPrice(billboard.category === 'screen' ? (billboard.pricing.hourly || 0) : billboard.pricing.daily)}
-                                </p>
-                            </motion.div>
-
-                            <div className="space-y-4 mb-6">
-                                <div>
-                                    <label className="block text-sm font-medium text-neutral-700 mb-2">
-                                        Start Date {billboard.category === 'screen' && '& Time'}
-                                    </label>
-                                    <input
-                                        type={billboard.category === 'screen' ? "datetime-local" : "date"}
-                                        value={startDate}
-                                        onChange={(e) => setStartDate(e.target.value)}
-                                        min={billboard.category === 'screen' ? new Date().toISOString().slice(0, 16) : new Date().toISOString().split('T')[0]}
-                                        className="w-full px-4 py-3 rounded-xl border border-neutral-300 focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-neutral-700 mb-2">
-                                        End Date {billboard.category === 'screen' && '& Time'}
-                                    </label>
-                                    <input
-                                        type={billboard.category === 'screen' ? "datetime-local" : "date"}
-                                        value={endDate}
-                                        onChange={(e) => setEndDate(e.target.value)}
-                                        min={startDate || (billboard.category === 'screen' ? new Date().toISOString().slice(0, 16) : new Date().toISOString().split('T')[0])}
-                                        className="w-full px-4 py-3 rounded-xl border border-neutral-300 focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                    />
-                                </div>
-
-                                <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-5 space-y-4">
-                                    <div>
-                                        <p className="text-sm font-bold text-neutral-900">Creative Requirements</p>
-                                        <p className="text-xs text-neutral-500 mt-1">
-                                            The owner reviews the creative first. Payment is only requested after that approval.
-                                        </p>
-                                    </div>
-
-                                    <div className="grid grid-cols-1 gap-3">
-                                        <button
-                                            type="button"
-                                            onClick={() => setCreativeRequirementType('advertiser_upload')}
-                                            className={`rounded-2xl border-2 p-4 text-left transition-all ${creativeRequirementType === 'advertiser_upload'
-                                                ? 'border-neutral-900 bg-white shadow-sm'
-                                                : 'border-transparent bg-neutral-100 hover:bg-neutral-200/50'
-                                                }`}
-                                        >
-                                            <div className="flex items-start gap-3">
-                                                <div className="mt-0.5 rounded-lg bg-[#d4f34a] p-2 text-green-900">
-                                                    <MdUpload size={18} />
-                                                </div>
-                                                <div>
-                                                    <p className="text-sm font-bold text-neutral-900">I already have a design</p>
-                                                    <p className="text-xs text-neutral-500 mt-1">Upload artwork, mockups, or a PDF proof so the owner can approve it.</p>
-                                                </div>
-                                            </div>
-                                        </button>
-
-                                        <button
-                                            type="button"
-                                            onClick={() => setCreativeRequirementType('owner_design_service')}
-                                            className={`rounded-2xl border-2 p-4 text-left transition-all ${creativeRequirementType === 'owner_design_service'
-                                                ? 'border-neutral-900 bg-white shadow-sm'
-                                                : 'border-transparent bg-neutral-100 hover:bg-neutral-200/50'
-                                                }`}
-                                        >
-                                            <div className="flex items-start gap-3">
-                                                <div className="mt-0.5 rounded-lg bg-neutral-200 p-2 text-neutral-800">
-                                                    <MdDesignServices size={18} />
-                                                </div>
-                                                <div>
-                                                    <p className="text-sm font-bold text-neutral-900">I need the company to create the design</p>
-                                                    <p className="text-xs text-neutral-500 mt-1">Explain the campaign, offer, audience, and any brand direction the owner should review.</p>
-                                                </div>
-                                            </div>
-                                        </button>
-                                    </div>
-
-                                    {creativeRequirementType === 'advertiser_upload' && (
-                                        <div className="space-y-3">
-                                            <label className="flex cursor-pointer items-center justify-center rounded-xl border border-dashed border-neutral-300 bg-neutral-50 px-4 py-5 text-center hover:border-primary-400 hover:bg-primary-50/40 transition-colors">
-                                                <div>
-                                                    <p className="text-sm font-medium text-neutral-800">Upload design files</p>
-                                                    <p className="text-xs text-neutral-500 mt-1">PNG, JPG, or PDF files the owner should approve before launch.</p>
-                                                </div>
-                                                <input
-                                                    type="file"
-                                                    accept="image/*,application/pdf,.pdf"
-                                                    multiple
-                                                    onChange={handleDesignUpload}
-                                                    className="hidden"
-                                                />
-                                            </label>
-
-                                            {designPreviewUrls.length > 0 && (
-                                                <div className="grid grid-cols-3 gap-2">
-                                                    {designPreviewUrls.map((url, index) => {
-                                                        const file = designFiles[index];
-
-                                                        if (file && isPdfFile(file)) {
-                                                            return (
-                                                                <a
-                                                                    key={url}
-                                                                    href={url}
-                                                                    target="_blank"
-                                                                    rel="noreferrer"
-                                                                    className="flex h-20 w-full flex-col items-center justify-center rounded-lg border border-red-200 bg-red-50 px-2 text-center"
-                                                                >
-                                                                    <MdPictureAsPdf size={28} className="text-red-600" />
-                                                                    <span className="mt-1 line-clamp-2 text-[11px] font-medium text-red-700">
-                                                                        {file.name}
-                                                                    </span>
-                                                                </a>
-                                                            );
-                                                        }
-
-                                                        return (
-                                                            <img
-                                                                key={url}
-                                                                src={url}
-                                                                alt={`Creative upload ${index + 1}`}
-                                                                className="h-20 w-full rounded-lg object-cover border border-neutral-200"
-                                                            />
-                                                        );
-                                                    })}
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-
-                                    <div>
-                                        <label className="block text-sm font-medium text-neutral-700 mb-2">
-                                            {creativeRequirementType === 'advertiser_upload' ? 'Additional creative notes' : 'Design brief'}
-                                        </label>
-                                        <textarea
-                                            value={creativeBrief}
-                                            onChange={(e) => setCreativeBrief(e.target.value)}
-                                            rows={4}
-                                            placeholder={creativeRequirementType === 'advertiser_upload'
-                                                ? 'Optional: add brand, sizing, print, or placement notes for the owner.'
-                                                : 'Describe the offer, target audience, CTA, colours, preferred message, and anything the owner needs to create the design.'}
-                                            className="w-full px-4 py-3 rounded-xl border border-neutral-300 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-
-                            {bookingDuration > 0 && (
-                                <div className="bg-neutral-50 rounded-xl p-4 mb-6">
-                                    <div className="flex justify-between mb-2">
-                                        <span className="text-neutral-600">Duration</span>
-                                        <span className="font-medium text-neutral-900">{bookingDuration} {billboard.category === 'screen' ? 'hours' : 'days'}</span>
-                                    </div>
-                                    <div className="flex justify-between text-lg font-bold">
-                                        <span className="text-neutral-900">Total</span>
-                                        <span className="text-neutral-900">{formatPrice(totalPrice)}</span>
-                                    </div>
-                                </div>
-                            )}
-
-                            {isOwnerListing ? (
-                                <p className="mt-4 rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-600">
-                                    This is your listing. Booking and favorite actions are disabled for owners.
-                                </p>
-                            ) : (
-                                <Button fullWidth size="lg" onClick={handleBooking} disabled={isBooking} className="!bg-[#d4f34a] !text-green-900 hover:!bg-[#c5e53a] !rounded-xl font-bold mt-4 shadow-sm">
-                                    {isBooking ? 'Processing...' : 'Submit For Review'}
-                                </Button>
-                            )}
-
-                            <p className="text-xs text-neutral-500 text-center mt-4">
-                                {billboard.bookingRules.instantBook
-                                    ? 'Instant booking confirms the dates immediately, but payment is still collected only after creative approval.'
-                                    : 'This booking requires owner review first, and payment is collected only after the creative is approved.'}
-                            </p>
-
-                            {/* Pricing Info */}
-                            {billboard.category !== 'screen' && (
-                                <motion.div
-                                    initial={{ opacity: 0, y: 10 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    transition={{ duration: 0.3, delay: 0.88 }}
-                                    className="mt-6 pt-6 border-t border-neutral-100 space-y-3 text-sm bg-gradient-to-br from-neutral-50 to-neutral-100 p-4 rounded-2xl"
-                                >
-                                    <div className="flex justify-between items-center">
-                                        <span className="text-neutral-600 font-medium">Weekly rate</span>
-                                        <span className="font-bold text-neutral-900">{formatPrice(billboard.pricing.weekly)}</span>
-                                    </div>
-                                    <div className="flex justify-between items-center">
-                                        <span className="text-neutral-600 font-medium">Monthly rate</span>
-                                        <span className="font-bold text-neutral-900">{formatPrice(billboard.pricing.monthly)}</span>
-                                    </div>
-                                </motion.div>
-                            )}
-                        </div>
-                    </motion.div>
-                </div>
-
-                <motion.section
-                    initial={{ opacity: 0, y: 16 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.35, delay: 0.9 }}
-                    className="mt-12"
-                >
-                    <div className="flex items-start justify-between gap-3 mb-5">
-                        <div>
-                            <h2 className="text-2xl font-bold text-neutral-900">Other Billboards</h2>
-                            <p className="text-sm text-neutral-500 mt-1">
-                                Prioritized by {billboard.location.city} first, then {billboard.location.state}, then matching {billboard.category === 'screen' ? 'screen' : 'billboard'} category.
-                            </p>
-                        </div>
-                    </div>
-
-                    {loadingRelated ? (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-                            {[1, 2, 3, 4].map((item) => (
-                                <div key={item} className="rounded-2xl border border-neutral-200 bg-white overflow-hidden">
-                                    <div className="h-48 skeleton-shimmer" />
-                                    <div className="p-4 space-y-2">
-                                        <div className="h-4 w-2/3 skeleton-shimmer" />
-                                        <div className="h-3 w-1/2 skeleton-shimmer" />
-                                        <div className="h-3 w-1/3 skeleton-shimmer" />
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    ) : relatedBillboards.length === 0 ? (
-                        <div className="rounded-2xl border border-neutral-200 bg-white p-6 text-sm text-neutral-500">
-                            No related listings found nearby right now.
-                        </div>
-                    ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-                            {relatedBillboards.map((item) => (
-                                <BillboardCard key={item.id} billboard={item} />
-                            ))}
-                        </div>
-                    )}
-                </motion.section>
-            </motion.main>
-        </div >
+      <div className="min-h-screen bg-[#f7f7f6]">
+        {/* skeleton header */}
+        <div className="sticky top-0 z-40 bg-[#f7f7f6] border-b border-neutral-200/60 h-14" />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+          {/* gallery skeleton */}
+          <div className="rounded-2xl overflow-hidden grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-2 h-[420px] lg:h-[500px]">
+            <div className="skeleton-shimmer rounded-2xl h-full" />
+            <div className="hidden lg:grid grid-rows-2 grid-cols-2 gap-2">
+              {[0, 1, 2, 3].map((i) => (
+                <div key={i} className="skeleton-shimmer rounded-xl" />
+              ))}
+            </div>
+          </div>
+          {/* content skeleton */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-2 space-y-5">
+              <div className="h-9 skeleton-shimmer rounded-xl w-3/4" />
+              <div className="h-5 skeleton-shimmer rounded-xl w-1/2" />
+              <div className="h-36 skeleton-shimmer rounded-2xl" />
+              <div className="h-48 skeleton-shimmer rounded-2xl" />
+            </div>
+            <div className="h-96 skeleton-shimmer rounded-2xl" />
+          </div>
+        </div>
+      </div>
     );
+  }
+
+  /* ── Not found ─────────────────────────────────────────────────────────── */
+
+  if (!billboard) {
+    return (
+      <div className="min-h-screen bg-[#f7f7f6] flex items-center justify-center px-4">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.96 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.3 }}
+          className="max-w-lg w-full"
+        >
+          <EmptyState
+            icon={<MdLocationOn />}
+            title="Billboard Not Found"
+            description="The billboard you're looking for doesn't exist or has been removed."
+            actionLabel="Browse Billboards"
+            actionHref="/listings"
+          />
+        </motion.div>
+      </div>
+    );
+  }
+
+  /* ── Derived display values ────────────────────────────────────────────── */
+
+  const isScreen = billboard.category === "screen";
+  const priceUnit = isScreen ? "hour" : "day";
+  const unitPrice = isScreen
+    ? billboard.pricing.hourly || 0
+    : billboard.pricing.daily;
+  const displayRating =
+    billboard.rating > 0 ? billboard.rating.toFixed(1) : null;
+  const photos = billboard.photos;
+
+  /* ────────────────────────────────────────────────────────────────────────
+       RENDER
+    ──────────────────────────────────────────────────────────────────────── */
+
+  return (
+    <div className="min-h-screen bg-[#f7f7f6]">
+      {/* ── Sticky Header ─────────────────────────────────────────────── */}
+      <motion.header
+        initial={{ y: -10, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.3 }}
+        className="sticky top-0 z-40 bg-[#f7f7f6]/95 backdrop-blur-sm border-b border-neutral-200/70"
+      >
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between gap-4">
+          {/* Left: back + breadcrumb */}
+          <div className="flex items-center gap-3 min-w-0">
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => navigate(-1)}
+              className="flex items-center justify-center w-9 h-9 rounded-xl bg-white border border-neutral-200 text-neutral-600 hover:text-neutral-900 hover:border-neutral-300 transition-all shadow-sm flex-shrink-0"
+            >
+              <MdArrowBack size={18} />
+            </motion.button>
+            <div className="hidden sm:flex items-center gap-2 text-sm text-neutral-500 min-w-0">
+              <Link
+                to="/listings"
+                className="hover:text-neutral-900 transition-colors truncate"
+              >
+                Listings
+              </Link>
+              <span className="text-neutral-300">/</span>
+              <span className="text-neutral-900 font-medium truncate max-w-[220px] lg:max-w-sm">
+                {billboard.title}
+              </span>
+            </div>
+          </div>
+
+          {/* Right: actions */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-neutral-200 text-sm font-medium text-neutral-600 hover:border-neutral-300 hover:text-neutral-900 transition-all shadow-sm"
+            >
+              <MdShare size={16} />
+              <span className="hidden sm:inline">Share</span>
+            </motion.button>
+            {!isOwnerListing && (
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={handleToggleFavorite}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-sm font-medium transition-all shadow-sm ${
+                  isFavorited
+                    ? "bg-red-50 border-red-200 text-red-600"
+                    : "bg-white border-neutral-200 text-neutral-600 hover:border-neutral-300 hover:text-neutral-900"
+                }`}
+              >
+                {isFavorited ? (
+                  <MdFavorite size={16} className="text-red-500" />
+                ) : (
+                  <MdFavoriteBorder size={16} />
+                )}
+                <span className="hidden sm:inline">
+                  {isFavorited ? "Saved" : "Save"}
+                </span>
+              </motion.button>
+            )}
+          </div>
+        </div>
+      </motion.header>
+
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8">
+        {/* ── Gallery (Airbnb-style) ──────────────────────────────── */}
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45 }}
+          className="mb-8"
+        >
+          {photos.length > 0 ? (
+            <div className="relative">
+              {/* Desktop: hero + 2×2 grid */}
+              <div className="hidden lg:grid grid-cols-[3fr_2fr] gap-2 h-[500px] rounded-2xl overflow-hidden">
+                {/* Main photo */}
+                <div className="relative group overflow-hidden bg-neutral-200">
+                  <AnimatePresence mode="wait">
+                    <motion.img
+                      key={currentPhotoIndex}
+                      src={photos[currentPhotoIndex]}
+                      alt={billboard.title}
+                      className="w-full h-full object-cover"
+                      initial={{ opacity: 0, scale: 1.02 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.35 }}
+                    />
+                  </AnimatePresence>
+
+                  {photos.length > 1 && (
+                    <>
+                      <button
+                        onClick={prevPhoto}
+                        className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center shadow-md hover:bg-white transition-colors opacity-0 group-hover:opacity-100"
+                      >
+                        <MdChevronLeft size={22} />
+                      </button>
+                      <button
+                        onClick={nextPhoto}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center shadow-md hover:bg-white transition-colors opacity-0 group-hover:opacity-100"
+                      >
+                        <MdChevronRight size={22} />
+                      </button>
+                    </>
+                  )}
+
+                  {/* Photo counter */}
+                  <div className="absolute bottom-4 left-4 px-3 py-1.5 bg-black/50 backdrop-blur-sm rounded-full text-white text-xs font-medium">
+                    {currentPhotoIndex + 1} / {photos.length}
+                  </div>
+                </div>
+
+                {/* Thumbnail 2×2 grid */}
+                <div className="grid grid-rows-2 grid-cols-2 gap-2">
+                  {[1, 2, 3, 4].map((offset) => {
+                    const photoIdx = offset < photos.length ? offset : -1;
+                    const isActive = photoIdx === currentPhotoIndex;
+                    return photoIdx >= 0 ? (
+                      <button
+                        key={offset}
+                        onClick={() => setCurrentPhotoIndex(photoIdx)}
+                        className={`relative overflow-hidden bg-neutral-200 transition-all ${
+                          isActive
+                            ? "ring-2 ring-inset ring-white"
+                            : "hover:brightness-90"
+                        } ${offset === 4 ? "relative" : ""}`}
+                      >
+                        <img
+                          src={photos[photoIdx]}
+                          alt={`${billboard.title} ${photoIdx + 1}`}
+                          className="w-full h-full object-cover"
+                        />
+                        {/* "Show all" button on last visible slot */}
+                        {offset === 4 && photos.length > 5 && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setShowAllPhotos(true);
+                            }}
+                            className="absolute inset-0 bg-black/50 flex items-center justify-center gap-2 text-white font-semibold text-sm hover:bg-black/60 transition-colors"
+                          >
+                            <MdGridView size={18} />+{photos.length - 4} more
+                          </button>
+                        )}
+                      </button>
+                    ) : (
+                      <div key={offset} className="bg-neutral-100" />
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Mobile: single photo with arrows */}
+              <div className="lg:hidden relative h-[280px] sm:h-[380px] rounded-2xl overflow-hidden bg-neutral-200">
+                <AnimatePresence mode="wait">
+                  <motion.img
+                    key={currentPhotoIndex}
+                    src={photos[currentPhotoIndex]}
+                    alt={billboard.title}
+                    className="w-full h-full object-cover"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.25 }}
+                  />
+                </AnimatePresence>
+                {photos.length > 1 && (
+                  <>
+                    <button
+                      onClick={prevPhoto}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center shadow"
+                    >
+                      <MdChevronLeft size={20} />
+                    </button>
+                    <button
+                      onClick={nextPhoto}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center shadow"
+                    >
+                      <MdChevronRight size={20} />
+                    </button>
+                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5">
+                      {photos.slice(0, 7).map((_, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => setCurrentPhotoIndex(idx)}
+                          className={`h-1.5 rounded-full transition-all ${
+                            idx === currentPhotoIndex
+                              ? "bg-white w-5"
+                              : "bg-white/50 w-1.5"
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
+                <div className="absolute bottom-4 right-4 px-2.5 py-1 bg-black/50 backdrop-blur-sm rounded-full text-white text-xs font-medium">
+                  {currentPhotoIndex + 1} / {photos.length}
+                </div>
+              </div>
+
+              {/* Show-all button below gallery on desktop */}
+              {photos.length > 5 && (
+                <button
+                  onClick={() => setShowAllPhotos(true)}
+                  className="hidden lg:flex items-center gap-2 mt-3 ml-auto px-4 py-2 bg-white border border-neutral-200 rounded-xl text-sm font-medium text-neutral-700 hover:bg-neutral-50 hover:border-neutral-300 transition-all shadow-sm"
+                >
+                  <MdGridView size={16} />
+                  Show all {photos.length} photos
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="h-[320px] sm:h-[420px] flex items-center justify-center rounded-2xl bg-neutral-100 border border-neutral-200">
+              <p className="text-neutral-400 text-sm">No photos available</p>
+            </div>
+          )}
+        </motion.div>
+
+        {/* ── All-photos lightbox ─────────────────────────────────── */}
+        <AnimatePresence>
+          {showAllPhotos && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="fixed inset-0 z-50 bg-black/90 flex flex-col"
+            >
+              <div className="flex items-center justify-between px-5 py-4">
+                <span className="text-white font-semibold">
+                  {currentPhotoIndex + 1} / {photos.length}
+                </span>
+                <button
+                  onClick={() => setShowAllPhotos(false)}
+                  className="w-9 h-9 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center text-white transition-colors"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="flex-1 flex items-center justify-center relative px-4">
+                <button
+                  onClick={prevPhoto}
+                  className="absolute left-4 w-11 h-11 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center text-white transition-colors"
+                >
+                  <MdChevronLeft size={24} />
+                </button>
+                <img
+                  src={photos[currentPhotoIndex]}
+                  alt={billboard.title}
+                  className="max-h-[75vh] max-w-full rounded-xl object-contain"
+                />
+                <button
+                  onClick={nextPhoto}
+                  className="absolute right-4 w-11 h-11 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center text-white transition-colors"
+                >
+                  <MdChevronRight size={24} />
+                </button>
+              </div>
+              <div className="flex gap-2 overflow-x-auto px-5 py-4 scrollbar-hide">
+                {photos.map((photo, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setCurrentPhotoIndex(idx)}
+                    className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden transition-all ${
+                      idx === currentPhotoIndex
+                        ? "ring-2 ring-white ring-offset-1 ring-offset-black"
+                        : "opacity-50 hover:opacity-75"
+                    }`}
+                  >
+                    <img
+                      src={photo}
+                      alt=""
+                      className="w-full h-full object-cover"
+                    />
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* ── Main 2-column layout ────────────────────────────────── */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* ── Left: Main content ─────────────────────────────── */}
+          <div className="lg:col-span-2 space-y-5">
+            {/* Title, badges & location */}
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.15 }}
+              className="bg-white border border-neutral-200 rounded-2xl p-6 shadow-sm"
+            >
+              {/* Badge row */}
+              <div className="flex items-center gap-2 flex-wrap mb-3">
+                <span className="px-2.5 py-1 bg-neutral-900 text-white rounded-full text-xs font-semibold capitalize">
+                  {isScreen ? "Digital Screen" : billboard.type}
+                </span>
+                {billboard.hasLighting && !isScreen && (
+                  <span className="px-2.5 py-1 bg-[#d4f34a] text-green-900 rounded-full text-xs font-semibold flex items-center gap-1">
+                    <MdLightMode size={12} /> Illuminated
+                  </span>
+                )}
+                {billboard.bookingRules.instantBook && (
+                  <span className="px-2.5 py-1 bg-[#d4f34a] text-green-900 rounded-full text-xs font-semibold flex items-center gap-1">
+                    <MdBolt size={12} /> Instant Book
+                  </span>
+                )}
+                {billboard.trafficScore >= 9 && (
+                  <span className="px-2.5 py-1 bg-rose-500 text-white rounded-full text-xs font-semibold flex items-center gap-1">
+                    <MdOutlineLocalFireDepartment size={12} /> Rare Find
+                  </span>
+                )}
+              </div>
+
+              {/* Title */}
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-neutral-900 tracking-tight mb-3">
+                {billboard.title}
+              </h1>
+
+              {/* Location */}
+              <div className="flex items-start gap-2 text-neutral-500 text-sm">
+                <MdLocationOn
+                  size={18}
+                  className="text-neutral-400 mt-0.5 flex-shrink-0"
+                />
+                <span>
+                  {billboard.location.address}, {billboard.location.city},{" "}
+                  {billboard.location.state}
+                </span>
+              </div>
+
+              {/* Rating row */}
+              {(displayRating || billboard.reviewCount > 0) && (
+                <div className="flex items-center gap-3 mt-4 pt-4 border-t border-neutral-100">
+                  {displayRating && (
+                    <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-0.5 bg-[#d4f34a] px-2 py-0.5 rounded-full">
+                        <MdStar size={13} className="text-green-900" />
+                        <span className="text-xs font-bold text-green-900">
+                          {displayRating}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                  {billboard.reviewCount > 0 && (
+                    <span className="text-sm text-neutral-500 underline cursor-pointer hover:text-neutral-700">
+                      {billboard.reviewCount} review
+                      {billboard.reviewCount !== 1 ? "s" : ""}
+                    </span>
+                  )}
+                  <span className="text-neutral-300">·</span>
+                  <span className="text-sm text-neutral-500">
+                    {billboard.totalBookings} bookings
+                  </span>
+                </div>
+              )}
+            </motion.div>
+
+            {/* Specs strip */}
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.2 }}
+              className="bg-white border border-neutral-200 rounded-2xl p-5 shadow-sm"
+            >
+              <h2 className="text-sm font-semibold text-neutral-500 uppercase tracking-wide mb-4">
+                Specifications
+              </h2>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {/* Dimensions */}
+                <div className="flex items-start gap-3 p-3 bg-neutral-50 rounded-xl">
+                  <div className="w-8 h-8 rounded-lg bg-neutral-200 flex items-center justify-center flex-shrink-0">
+                    <MdCropFree size={16} className="text-neutral-600" />
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-medium text-neutral-400 uppercase tracking-wide">
+                      Size
+                    </p>
+                    <p className="text-sm font-bold text-neutral-900 mt-0.5">
+                      {billboard.dimensions.width}×{billboard.dimensions.height}
+                      <span className="text-xs font-normal text-neutral-500 ml-1">
+                        {billboard.dimensions.unit}
+                      </span>
+                    </p>
+                  </div>
+                </div>
+
+                {/* Orientation */}
+                <div className="flex items-start gap-3 p-3 bg-neutral-50 rounded-xl">
+                  <div className="w-8 h-8 rounded-lg bg-neutral-200 flex items-center justify-center flex-shrink-0">
+                    <MdScreenRotation size={16} className="text-neutral-600" />
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-medium text-neutral-400 uppercase tracking-wide">
+                      Orientation
+                    </p>
+                    <p className="text-sm font-bold text-neutral-900 mt-0.5 capitalize">
+                      {billboard.orientation}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Traffic */}
+                <div className="flex items-start gap-3 p-3 bg-neutral-50 rounded-xl">
+                  <div className="w-8 h-8 rounded-lg bg-[#d4f34a] flex items-center justify-center flex-shrink-0">
+                    <MdTrendingUp size={16} className="text-green-900" />
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-medium text-neutral-400 uppercase tracking-wide">
+                      Traffic
+                    </p>
+                    <p className="text-sm font-bold text-neutral-900 mt-0.5">
+                      {billboard.trafficScore}
+                      <span className="text-xs font-normal text-neutral-500">
+                        /10
+                      </span>
+                    </p>
+                  </div>
+                </div>
+
+                {/* Rating */}
+                <div className="flex items-start gap-3 p-3 bg-neutral-50 rounded-xl">
+                  <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0">
+                    <MdStar size={16} className="text-amber-500" />
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-medium text-neutral-400 uppercase tracking-wide">
+                      Rating
+                    </p>
+                    <p className="text-sm font-bold text-neutral-900 mt-0.5">
+                      {billboard.rating > 0
+                        ? billboard.rating.toFixed(1)
+                        : "New"}
+                      {billboard.reviewCount > 0 && (
+                        <span className="text-xs font-normal text-neutral-500 ml-1">
+                          ({billboard.reviewCount})
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Description */}
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.25 }}
+              className="bg-white border border-neutral-200 rounded-2xl p-6 shadow-sm"
+            >
+              <h2 className="text-base font-bold text-neutral-900 mb-3">
+                About This {isScreen ? "Screen" : "Billboard"}
+              </h2>
+              <p className="text-neutral-600 leading-relaxed text-sm">
+                {billboard.description}
+              </p>
+            </motion.div>
+
+            {/* Location map */}
+            {(billboard.location.lat !== 0 ||
+              billboard.location.lng !== 0 ||
+              billboard.location.address) && (
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.3 }}
+                className="bg-white border border-neutral-200 rounded-2xl p-6 shadow-sm"
+              >
+                <h2 className="text-base font-bold text-neutral-900 mb-1 flex items-center gap-2">
+                  <MdLocationOn size={18} className="text-neutral-400" />
+                  Location
+                </h2>
+                <p className="text-sm text-neutral-500 mb-4">
+                  {billboard.location.address}, {billboard.location.city},{" "}
+                  {billboard.location.state}
+                </p>
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+                  {billboard.location.lat !== 0 &&
+                    billboard.location.lng !== 0 && (
+                      <GoogleMapPanel
+                        latitude={billboard.location.lat}
+                        longitude={billboard.location.lng}
+                        title="Billboard Location"
+                        subtitle="Exact placement on Google Maps."
+                        heightClassName="h-[300px]"
+                      />
+                    )}
+                  <StreetViewPanel
+                    latitude={
+                      billboard.location.lat !== 0
+                        ? billboard.location.lat
+                        : undefined
+                    }
+                    longitude={
+                      billboard.location.lng !== 0
+                        ? billboard.location.lng
+                        : undefined
+                    }
+                    addressFallback={[
+                      billboard.location.address,
+                      billboard.location.city,
+                      billboard.location.state,
+                      billboard.location.country,
+                    ]
+                      .filter(Boolean)
+                      .join(", ")}
+                    title="Street-Level View"
+                    subtitle="See the billboard from the road."
+                    heightClassName="h-[300px]"
+                  />
+                </div>
+                {billboard.location.lat !== 0 &&
+                  billboard.location.lng !== 0 && (
+                    <p className="text-[11px] text-neutral-400 mt-3 font-mono">
+                      {billboard.location.lat.toFixed(6)},{" "}
+                      {billboard.location.lng.toFixed(6)}
+                    </p>
+                  )}
+              </motion.div>
+            )}
+
+            {/* Owner card */}
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.35 }}
+              className="bg-white border border-neutral-200 rounded-2xl p-6 shadow-sm"
+            >
+              <h2 className="text-base font-bold text-neutral-900 mb-4">
+                Hosted by
+              </h2>
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 rounded-full bg-neutral-900 flex items-center justify-center text-white text-xl font-bold flex-shrink-0">
+                    {billboard.ownerName.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <p className="font-bold text-neutral-900 flex items-center gap-1.5">
+                      {billboard.ownerName}
+                      {billboard.ownerVerified && (
+                        <MdVerified size={16} className="text-green-600" />
+                      )}
+                    </p>
+                    <p className="text-sm text-neutral-500 mt-0.5">
+                      {billboard.totalBookings} successful booking
+                      {billboard.totalBookings !== 1 ? "s" : ""}
+                    </p>
+                  </div>
+                </div>
+                {!isOwnerListing && (
+                  <Button
+                    variant="outline"
+                    icon={<MdMessage />}
+                    onClick={handleContact}
+                    className="!rounded-xl !text-sm flex-shrink-0"
+                  >
+                    Message
+                  </Button>
+                )}
+              </div>
+            </motion.div>
+
+            {/* Reviews */}
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.4 }}
+              className="bg-white border border-neutral-200 rounded-2xl p-6 shadow-sm"
+            >
+              <div className="flex items-center justify-between mb-5">
+                <div className="flex items-center gap-3">
+                  <h2 className="text-base font-bold text-neutral-900">
+                    Reviews
+                  </h2>
+                  {displayRating && (
+                    <div className="flex items-center gap-1 px-2.5 py-1 bg-[#d4f34a] rounded-full">
+                      <MdStar size={13} className="text-green-900" />
+                      <span className="text-xs font-bold text-green-900">
+                        {displayRating}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <span className="text-sm text-neutral-500">
+                  {reviews.length} total
+                </span>
+              </div>
+
+              {reviews.length === 0 ? (
+                <div className="text-center py-10 text-neutral-400">
+                  <MdStar size={32} className="mx-auto mb-2 opacity-30" />
+                  <p className="text-sm">
+                    No reviews yet. Be the first after your campaign!
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {reviews.map((review) => (
+                    <div
+                      key={review.id}
+                      className="p-4 bg-neutral-50 rounded-xl"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="w-9 h-9 rounded-full bg-neutral-200 flex items-center justify-center text-neutral-700 text-sm font-bold flex-shrink-0">
+                          {review.advertiserName.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-sm font-semibold text-neutral-900">
+                              {review.advertiserName}
+                            </p>
+                            <span className="text-xs text-neutral-400 flex-shrink-0">
+                              {formatDate(review.createdAt)}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-0.5 mt-1 mb-2">
+                            {[1, 2, 3, 4, 5].map((star) => (
+                              <MdStar
+                                key={star}
+                                size={13}
+                                className={
+                                  star <= review.rating
+                                    ? "text-amber-400"
+                                    : "text-neutral-200"
+                                }
+                              />
+                            ))}
+                          </div>
+                          <p className="text-sm text-neutral-600 leading-relaxed">
+                            {review.comment}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </motion.div>
+          </div>
+
+          {/* ── Right: Booking sidebar ──────────────────────────── */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.2 }}
+            className="lg:col-span-1"
+          >
+            <div className="lg:sticky lg:top-20 space-y-4">
+              {/* Price card */}
+              <div className="bg-white border border-neutral-200 rounded-2xl p-5 shadow-sm">
+                {/* Price header */}
+                <div className="mb-4 pb-4 border-b border-neutral-100">
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-2xl sm:text-3xl font-extrabold text-neutral-900">
+                      {formatPrice(unitPrice)}
+                    </span>
+                    <span className="text-sm text-neutral-500 font-medium">
+                      / {priceUnit}
+                    </span>
+                  </div>
+                  {!isScreen && (
+                    <div className="flex items-center gap-4 mt-2 text-xs text-neutral-500">
+                      <span>
+                        <span className="font-semibold text-neutral-700">
+                          {formatPrice(billboard.pricing.weekly)}
+                        </span>{" "}
+                        / week
+                      </span>
+                      <span className="text-neutral-300">·</span>
+                      <span>
+                        <span className="font-semibold text-neutral-700">
+                          {formatPrice(billboard.pricing.monthly)}
+                        </span>{" "}
+                        / month
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Date inputs */}
+                <div className="space-y-3 mb-4">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-1.5">
+                        {isScreen ? "Start" : "Check-in"}
+                      </label>
+                      <input
+                        type={isScreen ? "datetime-local" : "date"}
+                        value={startDate}
+                        onChange={(e) => setStartDate(e.target.value)}
+                        min={
+                          isScreen
+                            ? new Date().toISOString().slice(0, 16)
+                            : new Date().toISOString().split("T")[0]
+                        }
+                        className="w-full px-3 py-2.5 rounded-xl border border-neutral-300 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-neutral-900 transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-1.5">
+                        {isScreen ? "End" : "Check-out"}
+                      </label>
+                      <input
+                        type={isScreen ? "datetime-local" : "date"}
+                        value={endDate}
+                        onChange={(e) => setEndDate(e.target.value)}
+                        min={
+                          startDate ||
+                          (isScreen
+                            ? new Date().toISOString().slice(0, 16)
+                            : new Date().toISOString().split("T")[0])
+                        }
+                        className="w-full px-3 py-2.5 rounded-xl border border-neutral-300 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-neutral-900 transition-all"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Price breakdown */}
+                <AnimatePresence>
+                  {bookingDuration > 0 && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="bg-neutral-50 rounded-xl p-4 mb-4 space-y-2 text-sm">
+                        <div className="flex justify-between text-neutral-600">
+                          <span>
+                            {formatPrice(unitPrice)} × {bookingDuration}{" "}
+                            {isScreen ? "hr" : "day"}
+                            {bookingDuration !== 1 ? "s" : ""}
+                          </span>
+                          <span>
+                            {formatPrice(unitPrice * bookingDuration)}
+                          </span>
+                        </div>
+                        <div className="h-px bg-neutral-200" />
+                        <div className="flex justify-between font-bold text-neutral-900">
+                          <span>Total</span>
+                          <span>{formatPrice(totalPrice)}</span>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* CTA */}
+                {isOwnerListing ? (
+                  <div className="rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-500 text-center">
+                    This is your listing
+                  </div>
+                ) : (
+                  <Button
+                    fullWidth
+                    size="lg"
+                    onClick={handleBooking}
+                    disabled={isBooking}
+                    className="!bg-[#d4f34a] !text-green-900 hover:!bg-[#c8ee3d] !rounded-xl !font-bold !shadow-none"
+                  >
+                    {isBooking ? "Processing..." : "Request to Book"}
+                  </Button>
+                )}
+
+                <p className="text-[11px] text-neutral-400 text-center mt-3 leading-relaxed">
+                  {billboard.bookingRules.instantBook
+                    ? "Dates confirmed instantly. Payment collected only after creative approval."
+                    : "Owner reviews first. Payment collected only after approval."}
+                </p>
+              </div>
+
+              {/* Creative requirements card */}
+              <div className="bg-white border border-neutral-200 rounded-2xl p-5 shadow-sm">
+                <p className="text-sm font-bold text-neutral-900 mb-1">
+                  Creative Requirements
+                </p>
+                <p className="text-xs text-neutral-500 mb-4">
+                  Owner reviews your creative before the campaign goes live.
+                </p>
+
+                <div className="space-y-2 mb-4">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setCreativeRequirementType("advertiser_upload")
+                    }
+                    className={`w-full rounded-xl border-2 p-3.5 text-left transition-all ${
+                      creativeRequirementType === "advertiser_upload"
+                        ? "border-neutral-900 bg-white"
+                        : "border-transparent bg-neutral-50 hover:bg-neutral-100"
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div
+                        className={`mt-0.5 rounded-lg p-1.5 ${
+                          creativeRequirementType === "advertiser_upload"
+                            ? "bg-[#d4f34a]"
+                            : "bg-neutral-200"
+                        }`}
+                      >
+                        <MdUpload
+                          size={15}
+                          className={
+                            creativeRequirementType === "advertiser_upload"
+                              ? "text-green-900"
+                              : "text-neutral-600"
+                          }
+                        />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-neutral-900">
+                          I have a design ready
+                        </p>
+                        <p className="text-[11px] text-neutral-500 mt-0.5">
+                          Upload artwork for owner approval.
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setCreativeRequirementType("owner_design_service")
+                    }
+                    className={`w-full rounded-xl border-2 p-3.5 text-left transition-all ${
+                      creativeRequirementType === "owner_design_service"
+                        ? "border-neutral-900 bg-white"
+                        : "border-transparent bg-neutral-50 hover:bg-neutral-100"
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div
+                        className={`mt-0.5 rounded-lg p-1.5 ${
+                          creativeRequirementType === "owner_design_service"
+                            ? "bg-[#d4f34a]"
+                            : "bg-neutral-200"
+                        }`}
+                      >
+                        <MdDesignServices
+                          size={15}
+                          className={
+                            creativeRequirementType === "owner_design_service"
+                              ? "text-green-900"
+                              : "text-neutral-600"
+                          }
+                        />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-neutral-900">
+                          Need design service
+                        </p>
+                        <p className="text-[11px] text-neutral-500 mt-0.5">
+                          Provide a brief for the owner.
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+                </div>
+
+                {/* Upload area */}
+                {creativeRequirementType === "advertiser_upload" && (
+                  <div className="space-y-3 mb-4">
+                    <label className="flex flex-col cursor-pointer items-center justify-center rounded-xl border border-dashed border-neutral-300 bg-neutral-50 px-4 py-4 text-center hover:border-neutral-400 hover:bg-neutral-100 transition-colors">
+                      <MdUpload size={20} className="text-neutral-400 mb-1.5" />
+                      <p className="text-xs font-medium text-neutral-700">
+                        Click to upload files
+                      </p>
+                      <p className="text-[11px] text-neutral-400 mt-0.5">
+                        PNG, JPG or PDF
+                      </p>
+                      <input
+                        type="file"
+                        accept="image/*,application/pdf,.pdf"
+                        multiple
+                        onChange={handleDesignUpload}
+                        className="hidden"
+                      />
+                    </label>
+
+                    {designPreviewUrls.length > 0 && (
+                      <div className="grid grid-cols-3 gap-2">
+                        {designPreviewUrls.map((url, index) => {
+                          const file = designFiles[index];
+                          if (file && isPdfFile(file)) {
+                            return (
+                              <a
+                                key={url}
+                                href={url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="flex h-16 w-full flex-col items-center justify-center rounded-lg border border-red-200 bg-red-50 px-2 text-center"
+                              >
+                                <MdPictureAsPdf
+                                  size={22}
+                                  className="text-red-500"
+                                />
+                                <span className="mt-0.5 line-clamp-1 text-[10px] font-medium text-red-600">
+                                  {file.name}
+                                </span>
+                              </a>
+                            );
+                          }
+                          return (
+                            <img
+                              key={url}
+                              src={url}
+                              alt={`Upload ${index + 1}`}
+                              className="h-16 w-full rounded-lg object-cover border border-neutral-200"
+                            />
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Brief textarea */}
+                <div>
+                  <label className="block text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-1.5">
+                    {creativeRequirementType === "advertiser_upload"
+                      ? "Creative notes (optional)"
+                      : "Design brief"}
+                  </label>
+                  <textarea
+                    value={creativeBrief}
+                    onChange={(e) => setCreativeBrief(e.target.value)}
+                    rows={3}
+                    placeholder={
+                      creativeRequirementType === "advertiser_upload"
+                        ? "Add brand, sizing, or placement notes for the owner."
+                        : "Describe the offer, audience, CTA, colours, and message for the owner."
+                    }
+                    className="w-full px-3 py-2.5 rounded-xl border border-neutral-300 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-neutral-900 resize-none transition-all"
+                  />
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+
+        {/* ── Related billboards (e-commerce grid) ───────────────── */}
+        <motion.section
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.5 }}
+          className="mt-14"
+        >
+          {/* Section header */}
+          <div className="flex items-end justify-between gap-4 mb-6">
+            <div>
+              <p className="text-xs font-semibold text-neutral-400 uppercase tracking-widest mb-1">
+                You might also like
+              </p>
+              <h2 className="text-xl sm:text-2xl font-extrabold text-neutral-900">
+                More in {billboard.location.city}
+              </h2>
+              <p className="text-sm text-neutral-500 mt-1">
+                Similar {isScreen ? "screens" : "billboards"} near{" "}
+                {billboard.location.city}, {billboard.location.state}
+              </p>
+            </div>
+            <Link
+              to="/listings"
+              className="flex-shrink-0 text-sm font-semibold text-neutral-900 underline underline-offset-2 hover:text-neutral-600 transition-colors"
+            >
+              See all →
+            </Link>
+          </div>
+
+          <div className="h-px bg-neutral-200 mb-6" />
+
+          {/* Grid */}
+          {loadingRelated ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {[1, 2, 3, 4, 5, 6, 7, 8].map((item) => (
+                <div
+                  key={item}
+                  className="rounded-2xl border border-neutral-200 bg-white overflow-hidden"
+                >
+                  <div className="h-48 skeleton-shimmer" />
+                  <div className="p-4 space-y-2.5">
+                    <div className="h-4 w-3/4 skeleton-shimmer rounded-lg" />
+                    <div className="h-3 w-1/2 skeleton-shimmer rounded-lg" />
+                    <div className="h-3 w-2/3 skeleton-shimmer rounded-lg" />
+                    <div className="flex justify-between items-center pt-1">
+                      <div className="h-5 w-1/3 skeleton-shimmer rounded-lg" />
+                      <div className="h-8 w-24 skeleton-shimmer rounded-full" />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : relatedBillboards.length === 0 ? (
+            <div className="rounded-2xl border border-neutral-200 bg-white p-8 text-center">
+              <MdLocationOn
+                size={32}
+                className="mx-auto text-neutral-300 mb-2"
+              />
+              <p className="text-sm text-neutral-500">
+                No other listings found nearby right now.
+              </p>
+            </div>
+          ) : (
+            <motion.div
+              initial="hidden"
+              animate="visible"
+              variants={{
+                hidden: { opacity: 0 },
+                visible: { opacity: 1, transition: { staggerChildren: 0.06 } },
+              }}
+              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
+            >
+              {relatedBillboards.map((item) => (
+                <motion.div
+                  key={item.id}
+                  variants={{
+                    hidden: { opacity: 0, y: 16 },
+                    visible: {
+                      opacity: 1,
+                      y: 0,
+                      transition: { duration: 0.35, ease: "easeOut" },
+                    },
+                  }}
+                >
+                  <BillboardCard billboard={item} />
+                </motion.div>
+              ))}
+            </motion.div>
+          )}
+
+          {/* Browse all CTA */}
+          {!loadingRelated && relatedBillboards.length > 0 && (
+            <div className="mt-8 text-center">
+              <Link
+                to="/listings"
+                className="inline-flex items-center gap-2 px-6 py-3 bg-white border border-neutral-200 rounded-2xl text-sm font-semibold text-neutral-700 hover:bg-neutral-50 hover:border-neutral-300 transition-all shadow-sm"
+              >
+                Browse all billboards →
+              </Link>
+            </div>
+          )}
+        </motion.section>
+      </main>
+    </div>
+  );
 };
 
 export default BillboardDetails;
