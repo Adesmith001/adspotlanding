@@ -46,7 +46,7 @@ const timestampToDate = (timestamp: any): Date => {
 };
 
 const resolveLiveBookingStatus = (
-  booking: Booking,
+  booking: Booking
 ): Pick<Booking, "status" | "campaignStartedAt"> => {
   if (
     ["cancelled", "completed", "rejected", "pending"].includes(booking.status)
@@ -78,7 +78,7 @@ export const createBillboard = async (
   ownerId: string,
   ownerName: string,
   data: CreateBillboardForm,
-  photos: File[],
+  photos: File[]
 ): Promise<string> => {
   try {
     // Upload photos to Cloudinary
@@ -141,7 +141,7 @@ export const createBillboard = async (
 
     const docRef = await addDoc(
       collection(db, BILLBOARDS_COLLECTION),
-      billboard,
+      billboard
     );
     return docRef.id;
   } catch (error: any) {
@@ -152,7 +152,7 @@ export const createBillboard = async (
       stack: error.stack,
     });
     throw new Error(
-      `Failed to create billboard listing: ${error.message || "Unknown error"}`,
+      `Failed to create billboard listing: ${error.message || "Unknown error"}`
     );
   }
 };
@@ -161,7 +161,7 @@ export const createBillboard = async (
  * Get billboard by ID
  */
 export const getBillboard = async (
-  billboardId: string,
+  billboardId: string
 ): Promise<Billboard | null> => {
   try {
     if (!billboardId) {
@@ -202,7 +202,7 @@ export const searchBillboards = async (
   filters: SearchFilters,
   sortBy: SortOption = "newest",
   pageSize: number = 20,
-  lastDoc?: DocumentSnapshot,
+  lastDoc?: DocumentSnapshot
 ): Promise<{ billboards: Billboard[]; lastDoc: DocumentSnapshot | null }> => {
   const mapDocsToBillboards = (docs: Array<{ id: string; data: () => any }>) =>
     docs.map((entry) => {
@@ -232,10 +232,7 @@ export const searchBillboards = async (
         item.hasLighting !== filters.hasLighting
       )
         return false;
-      if (
-        filters.instantBookOnly &&
-        item.bookingRules?.instantBook !== true
-      )
+      if (filters.instantBookOnly && item.bookingRules?.instantBook !== true)
         return false;
       if (
         typeof filters.minRating === "number" &&
@@ -248,9 +245,10 @@ export const searchBillboards = async (
       )
         return false;
 
-      const itemPrice = item.category === "screen"
-        ? item.pricing.hourly || 0
-        : item.pricing.daily;
+      const itemPrice =
+        item.category === "screen"
+          ? item.pricing.hourly || 0
+          : item.pricing.daily;
       if (typeof filters.minPrice === "number" && itemPrice < filters.minPrice)
         return false;
       if (typeof filters.maxPrice === "number" && itemPrice > filters.maxPrice)
@@ -280,7 +278,9 @@ export const searchBillboards = async (
 
   const sortItems = (items: Billboard[]): Billboard[] => {
     const getComparablePrice = (item: Billboard) =>
-      item.category === "screen" ? item.pricing.hourly || 0 : item.pricing.daily;
+      item.category === "screen"
+        ? item.pricing.hourly || 0
+        : item.pricing.daily;
 
     return [...items].sort((a, b) => {
       switch (sortBy) {
@@ -390,7 +390,7 @@ export const searchBillboards = async (
         collection(db, BILLBOARDS_COLLECTION),
         where("status", "==", "active"),
         orderBy("createdAt", "desc"),
-        limit(200),
+        limit(200)
       );
 
       const fallbackSnapshot = await getDocs(fallbackQuery);
@@ -399,7 +399,9 @@ export const searchBillboards = async (
 
       let startIndex = 0;
       if (lastDoc?.id) {
-        const cursorIndex = filteredItems.findIndex((item) => item.id === lastDoc.id);
+        const cursorIndex = filteredItems.findIndex(
+          (item) => item.id === lastDoc.id
+        );
         startIndex = cursorIndex >= 0 ? cursorIndex + 1 : 0;
       }
 
@@ -419,13 +421,13 @@ export const searchBillboards = async (
  * Get billboards by owner
  */
 export const getOwnerBillboards = async (
-  ownerId: string,
+  ownerId: string
 ): Promise<Billboard[]> => {
   try {
     const q = query(
       collection(db, BILLBOARDS_COLLECTION),
       where("ownerId", "==", ownerId),
-      orderBy("createdAt", "desc"),
+      orderBy("createdAt", "desc")
     );
 
     const querySnapshot = await getDocs(q);
@@ -449,11 +451,11 @@ export const getOwnerBillboards = async (
  */
 export const subscribeToOwnerBillboards = (
   ownerId: string,
-  callback: (billboards: Billboard[]) => void,
+  callback: (billboards: Billboard[]) => void
 ): (() => void) => {
   const q = query(
     collection(db, BILLBOARDS_COLLECTION),
-    where("ownerId", "==", ownerId),
+    where("ownerId", "==", ownerId)
   );
 
   return onSnapshot(
@@ -475,7 +477,7 @@ export const subscribeToOwnerBillboards = (
     },
     (error) => {
       console.error("Error subscribing to owner billboards:", error);
-    },
+    }
   );
 };
 
@@ -484,7 +486,7 @@ export const subscribeToOwnerBillboards = (
  */
 export const updateBillboard = async (
   billboardId: string,
-  updates: Partial<Billboard>,
+  updates: Partial<Billboard>
 ): Promise<void> => {
   try {
     const docRef = doc(db, BILLBOARDS_COLLECTION, billboardId);
@@ -512,10 +514,55 @@ export const deleteBillboard = async (billboardId: string): Promise<void> => {
 };
 
 /**
+ * Check whether a billboard has any bookings that are still pending,
+ * confirmed, or actively running. Uses a single-field query so no
+ * composite Firestore index is required — active-status filtering is
+ * done client-side.
+ */
+export const checkBillboardHasActiveBookings = async (
+  billboardId: string
+): Promise<{ hasActive: boolean; reason: string | null }> => {
+  try {
+    const q = query(
+      collection(db, BOOKINGS_COLLECTION),
+      where("billboardId", "==", billboardId)
+    );
+    const snapshot = await getDocs(q);
+
+    const BLOCKING_STATUSES: Booking["status"][] = [
+      "pending",
+      "confirmed",
+      "active",
+    ];
+
+    const blocking = snapshot.docs.find((d) =>
+      BLOCKING_STATUSES.includes(d.data().status as Booking["status"])
+    );
+
+    if (!blocking) return { hasActive: false, reason: null };
+
+    const status = blocking.data().status as Booking["status"];
+    const reasonMap: Record<string, string> = {
+      pending: "a booking request is awaiting your approval",
+      confirmed: "a confirmed booking is scheduled for this listing",
+      active: "a campaign is currently running on this listing",
+    };
+
+    return {
+      hasActive: true,
+      reason: reasonMap[status] ?? "there is an active booking on this listing",
+    };
+  } catch (error) {
+    console.error("Error checking active bookings:", error);
+    throw new Error("Failed to check active bookings");
+  }
+};
+
+/**
  * Increment billboard views
  */
 export const incrementBillboardViews = async (
-  billboardId: string,
+  billboardId: string
 ): Promise<void> => {
   try {
     const docRef = doc(db, BILLBOARDS_COLLECTION, billboardId);
@@ -539,7 +586,7 @@ export const createBooking = async (
   advertiserId: string,
   advertiserName: string,
   advertiserEmail: string,
-  request: BookingRequest,
+  request: BookingRequest
 ): Promise<string> => {
   try {
     // Get billboard details
@@ -553,8 +600,9 @@ export const createBooking = async (
     }
 
     // Calculate duration and price based on category/unit
-    const isHourly = request.durationUnit === "hours" || billboard.category === "screen";
-    
+    const isHourly =
+      request.durationUnit === "hours" || billboard.category === "screen";
+
     let duration = 0;
     let pricePerUnit = 0;
     let totalAmount = 0;
@@ -562,14 +610,14 @@ export const createBooking = async (
     if (isHourly) {
       duration = Math.ceil(
         (request.endDate.getTime() - request.startDate.getTime()) /
-          (1000 * 60 * 60),
+          (1000 * 60 * 60)
       );
       pricePerUnit = billboard.pricing.hourly || 0;
       totalAmount = pricePerUnit * duration;
     } else {
       duration = Math.ceil(
         (request.endDate.getTime() - request.startDate.getTime()) /
-          (1000 * 60 * 60 * 24),
+          (1000 * 60 * 60 * 24)
       );
       pricePerUnit = billboard.pricing.daily;
       totalAmount = pricePerUnit * duration;
@@ -631,7 +679,7 @@ export const createBooking = async (
       `Hi, I just booked \"${
         billboard.title
       }\" from ${request.startDate.toLocaleDateString(
-        "en-NG",
+        "en-NG"
       )} to ${request.endDate.toLocaleDateString("en-NG")}.`,
       creativeSummary,
       request.message?.trim() || "",
@@ -647,7 +695,7 @@ export const createBooking = async (
       "New Booking Request",
       `${advertiserName} submitted a booking request for \"${billboard.title}\" with creative details ready for review.`,
       { bookingId: docRef.id, billboardId: billboard.id },
-      "/dashboard/owner/bookings",
+      "/dashboard/owner/bookings"
     );
 
     return docRef.id;
@@ -661,7 +709,7 @@ export const createBooking = async (
  * Get booking by ID
  */
 export const getBooking = async (
-  bookingId: string,
+  bookingId: string
 ): Promise<Booking | null> => {
   try {
     const docRef = doc(db, BOOKINGS_COLLECTION, bookingId);
@@ -689,13 +737,13 @@ export const getBooking = async (
  * Get bookings for advertiser
  */
 export const getAdvertiserBookings = async (
-  advertiserId: string,
+  advertiserId: string
 ): Promise<Booking[]> => {
   try {
     // No server-side orderBy to avoid composite index requirement; sort client-side
     const q = query(
       collection(db, BOOKINGS_COLLECTION),
-      where("advertiserId", "==", advertiserId),
+      where("advertiserId", "==", advertiserId)
     );
 
     const querySnapshot = await getDocs(q);
@@ -711,7 +759,7 @@ export const getAdvertiserBookings = async (
       } as Booking;
     });
     return bookings.sort(
-      (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+      (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
     );
   } catch (error) {
     console.error("Error getting advertiser bookings:", error);
@@ -724,11 +772,11 @@ export const getAdvertiserBookings = async (
  */
 export const subscribeToAdvertiserBookings = (
   advertiserId: string,
-  callback: (bookings: Booking[]) => void,
+  callback: (bookings: Booking[]) => void
 ): (() => void) => {
   const q = query(
     collection(db, BOOKINGS_COLLECTION),
-    where("advertiserId", "==", advertiserId),
+    where("advertiserId", "==", advertiserId)
   );
 
   return onSnapshot(
@@ -746,13 +794,13 @@ export const subscribeToAdvertiserBookings = (
         } as Booking;
       });
       const sorted = bookings.sort(
-        (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+        (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
       );
       callback(sorted);
     },
     (error) => {
       console.error("Error subscribing to advertiser bookings:", error);
-    },
+    }
   );
 };
 
@@ -764,7 +812,7 @@ export const getOwnerBookings = async (ownerId: string): Promise<Booking[]> => {
     const q = query(
       collection(db, BOOKINGS_COLLECTION),
       where("ownerId", "==", ownerId),
-      orderBy("createdAt", "desc"),
+      orderBy("createdAt", "desc")
     );
 
     const querySnapshot = await getDocs(q);
@@ -790,11 +838,11 @@ export const getOwnerBookings = async (ownerId: string): Promise<Booking[]> => {
  */
 export const subscribeToOwnerBookings = (
   ownerId: string,
-  callback: (bookings: Booking[]) => void,
+  callback: (bookings: Booking[]) => void
 ): (() => void) => {
   const q = query(
     collection(db, BOOKINGS_COLLECTION),
-    where("ownerId", "==", ownerId),
+    where("ownerId", "==", ownerId)
   );
 
   return onSnapshot(
@@ -818,7 +866,7 @@ export const subscribeToOwnerBookings = (
     },
     (error) => {
       console.error("Error subscribing to owner bookings:", error);
-    },
+    }
   );
 };
 
@@ -827,7 +875,7 @@ export const subscribeToOwnerBookings = (
  */
 export const updateBookingStatus = async (
   bookingId: string,
-  status: Booking["status"],
+  status: Booking["status"]
 ): Promise<void> => {
   try {
     const booking = await getBooking(bookingId);
@@ -854,7 +902,7 @@ export const updateBookingStatus = async (
         "Booking Approved",
         `Your booking for "${booking.billboardTitle}" was approved. The owner can now review the creative before payment is due.`,
         { bookingId, billboardId: booking.billboardId },
-        "/dashboard/advertiser/campaigns",
+        "/dashboard/advertiser/campaigns"
       );
     }
 
@@ -865,7 +913,7 @@ export const updateBookingStatus = async (
         "Booking Declined",
         `Your booking request for "${booking.billboardTitle}" was declined by the owner.`,
         { bookingId, billboardId: booking.billboardId },
-        "/dashboard/advertiser/campaigns",
+        "/dashboard/advertiser/campaigns"
       );
     }
 
@@ -882,7 +930,7 @@ export const updateBookingStatus = async (
         "How was your campaign? ⭐",
         `Your campaign on "${booking.billboardTitle}" has ended. Share your experience to help others!`,
         { bookingId, billboardId: booking.billboardId },
-        `/dashboard/advertiser/campaigns?review=${bookingId}`,
+        `/dashboard/advertiser/campaigns?review=${bookingId}`
       );
     }
 
@@ -893,7 +941,7 @@ export const updateBookingStatus = async (
       } catch (err) {
         console.error(
           "Error restoring billboard status after cancellation:",
-          err,
+          err
         );
       }
     }
@@ -909,7 +957,7 @@ export const updateBookingStatus = async (
 export const updatePaymentStatus = async (
   bookingId: string,
   paymentStatus: Booking["paymentStatus"],
-  paymentId?: string,
+  paymentId?: string
 ): Promise<void> => {
   try {
     const docRef = doc(db, BOOKINGS_COLLECTION, bookingId);
@@ -926,7 +974,7 @@ export const updatePaymentStatus = async (
 };
 
 export const syncBookingCampaignStatus = async (
-  bookingId: string,
+  bookingId: string
 ): Promise<Booking | null> => {
   const booking = await getBooking(bookingId);
   if (!booking) {
@@ -965,7 +1013,7 @@ export const syncBookingCampaignStatus = async (
 export const updateCreativeApprovalStatus = async (
   bookingId: string,
   creativeApprovalStatus: CreativeApprovalStatus,
-  creativeReviewNotes?: string,
+  creativeReviewNotes?: string
 ): Promise<Booking | null> => {
   try {
     const booking = await getBooking(bookingId);
@@ -995,7 +1043,7 @@ export const updateCreativeApprovalStatus = async (
         { bookingId, billboardId: booking.billboardId },
         booking.paymentStatus === "paid"
           ? "/dashboard/advertiser/campaigns"
-          : "/dashboard/advertiser/payments",
+          : "/dashboard/advertiser/payments"
       );
     }
 
@@ -1007,7 +1055,7 @@ export const updateCreativeApprovalStatus = async (
         creativeReviewNotes?.trim() ||
           `The owner requested more detail or revisions for \"${booking.billboardTitle}\".`,
         { bookingId, billboardId: booking.billboardId },
-        "/dashboard/advertiser/campaigns",
+        "/dashboard/advertiser/campaigns"
       );
     }
 
@@ -1029,7 +1077,7 @@ export const createReview = async (
   advertiserId: string,
   advertiserName: string,
   rating: number,
-  comment: string,
+  comment: string
 ): Promise<string> => {
   try {
     const review: Omit<Review, "id"> = {
@@ -1071,13 +1119,13 @@ export const createReview = async (
  * Called client-side when the advertiser visits their campaigns page.
  */
 export const checkAndCompleteExpiredCampaigns = async (
-  advertiserId: string,
+  advertiserId: string
 ): Promise<void> => {
   try {
     const q = query(
       collection(db, BOOKINGS_COLLECTION),
       where("advertiserId", "==", advertiserId),
-      where("status", "==", "active"),
+      where("status", "==", "active")
     );
     const snapshot = await getDocs(q);
     const now = new Date();
@@ -1115,11 +1163,11 @@ export const checkAndCompleteExpiredCampaigns = async (
               "How was your campaign? ⭐",
               `Your campaign on "${billboardTitle}" has ended. Share your experience to help others!`,
               { bookingId, billboardId },
-              `/dashboard/advertiser/campaigns?review=${bookingId}`,
+              `/dashboard/advertiser/campaigns?review=${bookingId}`
             );
           }
         }
-      }),
+      })
     );
   } catch (error) {
     console.error("Error checking expired campaigns:", error);
@@ -1130,13 +1178,13 @@ export const checkAndCompleteExpiredCampaigns = async (
  * Get reviews for billboard
  */
 export const getBillboardReviews = async (
-  billboardId: string,
+  billboardId: string
 ): Promise<Review[]> => {
   try {
     const q = query(
       collection(db, REVIEWS_COLLECTION),
       where("billboardId", "==", billboardId),
-      orderBy("createdAt", "desc"),
+      orderBy("createdAt", "desc")
     );
 
     const querySnapshot = await getDocs(q);
@@ -1180,7 +1228,7 @@ const updateBillboardRating = async (billboardId: string): Promise<void> => {
  */
 export const toggleFavorite = async (
   userId: string,
-  billboardId: string,
+  billboardId: string
 ): Promise<boolean> => {
   try {
     const billboard = await getBillboard(billboardId);
@@ -1195,7 +1243,7 @@ export const toggleFavorite = async (
     const q = query(
       collection(db, FAVORITES_COLLECTION),
       where("userId", "==", userId),
-      where("billboardId", "==", billboardId),
+      where("billboardId", "==", billboardId)
     );
     const snapshot = await getDocs(q);
 
@@ -1223,13 +1271,13 @@ export const toggleFavorite = async (
  */
 export const isBillboardFavorited = async (
   userId: string,
-  billboardId: string,
+  billboardId: string
 ): Promise<boolean> => {
   try {
     const q = query(
       collection(db, FAVORITES_COLLECTION),
       where("userId", "==", userId),
-      where("billboardId", "==", billboardId),
+      where("billboardId", "==", billboardId)
     );
     const snapshot = await getDocs(q);
     return !snapshot.empty;
@@ -1246,7 +1294,7 @@ export const getAvailableLocations = async (): Promise<string[]> => {
   try {
     const q = query(
       collection(db, BILLBOARDS_COLLECTION),
-      where("status", "==", "active"),
+      where("status", "==", "active")
     );
     const snapshot = await getDocs(q);
 
@@ -1269,13 +1317,13 @@ export const getAvailableLocations = async (): Promise<string[]> => {
  * Get user favorites
  */
 export const getUserFavorites = async (
-  userId: string,
+  userId: string
 ): Promise<Billboard[]> => {
   try {
     const q = query(
       collection(db, FAVORITES_COLLECTION),
       where("userId", "==", userId),
-      orderBy("createdAt", "desc"),
+      orderBy("createdAt", "desc")
     );
     const snapshot = await getDocs(q);
 
@@ -1288,7 +1336,7 @@ export const getUserFavorites = async (
     // Better: simple Promise.all
 
     const billboards = await Promise.all(
-      billboardIds.map((id) => getBillboard(id)),
+      billboardIds.map((id) => getBillboard(id))
     );
 
     return billboards.filter((b) => b !== null) as Billboard[];

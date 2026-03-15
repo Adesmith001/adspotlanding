@@ -1,275 +1,277 @@
-import { useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import { Provider } from 'react-redux';
-import { Toaster } from 'react-hot-toast';
-import { store } from './store';
-import { useAppDispatch } from './hooks/useRedux';
-import { initializeAuth } from './store/authSlice';
+import { useEffect } from "react";
+import { createBrowserRouter, RouterProvider, Outlet } from "react-router-dom";
+import { Provider } from "react-redux";
+import { Toaster } from "react-hot-toast";
+import { store } from "./store";
+import { useAppDispatch } from "./hooks/useRedux";
+import { initializeAuth } from "./store/authSlice";
 
 // Pages - Public
-import Home from './pages/Home';
-import Login from './pages/Login';
-import Signup from './pages/Signup';
-import Listings from './pages/Listings';
-import TermsOfService from './pages/TermsOfService';
-import PrivacyPolicy from './pages/PrivacyPolicy';
+import Home from "./pages/Home";
+import Login from "./pages/Login";
+import Signup from "./pages/Signup";
+import Listings from "./pages/Listings";
+import TermsOfService from "./pages/TermsOfService";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
 
 // Pages - Dashboards
-import OwnerDashboard from './pages/OwnerDashboard';
-import AdvertiserDashboard from './pages/AdvertiserDashboard';
+import OwnerDashboard from "./pages/OwnerDashboard";
+import AdvertiserDashboard from "./pages/AdvertiserDashboard";
 
 // Pages - Owner
-import CreateListing from './pages/owner/CreateListing';
-import EditListing from './pages/owner/EditListing';
-import MyListings from './pages/owner/MyListings';
-import OwnerBookings from './pages/owner/OwnerBookings';
-import OwnerAnalytics from './pages/owner/OwnerAnalytics';
+import CreateListing from "./pages/owner/CreateListing";
+import EditListing from "./pages/owner/EditListing";
+import MyListings from "./pages/owner/MyListings";
+import OwnerBookings from "./pages/owner/OwnerBookings";
+import OwnerAnalytics from "./pages/owner/OwnerAnalytics";
 
 // Pages - Advertiser
-import MyCampaigns from './pages/advertiser/MyCampaigns';
-import Favorites from './pages/advertiser/Favorites';
-import BrowseBillboards from './pages/advertiser/BrowseBillboards';
-import Payments from './pages/advertiser/Payments';
+import MyCampaigns from "./pages/advertiser/MyCampaigns";
+import Favorites from "./pages/advertiser/Favorites";
+import BrowseBillboards from "./pages/advertiser/BrowseBillboards";
+import Payments from "./pages/advertiser/Payments";
 
 // Pages - Shared
-import Messages from './pages/shared/Messages';
-import BillboardDetails from './pages/shared/BillboardDetails';
-import Settings from './pages/shared/Settings';
+import Messages from "./pages/shared/Messages";
+import BillboardDetails from "./pages/shared/BillboardDetails";
+import Settings from "./pages/shared/Settings";
 
 // Pages - Admin
-import AdminDashboard from './pages/admin/AdminDashboard';
-import UserManagement from './pages/admin/UserManagement';
-import ListingVerification from './pages/admin/ListingVerification';
-import AdminTransactions from './pages/admin/AdminTransactions';
+import AdminDashboard from "./pages/admin/AdminDashboard";
+import UserManagement from "./pages/admin/UserManagement";
+import ListingVerification from "./pages/admin/ListingVerification";
+import AdminTransactions from "./pages/admin/AdminTransactions";
 
 // Components
-import ProtectedRoute from './components/auth/ProtectedRoute';
+import ProtectedRoute from "./components/auth/ProtectedRoute";
 
-function AppContent() {
-    const dispatch = useAppDispatch();
+function RootLayout() {
+  const dispatch = useAppDispatch();
 
-    useEffect(() => {
-        // Initialize auth state listener
-        dispatch(initializeAuth());
-    }, [dispatch]);
+  useEffect(() => {
+    dispatch(initializeAuth());
+  }, [dispatch]);
 
-    return (
-        <>
-            <Routes>
-                {/* Public Routes */}
-                <Route path="/" element={<Home />} />
-                <Route path="/login" element={<Login />} />
-                <Route path="/signup" element={<Signup />} />
-                <Route path="/listings" element={<Listings />} />
-                <Route path="/terms-of-service" element={<TermsOfService />} />
-                <Route path="/privacy-policy" element={<PrivacyPolicy />} />
-                <Route path="/billboards/:id" element={<BillboardDetails />} />
-
-                {/* Owner Dashboard Routes */}
-                <Route
-                    path="/dashboard/owner"
-                    element={
-                        <ProtectedRoute requiredRole="owner">
-                            <OwnerDashboard />
-                        </ProtectedRoute>
-                    }
-                />
-                <Route
-                    path="/dashboard/owner/create"
-                    element={
-                        <ProtectedRoute requiredRole="owner">
-                            <CreateListing />
-                        </ProtectedRoute>
-                    }
-                />
-                <Route
-                    path="/dashboard/owner/listings"
-                    element={
-                        <ProtectedRoute requiredRole="owner">
-                            <MyListings />
-                        </ProtectedRoute>
-                    }
-                />
-                <Route
-                    path="/dashboard/owner/edit/:id"
-                    element={
-                        <ProtectedRoute requiredRole="owner">
-                            <EditListing />
-                        </ProtectedRoute>
-                    }
-                />
-                <Route
-                    path="/dashboard/owner/bookings"
-                    element={
-                        <ProtectedRoute requiredRole="owner">
-                            <OwnerBookings />
-                        </ProtectedRoute>
-                    }
-                />
-                <Route
-                    path="/dashboard/owner/analytics"
-                    element={
-                        <ProtectedRoute requiredRole="owner">
-                            <OwnerAnalytics />
-                        </ProtectedRoute>
-                    }
-                />
-                <Route
-                    path="/dashboard/owner/messages"
-                    element={
-                        <ProtectedRoute requiredRole="owner">
-                            <Messages userRole="owner" />
-                        </ProtectedRoute>
-                    }
-                />
-                <Route
-                    path="/dashboard/owner/settings"
-                    element={
-                        <ProtectedRoute requiredRole="owner">
-                            <Settings userRole="owner" />
-                        </ProtectedRoute>
-                    }
-                />
-
-                {/* Advertiser Dashboard Routes */}
-                <Route
-                    path="/dashboard/advertiser"
-                    element={
-                        <ProtectedRoute requiredRole="advertiser">
-                            <AdvertiserDashboard />
-                        </ProtectedRoute>
-                    }
-                />
-                <Route
-                    path="/dashboard/advertiser/browse"
-                    element={
-                        <ProtectedRoute requiredRole="advertiser">
-                            <BrowseBillboards />
-                        </ProtectedRoute>
-                    }
-                />
-                <Route
-                    path="/dashboard/advertiser/campaigns"
-                    element={
-                        <ProtectedRoute requiredRole="advertiser">
-                            <MyCampaigns />
-                        </ProtectedRoute>
-                    }
-                />
-                <Route
-                    path="/dashboard/advertiser/favorites"
-                    element={
-                        <ProtectedRoute requiredRole="advertiser">
-                            <Favorites />
-                        </ProtectedRoute>
-                    }
-                />
-                <Route
-                    path="/dashboard/advertiser/payments"
-                    element={
-                        <ProtectedRoute requiredRole="advertiser">
-                            <Payments />
-                        </ProtectedRoute>
-                    }
-                />
-                <Route
-                    path="/dashboard/advertiser/messages"
-                    element={
-                        <ProtectedRoute requiredRole="advertiser">
-                            <Messages userRole="advertiser" />
-                        </ProtectedRoute>
-                    }
-                />
-                <Route
-                    path="/dashboard/advertiser/settings"
-                    element={
-                        <ProtectedRoute requiredRole="advertiser">
-                            <Settings userRole="advertiser" />
-                        </ProtectedRoute>
-                    }
-                />
-
-                {/* Admin Dashboard Routes */}
-                <Route
-                    path="/dashboard/admin"
-                    element={
-                        <ProtectedRoute requiredRole="admin">
-                            <AdminDashboard />
-                        </ProtectedRoute>
-                    }
-                />
-                <Route
-                    path="/dashboard/admin/users"
-                    element={
-                        <ProtectedRoute requiredRole="admin">
-                            <UserManagement />
-                        </ProtectedRoute>
-                    }
-                />
-                <Route
-                    path="/dashboard/admin/listings"
-                    element={
-                        <ProtectedRoute requiredRole="admin">
-                            <ListingVerification />
-                        </ProtectedRoute>
-                    }
-                />
-                <Route
-                    path="/dashboard/admin/transactions"
-                    element={
-                        <ProtectedRoute requiredRole="admin">
-                            <AdminTransactions />
-                        </ProtectedRoute>
-                    }
-                />
-                <Route
-                    path="/dashboard/admin/settings"
-                    element={
-                        <ProtectedRoute requiredRole="admin">
-                            <Settings userRole="admin" />
-                        </ProtectedRoute>
-                    }
-                />
-            </Routes>
-
-            {/* Toast Notifications */}
-            <Toaster
-                position="top-center"
-                toastOptions={{
-                    duration: 4000,
-                    style: {
-                        background: '#fff',
-                        color: '#0a0a0a',
-                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-                        borderRadius: '0.75rem',
-                        padding: '1rem',
-                    },
-                    success: {
-                        iconTheme: {
-                            primary: '#003c30',
-                            secondary: '#fff',
-                        },
-                    },
-                    error: {
-                        iconTheme: {
-                            primary: '#ef4444',
-                            secondary: '#fff',
-                        },
-                    },
-                }}
-            />
-        </>
-    );
+  return (
+    <>
+      <Outlet />
+      <Toaster
+        position="top-center"
+        toastOptions={{
+          duration: 4000,
+          style: {
+            background: "#fff",
+            color: "#0a0a0a",
+            boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
+            borderRadius: "0.75rem",
+            padding: "1rem",
+          },
+          success: {
+            iconTheme: {
+              primary: "#003c30",
+              secondary: "#fff",
+            },
+          },
+          error: {
+            iconTheme: {
+              primary: "#ef4444",
+              secondary: "#fff",
+            },
+          },
+        }}
+      />
+    </>
+  );
 }
 
+const router = createBrowserRouter([
+  {
+    element: <RootLayout />,
+    children: [
+      // Public Routes
+      { path: "/", element: <Home /> },
+      { path: "/login", element: <Login /> },
+      { path: "/signup", element: <Signup /> },
+      { path: "/listings", element: <Listings /> },
+      { path: "/terms-of-service", element: <TermsOfService /> },
+      { path: "/privacy-policy", element: <PrivacyPolicy /> },
+      { path: "/billboards/:id", element: <BillboardDetails /> },
+
+      // Owner Dashboard Routes
+      {
+        path: "/dashboard/owner",
+        element: (
+          <ProtectedRoute requiredRole="owner">
+            <OwnerDashboard />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "/dashboard/owner/create",
+        element: (
+          <ProtectedRoute requiredRole="owner">
+            <CreateListing />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "/dashboard/owner/listings",
+        element: (
+          <ProtectedRoute requiredRole="owner">
+            <MyListings />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "/dashboard/owner/edit/:id",
+        element: (
+          <ProtectedRoute requiredRole="owner">
+            <EditListing />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "/dashboard/owner/bookings",
+        element: (
+          <ProtectedRoute requiredRole="owner">
+            <OwnerBookings />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "/dashboard/owner/analytics",
+        element: (
+          <ProtectedRoute requiredRole="owner">
+            <OwnerAnalytics />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "/dashboard/owner/messages",
+        element: (
+          <ProtectedRoute requiredRole="owner">
+            <Messages userRole="owner" />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "/dashboard/owner/settings",
+        element: (
+          <ProtectedRoute requiredRole="owner">
+            <Settings userRole="owner" />
+          </ProtectedRoute>
+        ),
+      },
+
+      // Advertiser Dashboard Routes
+      {
+        path: "/dashboard/advertiser",
+        element: (
+          <ProtectedRoute requiredRole="advertiser">
+            <AdvertiserDashboard />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "/dashboard/advertiser/browse",
+        element: (
+          <ProtectedRoute requiredRole="advertiser">
+            <BrowseBillboards />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "/dashboard/advertiser/campaigns",
+        element: (
+          <ProtectedRoute requiredRole="advertiser">
+            <MyCampaigns />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "/dashboard/advertiser/favorites",
+        element: (
+          <ProtectedRoute requiredRole="advertiser">
+            <Favorites />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "/dashboard/advertiser/payments",
+        element: (
+          <ProtectedRoute requiredRole="advertiser">
+            <Payments />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "/dashboard/advertiser/messages",
+        element: (
+          <ProtectedRoute requiredRole="advertiser">
+            <Messages userRole="advertiser" />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "/dashboard/advertiser/settings",
+        element: (
+          <ProtectedRoute requiredRole="advertiser">
+            <Settings userRole="advertiser" />
+          </ProtectedRoute>
+        ),
+      },
+
+      // Admin Dashboard Routes
+      {
+        path: "/dashboard/admin",
+        element: (
+          <ProtectedRoute requiredRole="admin">
+            <AdminDashboard />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "/dashboard/admin/users",
+        element: (
+          <ProtectedRoute requiredRole="admin">
+            <UserManagement />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "/dashboard/admin/listings",
+        element: (
+          <ProtectedRoute requiredRole="admin">
+            <ListingVerification />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "/dashboard/admin/transactions",
+        element: (
+          <ProtectedRoute requiredRole="admin">
+            <AdminTransactions />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "/dashboard/admin/settings",
+        element: (
+          <ProtectedRoute requiredRole="admin">
+            <Settings userRole="admin" />
+          </ProtectedRoute>
+        ),
+      },
+    ],
+  },
+]);
+
 function App() {
-    return (
-        <Provider store={store}>
-            <Router>
-                <AppContent />
-            </Router>
-        </Provider>
-    );
+  return (
+    <Provider store={store}>
+      <RouterProvider router={router} />
+    </Provider>
+  );
 }
 
 export default App;

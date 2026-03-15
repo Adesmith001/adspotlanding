@@ -22,6 +22,9 @@ import {
   MdCropFree,
   MdScreenRotation,
   MdOutlineLocalFireDepartment,
+  MdEdit,
+  MdDeleteOutline,
+  MdWarningAmber,
 } from "react-icons/md";
 import Button from "@/components/ui/Button";
 import EmptyState from "@/components/EmptyState";
@@ -38,6 +41,8 @@ import {
   toggleFavorite,
   isBillboardFavorited,
   searchBillboards,
+  deleteBillboard,
+  checkBillboardHasActiveBookings,
 } from "@/services/billboard.service";
 import { startConversation } from "@/services/message.service";
 import { syncUserProfile, getUserProfile } from "@/services/user.service";
@@ -66,6 +71,11 @@ const BillboardDetails: React.FC = () => {
   const [isFavorited, setIsFavorited] = useState(false);
   const [isBooking, setIsBooking] = useState(false);
   const [showAllPhotos, setShowAllPhotos] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteBlockReason, setDeleteBlockReason] = useState<string | null>(
+    null
+  );
 
   // Booking form state
   const [startDate, setStartDate] = useState("");
@@ -80,6 +90,14 @@ const BillboardDetails: React.FC = () => {
   const isOwnerListing = Boolean(
     user && billboard && user.uid === billboard.ownerId
   );
+
+  // Role-based destination for "See all" / "Browse all" links
+  const browseAllHref =
+    user?.role === "owner"
+      ? "/dashboard/owner/listings"
+      : user?.role === "advertiser"
+      ? "/dashboard/advertiser/browse"
+      : "/listings";
 
   /* ── Data fetching ─────────────────────────────────────────────────────── */
 
@@ -359,6 +377,31 @@ const BillboardDetails: React.FC = () => {
     }
   };
 
+  const handleDeleteAttempt = () => {
+    setDeleteBlockReason(null);
+    setShowDeleteConfirm(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!id) return;
+    setIsDeleting(true);
+    try {
+      const { hasActive, reason } = await checkBillboardHasActiveBookings(id);
+      if (hasActive) {
+        setDeleteBlockReason(reason);
+        setIsDeleting(false);
+        return;
+      }
+      await deleteBillboard(id);
+      toast.success("Listing deleted successfully.");
+      navigate("/dashboard/owner/listings");
+    } catch (err: any) {
+      console.error("Delete failed:", err);
+      toast.error(err.message || "Failed to delete listing. Please try again.");
+      setIsDeleting(false);
+    }
+  };
+
   const formatPrice = (price: number) =>
     new Intl.NumberFormat("en-NG", {
       style: "currency",
@@ -509,7 +552,29 @@ const BillboardDetails: React.FC = () => {
               <MdShare size={16} />
               <span className="hidden sm:inline">Share</span>
             </motion.button>
-            {!isOwnerListing && (
+
+            {isOwnerListing ? (
+              <>
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => navigate(`/dashboard/owner/edit/${id}`)}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-neutral-200 text-sm font-medium text-neutral-600 hover:border-neutral-300 hover:text-neutral-900 transition-all shadow-sm"
+                >
+                  <MdEdit size={16} />
+                  <span className="hidden sm:inline">Edit</span>
+                </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={handleDeleteAttempt}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-red-200 text-sm font-medium text-red-600 hover:bg-red-50 hover:border-red-300 transition-all shadow-sm"
+                >
+                  <MdDeleteOutline size={16} />
+                  <span className="hidden sm:inline">Delete</span>
+                </motion.button>
+              </>
+            ) : (
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
@@ -749,6 +814,139 @@ const BillboardDetails: React.FC = () => {
                   </button>
                 ))}
               </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* ── Delete confirmation modal ──────────────────────────── */}
+        <AnimatePresence>
+          {showDeleteConfirm && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+              onClick={(e) => {
+                if (e.target === e.currentTarget && !isDeleting)
+                  setShowDeleteConfirm(false);
+              }}
+            >
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 8 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 8 }}
+                transition={{ duration: 0.2 }}
+                className="bg-white rounded-2xl shadow-xl border border-neutral-200 p-6 w-full max-w-md"
+              >
+                {deleteBlockReason ? (
+                  /* ── Blocked state ── */
+                  <>
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+                        <MdWarningAmber size={22} className="text-amber-600" />
+                      </div>
+                      <div>
+                        <p className="font-bold text-neutral-900">
+                          Can't delete right now
+                        </p>
+                        <p className="text-sm text-neutral-500 mt-0.5 capitalize">
+                          This listing can't be deleted because{" "}
+                          {deleteBlockReason}.
+                        </p>
+                      </div>
+                    </div>
+                    <p className="text-xs text-neutral-400 mb-5 leading-relaxed">
+                      You can delete this listing once all pending, confirmed,
+                      and active bookings have been resolved — either completed,
+                      cancelled, or rejected.
+                    </p>
+                    <div className="flex gap-3">
+                      <Button
+                        variant="outline"
+                        fullWidth
+                        onClick={() => {
+                          setShowDeleteConfirm(false);
+                          setDeleteBlockReason(null);
+                        }}
+                        className="!rounded-xl"
+                      >
+                        Got it
+                      </Button>
+                      <Button
+                        fullWidth
+                        onClick={() => {
+                          setShowDeleteConfirm(false);
+                          setDeleteBlockReason(null);
+                          navigate("/dashboard/owner/bookings");
+                        }}
+                        className="!rounded-xl !bg-neutral-900 !text-white"
+                      >
+                        View Bookings
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  /* ── Confirm state ── */
+                  <>
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                        <MdDeleteOutline size={22} className="text-red-600" />
+                      </div>
+                      <div>
+                        <p className="font-bold text-neutral-900">
+                          Delete this listing?
+                        </p>
+                        <p className="text-sm text-neutral-500 mt-0.5">
+                          This action cannot be undone.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="bg-neutral-50 rounded-xl p-3 mb-5 flex items-center gap-3">
+                      {billboard?.photos[0] && (
+                        <img
+                          src={billboard.photos[0]}
+                          alt=""
+                          className="w-12 h-12 rounded-lg object-cover flex-shrink-0 border border-neutral-200"
+                        />
+                      )}
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-neutral-900 truncate">
+                          {billboard?.title}
+                        </p>
+                        <p className="text-xs text-neutral-500 truncate">
+                          {billboard?.location.city},{" "}
+                          {billboard?.location.state}
+                        </p>
+                      </div>
+                    </div>
+                    <p className="text-xs text-neutral-400 mb-5 leading-relaxed">
+                      The listing, its photos, and all associated data will be
+                      permanently removed. Completed and historical booking
+                      records will be retained separately.
+                    </p>
+                    <div className="flex gap-3">
+                      <Button
+                        variant="outline"
+                        fullWidth
+                        disabled={isDeleting}
+                        onClick={() => setShowDeleteConfirm(false)}
+                        className="!rounded-xl"
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        fullWidth
+                        disabled={isDeleting}
+                        onClick={handleDeleteConfirm}
+                        className="!rounded-xl !bg-red-600 hover:!bg-red-700 !text-white !border-red-600"
+                      >
+                        {isDeleting ? "Checking…" : "Yes, delete"}
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </motion.div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -1437,7 +1635,7 @@ const BillboardDetails: React.FC = () => {
               </p>
             </div>
             <Link
-              to="/listings"
+              to={browseAllHref}
               className="flex-shrink-0 text-sm font-semibold text-neutral-900 underline underline-offset-2 hover:text-neutral-600 transition-colors"
             >
               See all →
@@ -1509,7 +1707,7 @@ const BillboardDetails: React.FC = () => {
           {!loadingRelated && relatedBillboards.length > 0 && (
             <div className="mt-8 text-center">
               <Link
-                to="/listings"
+                to={browseAllHref}
                 className="inline-flex items-center gap-2 px-6 py-3 bg-white border border-neutral-200 rounded-2xl text-sm font-semibold text-neutral-700 hover:bg-neutral-50 hover:border-neutral-300 transition-all shadow-sm"
               >
                 Browse all billboards →
