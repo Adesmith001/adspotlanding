@@ -21,6 +21,7 @@ import { selectUser } from "@/store/authSlice";
 import { createBillboard } from "@/services/billboard.service";
 import {
   geocodeAddress,
+  getCurrentBrowserLocation,
   reverseGeocodeCoordinates,
 } from "@/services/location.service";
 import type {
@@ -95,6 +96,7 @@ const CreateListing: React.FC = () => {
   const [photos, setPhotos] = useState<File[]>([]);
   const [photoPreviewUrls, setPhotoPreviewUrls] = useState<string[]>([]);
   const [extractingLocation, setExtractingLocation] = useState(false);
+  const [gettingCurrentLocation, setGettingCurrentLocation] = useState(false);
   const [resolvingAddress, setResolvingAddress] = useState(false);
   const [geocodingAddress, setGeocodingAddress] = useState(false);
   const [locationLookupNote, setLocationLookupNote] = useState("");
@@ -151,7 +153,7 @@ const CreateListing: React.FC = () => {
   const applyCoordinates = async (
     lat: number,
     lng: number,
-    source: "photo" | "camera" | "map" | "address"
+    source: "photo" | "camera" | "map" | "address" | "device"
   ) => {
     setFormData((prev) => ({
       ...prev,
@@ -200,8 +202,48 @@ const CreateListing: React.FC = () => {
     setLocationLookupNote(
       source === "map"
         ? "Map pin moved and the closest street details were filled automatically."
+        : source === "device"
+        ? "We used your current device location and filled in the nearest street details automatically."
         : "Coordinates and street details were extracted automatically from the photo."
     );
+  };
+
+  const tryCurrentLocationFallback = async (
+    reason: "photo" | "camera" | "manual"
+  ) => {
+    setGettingCurrentLocation(true);
+    const currentLocation = await getCurrentBrowserLocation();
+    setGettingCurrentLocation(false);
+
+    if (!currentLocation) {
+      return null;
+    }
+
+    await applyCoordinates(
+      currentLocation.latitude,
+      currentLocation.longitude,
+      "device"
+    );
+
+    const accuracySuffix =
+      typeof currentLocation.accuracy === "number"
+        ? ` Accuracy: about ${Math.round(currentLocation.accuracy)}m.`
+        : "";
+
+    if (reason === "manual") {
+      toast.success(`Current location captured.${accuracySuffix}`, {
+        duration: 5000,
+      });
+    } else {
+      toast.success(
+        `Photo GPS was unavailable, so we used your current device location.${accuracySuffix}`,
+        {
+          duration: 5000,
+        }
+      );
+    }
+
+    return currentLocation;
   };
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -246,8 +288,25 @@ const CreateListing: React.FC = () => {
               duration: 4000,
             });
           }
+          if (!gps) {
+            const fallback = await tryCurrentLocationFallback("photo");
+            if (!fallback) {
+              toast(
+                "This photo does not contain GPS metadata. Allow location access or place the pin manually on the map.",
+                {
+                  icon: "i",
+                  duration: 5000,
+                }
+              );
+            }
+          }
         } catch {
-          // silently fail if extraction errors
+          const fallback = await tryCurrentLocationFallback("photo");
+          if (!fallback) {
+            toast.error(
+              "We couldn't read a location from this photo. Please allow device location or place the pin manually."
+            );
+          }
         } finally {
           setExtractingLocation(false);
         }
@@ -300,8 +359,14 @@ const CreateListing: React.FC = () => {
             duration: 4000,
           });
         } else {
+          const fallback = await tryCurrentLocationFallback("camera");
+          if (fallback) {
+            e.target.value = "";
+            setExtractingLocation(false);
+            return;
+          }
           toast(
-            "No GPS data found in this photo. Try taking the photo at the billboard location.",
+            "No GPS data found in this photo. Allow device location or place the pin manually on the map.",
             {
               icon: "ℹ️",
               duration: 5000,
@@ -309,7 +374,12 @@ const CreateListing: React.FC = () => {
           );
         }
       } catch {
-        // silently fail
+        const fallback = await tryCurrentLocationFallback("camera");
+        if (!fallback) {
+          toast.error(
+            "We couldn't detect a location from this photo. Please allow device location or place the pin manually."
+          );
+        }
       } finally {
         setExtractingLocation(false);
       }
@@ -802,6 +872,20 @@ const CreateListing: React.FC = () => {
                   the location, or go back and upload a photo taken at the site.
                 </p>
               )}
+
+              <div className="mb-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => void tryCurrentLocationFallback("manual")}
+                  disabled={gettingCurrentLocation}
+                  className="inline-flex items-center gap-2 rounded-xl border border-neutral-300 bg-white px-3 py-2 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <MdMyLocation size={16} />
+                  {gettingCurrentLocation
+                    ? "Getting current location..."
+                    : "Use Current Location"}
+                </button>
+              </div>
 
               <div className="rounded-2xl overflow-hidden border-2 border-neutral-200 shadow-soft relative z-0">
                 <GoogleMapInteractive

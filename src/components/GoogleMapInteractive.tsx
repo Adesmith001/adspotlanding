@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef } from "react";
+import { useGoogleMaps } from "@/hooks/useGoogleMaps";
 
 interface GoogleMapInteractiveProps {
   latitude?: number;
@@ -20,31 +21,19 @@ const GoogleMapInteractive: React.FC<GoogleMapInteractiveProps> = ({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
   const markerRef = useRef<any>(null);
-  const [isReady, setIsReady] = useState(false);
+  const { isLoaded, loadError, hasApiKey } = useGoogleMaps();
 
   useEffect(() => {
-    let timer: ReturnType<typeof setTimeout>;
-    const check = () => {
-      if ((window as any).google?.maps) {
-        setIsReady(true);
-      } else {
-        timer = setTimeout(check, 200);
-      }
-    };
-    check();
-    return () => clearTimeout(timer);
-  }, []);
+    if (!hasApiKey || !isLoaded || !containerRef.current) return;
 
-  useEffect(() => {
-    if (!isReady || !containerRef.current) return;
-    const google = (window as any).google;
-
-    const center = latitude !== undefined && longitude !== undefined
-      ? { lat: latitude, lng: longitude }
-      : { lat: defaultCenter[0], lng: defaultCenter[1] };
+    const googleMaps = window.google.maps;
+    const center =
+      latitude !== undefined && longitude !== undefined
+        ? { lat: latitude, lng: longitude }
+        : { lat: defaultCenter[0], lng: defaultCenter[1] };
 
     if (!mapRef.current) {
-      mapRef.current = new google.maps.Map(containerRef.current, {
+      mapRef.current = new googleMaps.Map(containerRef.current, {
         center,
         zoom: latitude !== undefined ? 16 : 11,
         fullscreenControl: true,
@@ -55,8 +44,8 @@ const GoogleMapInteractive: React.FC<GoogleMapInteractiveProps> = ({
       });
 
       if (!readOnly && onLocationChange) {
-        mapRef.current.addListener("click", (e: any) => {
-          onLocationChange(e.latLng.lat(), e.latLng.lng());
+        mapRef.current.addListener("click", (event: any) => {
+          onLocationChange(event.latLng.lat(), event.latLng.lng());
         });
       }
     } else {
@@ -66,16 +55,16 @@ const GoogleMapInteractive: React.FC<GoogleMapInteractiveProps> = ({
 
     if (latitude !== undefined && longitude !== undefined) {
       if (!markerRef.current) {
-        markerRef.current = new google.maps.Marker({
+        markerRef.current = new googleMaps.Marker({
           position: center,
           map: mapRef.current,
           draggable: !readOnly,
-          animation: google.maps.Animation.DROP,
+          animation: googleMaps.Animation.DROP,
         });
 
         if (!readOnly && onLocationChange) {
-          markerRef.current.addListener("dragend", (e: any) => {
-            onLocationChange(e.latLng.lat(), e.latLng.lng());
+          markerRef.current.addListener("dragend", (event: any) => {
+            onLocationChange(event.latLng.lat(), event.latLng.lng());
           });
         }
       } else {
@@ -86,16 +75,41 @@ const GoogleMapInteractive: React.FC<GoogleMapInteractiveProps> = ({
       markerRef.current.setMap(null);
       markerRef.current = null;
     }
-  }, [isReady, latitude, longitude, readOnly, onLocationChange, defaultCenter]);
+  }, [
+    defaultCenter,
+    hasApiKey,
+    isLoaded,
+    latitude,
+    longitude,
+    onLocationChange,
+    readOnly,
+  ]);
+
+  const overlay = loadError
+    ? {
+        title: "Map unavailable",
+        message: "Google Maps failed to load. Check the API key and enabled APIs.",
+      }
+    : !hasApiKey
+    ? {
+        title: "Map unavailable",
+        message: "Add VITE_GOOGLE_MAPS_API_KEY to load Google Maps.",
+      }
+    : {
+        title: "Map unavailable",
+        message: "Loading Google Maps...",
+      };
 
   return (
     <div className={`relative w-full ${heightClassName}`}>
       <div ref={containerRef} className="h-full w-full outline-none" />
-      {!isReady && (
+      {(!hasApiKey || loadError || !isLoaded) && (
         <div className="absolute inset-0 flex items-center justify-center bg-neutral-50 px-5 text-center">
           <div>
-            <p className="text-sm font-medium text-neutral-800">Map unavailable</p>
-            <p className="mt-2 text-sm text-neutral-500">Loading Google Maps...</p>
+            <p className="text-sm font-medium text-neutral-800">
+              {overlay.title}
+            </p>
+            <p className="mt-2 text-sm text-neutral-500">{overlay.message}</p>
           </div>
         </div>
       )}

@@ -31,6 +31,7 @@ import EmptyState from "@/components/EmptyState";
 import GoogleMapPanel from "@/components/GoogleMapPanel";
 import StreetViewPanel from "@/components/StreetViewPanel";
 import BillboardCard from "@/components/BillboardCard";
+import { useGoogleMaps } from "@/hooks/useGoogleMaps";
 import { useAppSelector } from "@/hooks/useRedux";
 import { selectUser, selectIsAuthenticated } from "@/store/authSlice";
 import {
@@ -44,6 +45,7 @@ import {
   deleteBillboard,
   checkBillboardHasActiveBookings,
 } from "@/services/billboard.service";
+import { geocodeAddress } from "@/services/location.service";
 import { startConversation } from "@/services/message.service";
 import { syncUserProfile, getUserProfile } from "@/services/user.service";
 import type {
@@ -61,6 +63,8 @@ const BillboardDetails: React.FC = () => {
   const navigate = useNavigate();
   const user = useAppSelector(selectUser);
   const isAuthenticated = useAppSelector(selectIsAuthenticated);
+  const { isLoaded: isGoogleMapsLoaded, hasApiKey: hasGoogleMapsApiKey } =
+    useGoogleMaps();
 
   const [billboard, setBillboard] = useState<Billboard | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -76,6 +80,12 @@ const BillboardDetails: React.FC = () => {
   const [deleteBlockReason, setDeleteBlockReason] = useState<string | null>(
     null
   );
+  const [resolvedLocationCoords, setResolvedLocationCoords] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
+  const [isResolvingLocationCoords, setIsResolvingLocationCoords] =
+    useState(false);
 
   // Booking form state
   const [startDate, setStartDate] = useState("");
@@ -247,6 +257,99 @@ const BillboardDetails: React.FC = () => {
 
   /* ── Handlers ──────────────────────────────────────────────────────────── */
 
+  useEffect(() => {
+    if (!billboard) {
+      setResolvedLocationCoords(null);
+      setIsResolvingLocationCoords(false);
+      return;
+    }
+
+    if (billboard.location.lat !== 0 && billboard.location.lng !== 0) {
+      setResolvedLocationCoords({
+        latitude: billboard.location.lat,
+        longitude: billboard.location.lng,
+      });
+      setIsResolvingLocationCoords(false);
+      return;
+    }
+
+    const address = billboard.location.address?.trim();
+    const city = billboard.location.city?.trim();
+    const state = billboard.location.state?.trim();
+
+    if (!address || !city || !state) {
+      setResolvedLocationCoords(null);
+      setIsResolvingLocationCoords(false);
+      return;
+    }
+
+    let ignore = false;
+    setIsResolvingLocationCoords(true);
+    const googleAddressQuery = [address, city, state, billboard.location.country]
+      .filter(Boolean)
+      .join(", ");
+
+    const resolveCoordinates = async () => {
+      if (hasGoogleMapsApiKey && isGoogleMapsLoaded && googleAddressQuery) {
+        try {
+          const coords = await new Promise<{
+            latitude: number;
+            longitude: number;
+          } | null>((resolve) => {
+            const geocoder = new window.google.maps.Geocoder();
+            geocoder.geocode(
+              {
+                address: googleAddressQuery,
+                region: "NG",
+              },
+              (results, status) => {
+                if (status === "OK" && results?.[0]?.geometry?.location) {
+                  resolve({
+                    latitude: results[0].geometry.location.lat(),
+                    longitude: results[0].geometry.location.lng(),
+                  });
+                  return;
+                }
+
+                resolve(null);
+              }
+            );
+          });
+
+          if (coords) {
+            return coords;
+          }
+        } catch (error) {
+          console.error("Error resolving billboard coordinates with Google:", error);
+        }
+      }
+
+      return geocodeAddress(address, city, state, billboard.location.country);
+    };
+
+    void resolveCoordinates()
+      .then((coords) => {
+        if (ignore) return;
+        setResolvedLocationCoords(
+          coords
+            ? {
+                latitude: coords.latitude,
+                longitude: coords.longitude,
+              }
+            : null
+        );
+      })
+      .finally(() => {
+        if (!ignore) {
+          setIsResolvingLocationCoords(false);
+        }
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [billboard, hasGoogleMapsApiKey, isGoogleMapsLoaded]);
+
   const handleContact = async () => {
     if (!isAuthenticated || !user) {
       toast.error("Please sign in to contact the owner");
@@ -383,10 +486,13 @@ const BillboardDetails: React.FC = () => {
   };
 
   const handleDeleteConfirm = async () => {
-    if (!id) return;
+    if (!id || !user) return;
     setIsDeleting(true);
     try {
-      const { hasActive, reason } = await checkBillboardHasActiveBookings(id);
+      const { hasActive, reason } = await checkBillboardHasActiveBookings(
+        id,
+        user.uid
+      );
       if (hasActive) {
         setDeleteBlockReason(reason);
         setIsDeleting(false);
@@ -503,6 +609,31 @@ const BillboardDetails: React.FC = () => {
   const displayRating =
     billboard.rating > 0 ? billboard.rating.toFixed(1) : null;
   const photos = billboard.photos;
+  const locationAddress = [
+    billboard.location.address,
+    billboard.location.city,
+    billboard.location.state,
+    billboard.location.country,
+  ]
+    .filter(Boolean)
+    .join(", ");
+  const displayLatitude =
+    billboard.location.lat !== 0
+      ? billboard.location.lat
+      : resolvedLocationCoords?.latitude;
+  const displayLongitude =
+    billboard.location.lng !== 0
+      ? billboard.location.lng
+      : resolvedLocationCoords?.longitude;
+  const hasDisplayCoordinates =
+    typeof displayLatitude === "number" &&
+    typeof displayLongitude === "number" &&
+    displayLatitude !== 0 &&
+    displayLongitude !== 0;
+  const isAddressEstimatedLocation =
+    billboard.location.lat === 0 &&
+    billboard.location.lng === 0 &&
+    hasDisplayCoordinates;
 
   /* ────────────────────────────────────────────────────────────────────────
        RENDER
@@ -1130,9 +1261,7 @@ const BillboardDetails: React.FC = () => {
             </motion.div>
 
             {/* Location map */}
-            {(billboard.location.lat !== 0 ||
-              billboard.location.lng !== 0 ||
-              billboard.location.address) && (
+            {(hasDisplayCoordinates || billboard.location.address) && (
               <motion.div
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -1148,47 +1277,39 @@ const BillboardDetails: React.FC = () => {
                   {billboard.location.state}
                 </p>
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
-                  {billboard.location.lat !== 0 &&
-                    billboard.location.lng !== 0 && (
-                      <GoogleMapPanel
-                        latitude={billboard.location.lat}
-                        longitude={billboard.location.lng}
-                        title="Billboard Location"
-                        subtitle="Exact placement on Google Maps."
-                        heightClassName="h-[300px]"
-                      />
-                    )}
+                  <GoogleMapPanel
+                    latitude={displayLatitude}
+                    longitude={displayLongitude}
+                    addressFallback={locationAddress}
+                    title="Billboard Location"
+                    subtitle={
+                      hasDisplayCoordinates
+                        ? "Exact placement on Google Maps."
+                        : "Map preview based on the saved address."
+                    }
+                    heightClassName="h-[300px]"
+                  />
                   <StreetViewPanel
-                    latitude={
-                      billboard.location.lat !== 0
-                        ? billboard.location.lat
-                        : undefined
-                    }
-                    longitude={
-                      billboard.location.lng !== 0
-                        ? billboard.location.lng
-                        : undefined
-                    }
-                    addressFallback={[
-                      billboard.location.address,
-                      billboard.location.city,
-                      billboard.location.state,
-                      billboard.location.country,
-                    ]
-                      .filter(Boolean)
-                      .join(", ")}
+                    latitude={displayLatitude}
+                    longitude={displayLongitude}
+                    addressFallback={locationAddress}
                     title="Street-Level View"
                     subtitle="See the billboard from the road."
                     heightClassName="h-[300px]"
                   />
                 </div>
-                {billboard.location.lat !== 0 &&
-                  billboard.location.lng !== 0 && (
-                    <p className="text-[11px] text-neutral-400 mt-3 font-mono">
-                      {billboard.location.lat.toFixed(6)},{" "}
-                      {billboard.location.lng.toFixed(6)}
-                    </p>
-                  )}
+                {(isResolvingLocationCoords || isAddressEstimatedLocation) && (
+                  <p className="text-[11px] text-neutral-400 mt-3">
+                    {isResolvingLocationCoords
+                      ? "Finding the exact map position from the saved address..."
+                      : "Map and street view are estimated from the saved address because no exact pin was stored with this listing."}
+                  </p>
+                )}
+                {hasDisplayCoordinates && (
+                  <p className="text-[11px] text-neutral-400 mt-3 font-mono">
+                    {displayLatitude.toFixed(6)}, {displayLongitude.toFixed(6)}
+                  </p>
+                )}
               </motion.div>
             )}
 

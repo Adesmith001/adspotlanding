@@ -520,12 +520,14 @@ export const deleteBillboard = async (billboardId: string): Promise<void> => {
  * done client-side.
  */
 export const checkBillboardHasActiveBookings = async (
-  billboardId: string
+  billboardId: string,
+  ownerId: string
 ): Promise<{ hasActive: boolean; reason: string | null }> => {
   try {
     const q = query(
       collection(db, BOOKINGS_COLLECTION),
-      where("billboardId", "==", billboardId)
+      where("billboardId", "==", billboardId),
+      where("ownerId", "==", ownerId)
     );
     const snapshot = await getDocs(q);
 
@@ -809,14 +811,10 @@ export const subscribeToAdvertiserBookings = (
  */
 export const getOwnerBookings = async (ownerId: string): Promise<Booking[]> => {
   try {
-    const q = query(
-      collection(db, BOOKINGS_COLLECTION),
-      where("ownerId", "==", ownerId),
-      orderBy("createdAt", "desc")
-    );
+    const q = query(collection(db, BOOKINGS_COLLECTION), where("ownerId", "==", ownerId));
 
     const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map((doc) => {
+    const bookings = querySnapshot.docs.map((doc) => {
       const data = doc.data();
       return {
         id: doc.id,
@@ -827,6 +825,9 @@ export const getOwnerBookings = async (ownerId: string): Promise<Booking[]> => {
         updatedAt: timestampToDate(data.updatedAt),
       } as Booking;
     });
+    return bookings.sort(
+      (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
+    );
   } catch (error) {
     console.error("Error getting owner bookings:", error);
     throw new Error("Failed to fetch bookings");

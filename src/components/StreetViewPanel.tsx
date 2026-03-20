@@ -1,15 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
 import { MdOutlineStreetview } from "react-icons/md";
+import { useGoogleMaps } from "@/hooks/useGoogleMaps";
 
 interface StreetViewPanelProps {
-  /** GPS latitude — required for the interactive Street View panorama */
   latitude?: number;
-  /** GPS longitude — required for the interactive Street View panorama */
   longitude?: number;
-  /**
-   * Fallback address string used when lat/lng are missing (0 or undefined).
-   * Renders an embedded Google Maps Street View iframe centred on the address.
-   */
   addressFallback?: string;
   title?: string;
   subtitle?: string;
@@ -29,62 +24,133 @@ const StreetViewPanel: React.FC<StreetViewPanelProps> = ({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [statusMessage, setStatusMessage] = useState("Loading street view...");
   const [hasStreetView, setHasStreetView] = useState(false);
-  const [isReady, setIsReady] = useState(false);
+  const [resolvedCoordinates, setResolvedCoordinates] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
+  const [isResolvingAddress, setIsResolvingAddress] = useState(false);
+  const { isLoaded, loadError, hasApiKey } = useGoogleMaps();
 
-  // Determine if we have usable GPS coordinates
-  const hasGps = typeof latitude === "number" && typeof longitude === "number"
-    && latitude !== 0 && longitude !== 0;
+  const hasExactGps =
+    typeof latitude === "number" &&
+    typeof longitude === "number" &&
+    latitude !== 0 &&
+    longitude !== 0;
 
-  // Address-based embedded iframe URL
-  const iframeSrc = !hasGps && addressFallback
-    ? `https://www.google.com/maps?q=${encodeURIComponent(addressFallback)}&layer=c&output=embed`
+  const effectiveLatitude = hasExactGps ? latitude : resolvedCoordinates?.latitude;
+  const effectiveLongitude = hasExactGps
+    ? longitude
+    : resolvedCoordinates?.longitude;
+
+  const hasResolvedCoordinates =
+    typeof effectiveLatitude === "number" &&
+    typeof effectiveLongitude === "number" &&
+    effectiveLatitude !== 0 &&
+    effectiveLongitude !== 0;
+
+  const mapsUrl = hasResolvedCoordinates
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+        `${effectiveLatitude},${effectiveLongitude}`
+      )}`
+    : addressFallback
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+        addressFallback
+      )}`
     : null;
 
-  // Wait for the keyless Google Maps script to populate window.google (only needed for GPS mode)
   useEffect(() => {
-    if (!hasGps) return;
-    let timer: ReturnType<typeof setTimeout>;
-    const check = () => {
-      if ((window as any).google?.maps) {
-        setIsReady(true);
-      } else {
-        timer = setTimeout(check, 200);
-      }
-    };
-    check();
-    return () => clearTimeout(timer);
-  }, [hasGps]);
+    setResolvedCoordinates(null);
+    setHasStreetView(false);
+    setStatusMessage(
+      hasExactGps
+        ? "Loading street view..."
+        : addressFallback
+        ? "Finding the street position for this listing..."
+        : "Street view needs an exact map pin for this listing."
+    );
+  }, [addressFallback, hasExactGps, latitude, longitude]);
 
   useEffect(() => {
-    if (!hasGps || !isReady || !containerRef.current) {
+    if (!hasApiKey || loadError || hasExactGps || !isLoaded || !addressFallback) {
+      return;
+    }
+
+    let cancelled = false;
+    setIsResolvingAddress(true);
+    setStatusMessage("Finding the street position for this listing...");
+
+    const geocoder = new window.google.maps.Geocoder();
+    geocoder.geocode(
+      {
+        address: addressFallback,
+        region: "NG",
+      },
+      (results, status) => {
+        if (cancelled) return;
+
+        if (status === "OK" && results?.[0]?.geometry?.location) {
+          const location = results[0].geometry.location;
+          setResolvedCoordinates({
+            latitude: location.lat(),
+            longitude: location.lng(),
+          });
+          setStatusMessage("Checking street-level imagery...");
+        } else {
+          setResolvedCoordinates(null);
+          setStatusMessage(
+            "We could not resolve an exact roadside position from the saved address."
+          );
+        }
+
+        setIsResolvingAddress(false);
+      }
+    );
+
+    return () => {
+      cancelled = true;
+    };
+  }, [addressFallback, hasApiKey, hasExactGps, isLoaded, loadError]);
+
+  useEffect(() => {
+    if (
+      !hasApiKey ||
+      loadError ||
+      !isLoaded ||
+      !hasResolvedCoordinates ||
+      !containerRef.current
+    ) {
       return;
     }
 
     containerRef.current.innerHTML = "";
-
-    const googleApi = (window as any).google;
-
     setStatusMessage("Checking street-level imagery...");
 
-    const streetViewService = new googleApi.maps.StreetViewService();
+    const googleMaps = window.google.maps;
+    const streetViewService = new googleMaps.StreetViewService();
+
     streetViewService.getPanorama(
       {
-        location: { lat: latitude, lng: longitude },
-        radius: 80,
-        source: googleApi.maps.StreetViewSource.OUTDOOR,
+        location: { lat: effectiveLatitude, lng: effectiveLongitude },
+        radius: 120,
+        source: googleMaps.StreetViewSource.OUTDOOR,
       },
-      (data: any, status: string) => {
+      (data, status) => {
         if (
-          status === googleApi.maps.StreetViewStatus.OK &&
+          status === googleMaps.StreetViewStatus.OK &&
           data?.location?.pano &&
           containerRef.current
         ) {
-          new googleApi.maps.StreetViewPanorama(containerRef.current, {
+          const pov =
+            typeof data?.tiles?.centerHeading === "number"
+              ? {
+                  heading: data.tiles.centerHeading,
+                  pitch: 0,
+                }
+              : undefined;
+
+          new googleMaps.StreetViewPanorama(containerRef.current, {
             pano: data.location.pano,
-            pov: {
-              heading: 0,
-              pitch: 0,
-            },
+            ...(pov ? { pov } : {}),
             zoom: 1,
             addressControl: false,
             linksControl: true,
@@ -93,48 +159,45 @@ const StreetViewPanel: React.FC<StreetViewPanelProps> = ({
             fullscreenControl: true,
             motionTracking: false,
           });
+
           setHasStreetView(true);
           return;
         }
 
         setHasStreetView(false);
         setStatusMessage(
-          "Street view imagery is not available for this exact point yet. The map location is still accurate.",
+          "Street view imagery is not available for this exact point yet."
         );
-      },
+      }
     );
-  }, [hasGps, isReady, latitude, longitude]);
+  }, [
+    effectiveLatitude,
+    effectiveLongitude,
+    hasApiKey,
+    hasResolvedCoordinates,
+    isLoaded,
+    loadError,
+  ]);
 
-  // ── Address-based iframe fallback ─────────────────────────────────────────
-  if (iframeSrc) {
-    return (
-      <div className={`rounded-2xl border border-neutral-200 bg-white overflow-hidden ${className}`}>
-        <div className="flex items-center gap-2 border-b border-neutral-100 px-4 py-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-neutral-100 text-neutral-700">
-            <MdOutlineStreetview size={20} />
-          </div>
-          <div>
-            <h3 className="text-sm font-semibold text-neutral-900">{title}</h3>
-            <p className="text-xs text-neutral-500">Showing street-level view based on address</p>
-          </div>
-        </div>
-        <div className={`relative w-full ${heightClassName}`}>
-          <iframe
-            title="Street View"
-            src={iframeSrc}
-            className="h-full w-full border-0"
-            loading="lazy"
-            allowFullScreen
-            referrerPolicy="no-referrer-when-downgrade"
-          />
-        </div>
-      </div>
-    );
-  }
+  const overlay = loadError
+    ? {
+        title: "Street view unavailable",
+        message: "Google Maps failed to load. Check the API key and enabled APIs.",
+      }
+    : !hasApiKey
+    ? {
+        title: "Street view unavailable",
+        message: "Add VITE_GOOGLE_MAPS_API_KEY to load Google Street View.",
+      }
+    : {
+        title: isResolvingAddress ? "Locating street view" : "Street view unavailable",
+        message: statusMessage,
+      };
 
-  // ── GPS interactive Street View ───────────────────────────────────────────
   return (
-    <div className={`rounded-2xl border border-neutral-200 bg-white ${className}`}>
+    <div
+      className={`rounded-2xl border border-neutral-200 bg-white ${className}`}
+    >
       <div className="flex items-center gap-2 border-b border-neutral-100 px-4 py-3">
         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-neutral-100 text-neutral-700">
           <MdOutlineStreetview size={20} />
@@ -146,16 +209,29 @@ const StreetViewPanel: React.FC<StreetViewPanelProps> = ({
       </div>
 
       <div className={`relative w-full ${heightClassName}`}>
-        <div
-          ref={containerRef}
-          className="h-full w-full"
-        />
+        {hasResolvedCoordinates && hasApiKey && !loadError ? (
+          <div ref={containerRef} className="h-full w-full" />
+        ) : null}
 
         {!hasStreetView && (
           <div className="absolute inset-0 flex items-center justify-center bg-neutral-50 px-5 text-center">
             <div>
-              <p className="text-sm font-medium text-neutral-800">Street view unavailable</p>
-              <p className="mt-2 text-sm text-neutral-500">{statusMessage}</p>
+              <p className="text-sm font-medium text-neutral-800">
+                {overlay.title}
+              </p>
+              <p className="mt-2 text-sm text-neutral-500">
+                {overlay.message}
+              </p>
+              {mapsUrl && (
+                <a
+                  href={mapsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-4 inline-flex items-center rounded-lg border border-neutral-200 px-3 py-2 text-xs font-semibold text-neutral-700 transition-colors hover:bg-neutral-100"
+                >
+                  Open in Maps
+                </a>
+              )}
             </div>
           </div>
         )}

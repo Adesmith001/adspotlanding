@@ -43,6 +43,7 @@ const OwnerBookings: React.FC = () => {
                 setBookings(data);
             } catch (error) {
                 console.error('Error fetching bookings:', error);
+                toast.error('Failed to load booking requests');
             } finally {
                 setLoading(false);
             }
@@ -301,7 +302,7 @@ const OwnerBookings: React.FC = () => {
 
                                             {booking.creativeAssets.length > 0 && (
                                                 <div className="grid grid-cols-3 gap-2 mb-3">
-                                                    {booking.creativeAssets.slice(0, 3).map((asset) => (
+                                                    {booking.creativeAssets.map((asset) => (
                                                         <a key={asset} href={asset} target="_blank" rel="noreferrer" className="block">
                                                             {isPdfUrl(asset) ? (
                                                                 <div className="flex h-20 w-full flex-col items-center justify-center rounded-lg border border-red-200 bg-red-50 px-2 text-center">

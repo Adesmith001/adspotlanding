@@ -8,7 +8,7 @@ import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import { useAppSelector } from '@/hooks/useRedux';
 import { selectUser } from '@/store/authSlice';
-import { getOwnerBillboards, deleteBillboard, updateBillboard } from '@/services/billboard.service';
+import { getOwnerBillboards, deleteBillboard, updateBillboard, checkBillboardHasActiveBookings } from '@/services/billboard.service';
 import type { Billboard } from '@/types/billboard.types';
 import toast from 'react-hot-toast';
 
@@ -45,7 +45,13 @@ const MyListings: React.FC = () => {
 
     const handleDelete = async (billboardId: string) => {
         if (!confirm('Are you sure you want to delete this listing?')) return;
+        if (!user) return;
         try {
+            const { hasActive, reason } = await checkBillboardHasActiveBookings(billboardId, user.uid);
+            if (hasActive) {
+                toast.error(`You cannot delete this listing yet because ${reason}.`);
+                return;
+            }
             await deleteBillboard(billboardId);
             setBillboards((prev) => prev.filter((b) => b.id !== billboardId));
             toast.success('Listing deleted successfully');

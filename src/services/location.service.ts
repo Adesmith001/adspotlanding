@@ -6,6 +6,12 @@ export interface ReverseGeocodeResult {
   landmark?: string;
 }
 
+export interface CurrentBrowserLocation {
+  latitude: number;
+  longitude: number;
+  accuracy?: number;
+}
+
 const NOMINATIM_BASE_URL = "https://nominatim.openstreetmap.org";
 
 const fetchJson = async <T>(url: string): Promise<T> => {
@@ -109,6 +115,31 @@ export const geocodeAddress = async (
     };
   } catch (error) {
     console.error("Error geocoding address:", error);
+    return null;
+  }
+};
+
+export const getCurrentBrowserLocation = async (): Promise<CurrentBrowserLocation | null> => {
+  if (typeof window === "undefined" || !("geolocation" in navigator)) {
+    return null;
+  }
+
+  try {
+    const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 30000,
+      });
+    });
+
+    return {
+      latitude: position.coords.latitude,
+      longitude: position.coords.longitude,
+      accuracy: position.coords.accuracy,
+    };
+  } catch (error) {
+    console.error("Error getting current browser location:", error);
     return null;
   }
 };

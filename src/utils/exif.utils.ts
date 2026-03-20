@@ -21,6 +21,44 @@ export const extractGpsFromFile = async (
     ) {
       return { latitude: gps.latitude, longitude: gps.longitude };
     }
+
+    const metadata = await exifr.parse(file, {
+      gps: true,
+      exif: true,
+      tiff: true,
+      xmp: true,
+      pick: [
+        "latitude",
+        "longitude",
+        "lat",
+        "lng",
+        "GPSLatitude",
+        "GPSLongitude",
+      ],
+    });
+
+    const latitudeCandidates = [
+      metadata?.latitude,
+      metadata?.lat,
+      metadata?.GPSLatitude,
+    ];
+    const longitudeCandidates = [
+      metadata?.longitude,
+      metadata?.lng,
+      metadata?.GPSLongitude,
+    ];
+
+    const latitude = latitudeCandidates.find(
+      (value) => typeof value === "number"
+    );
+    const longitude = longitudeCandidates.find(
+      (value) => typeof value === "number"
+    );
+
+    if (typeof latitude === "number" && typeof longitude === "number") {
+      return { latitude, longitude };
+    }
+
     return null;
   } catch {
     return null;
