@@ -20,6 +20,7 @@ import { uploadFiles, uploadImages } from "./cloudinary.service";
 import { db } from "./firebase";
 import { createNotification } from "./notification.service";
 import { startConversation } from "./message.service";
+import { getUserProfile } from "./user.service";
 import type {
   Billboard,
   Booking,
@@ -30,6 +31,7 @@ import type {
   CreateBillboardForm,
   BookingRequest,
 } from "@/types/billboard.types";
+import { stripUndefinedDeep } from "@/utils/firestore.utils";
 
 // Collections
 const BILLBOARDS_COLLECTION = "billboards";
@@ -43,6 +45,53 @@ const timestampToDate = (timestamp: any): Date => {
     return timestamp.toDate();
   }
   return timestamp;
+};
+
+const optionalTimestampToDate = (timestamp: any): Date | undefined => {
+  if (!timestamp) {
+    return undefined;
+  }
+
+  return timestampToDate(timestamp);
+};
+
+const mapBookingData = (id: string, data: any): Booking =>
+  ({
+    id,
+    ...data,
+    startDate: timestampToDate(data.startDate),
+    endDate: timestampToDate(data.endDate),
+    paidAt: optionalTimestampToDate(data.paidAt),
+    paymentRequestedAt: optionalTimestampToDate(data.paymentRequestedAt),
+    paymentDueAt: optionalTimestampToDate(data.paymentDueAt),
+    approvalDecisionAt: optionalTimestampToDate(data.approvalDecisionAt),
+    creativeReviewedAt: optionalTimestampToDate(data.creativeReviewedAt),
+    campaignStartedAt: optionalTimestampToDate(data.campaignStartedAt),
+    cancelledAt: optionalTimestampToDate(data.cancelledAt),
+    reviewedAt: optionalTimestampToDate(data.reviewedAt),
+    createdAt: timestampToDate(data.createdAt),
+    updatedAt: timestampToDate(data.updatedAt),
+  }) as Booking;
+
+const addDays = (date: Date, days: number): Date => {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+};
+
+const formatDurationLabel = (duration: number, unit: "days" | "hours") =>
+  `${duration} ${unit === "hours" ? "hour" : "day"}${
+    duration === 1 ? "" : "s"
+  }`;
+
+const calculateBookingDuration = (
+  startDate: Date,
+  endDate: Date,
+  durationUnit: "days" | "hours"
+) => {
+  const unitMs =
+    durationUnit === "hours" ? 1000 * 60 * 60 : 1000 * 60 * 60 * 24;
+  return Math.ceil((endDate.getTime() - startDate.getTime()) / unitMs);
 };
 
 const resolveLiveBookingStatus = (
@@ -59,7 +108,9 @@ const resolveLiveBookingStatus = (
 
   const shouldBeActive =
     booking.paymentStatus === "paid" &&
-    booking.creativeApprovalStatus === "approved";
+    booking.creativeApprovalStatus === "approved" &&
+    new Date(booking.startDate).getTime() <= Date.now() &&
+    new Date(booking.endDate).getTime() >= Date.now();
 
   return {
     status: shouldBeActive ? "active" : "confirmed",
@@ -141,7 +192,7 @@ export const createBillboard = async (
 
     const docRef = await addDoc(
       collection(db, BILLBOARDS_COLLECTION),
-      billboard
+      stripUndefinedDeep(billboard)
     );
     return docRef.id;
   } catch (error: any) {
@@ -604,23 +655,66 @@ export const createBooking = async (
     // Calculate duration and price based on category/unit
     const isHourly =
       request.durationUnit === "hours" || billboard.category === "screen";
+    const durationUnit = isHourly ? "hours" : "days";
 
     let duration = 0;
     let pricePerUnit = 0;
     let totalAmount = 0;
 
-    if (isHourly) {
-      duration = Math.ceil(
-        (request.endDate.getTime() - request.startDate.getTime()) /
-          (1000 * 60 * 60)
+    duration = calculateBookingDuration(
+      request.startDate,
+      request.endDate,
+      durationUnit
+    );
+
+    if (duration <= 0) {
+      throw new Error("End date must be after the start date");
+    }
+
+    const minDuration = Math.max(1, billboard.bookingRules.minDuration || 1);
+    const maxDuration = Math.max(minDuration, billboard.bookingRules.maxDuration || minDuration);
+    const advanceNotice = Math.max(0, billboard.bookingRules.advanceNotice || 0);
+
+    if (duration < minDuration) {
+      throw new Error(
+        `Minimum booking duration is ${formatDurationLabel(
+          minDuration,
+          durationUnit
+        )}`
       );
+    }
+
+    if (duration > maxDuration) {
+      throw new Error(
+        `Maximum booking duration is ${formatDurationLabel(
+          maxDuration,
+          durationUnit
+        )}`
+      );
+    }
+
+    const earliestStart = addDays(new Date(), advanceNotice);
+    const normalizedRequestStart = new Date(request.startDate);
+    const normalizedEarliestStart = new Date(earliestStart);
+
+    if (durationUnit === "days") {
+      normalizedRequestStart.setHours(0, 0, 0, 0);
+      normalizedEarliestStart.setHours(0, 0, 0, 0);
+    }
+
+    if (normalizedRequestStart.getTime() < normalizedEarliestStart.getTime()) {
+      throw new Error(
+        `Bookings must be made at least ${formatDurationLabel(
+          advanceNotice,
+          "days"
+        )} in advance`
+      );
+    }
+
+    if (isHourly) {
       pricePerUnit = billboard.pricing.hourly || 0;
       totalAmount = pricePerUnit * duration;
     } else {
-      duration = Math.ceil(
-        (request.endDate.getTime() - request.startDate.getTime()) /
-          (1000 * 60 * 60 * 24)
-      );
       pricePerUnit = billboard.pricing.daily;
       totalAmount = pricePerUnit * duration;
 
@@ -637,6 +731,14 @@ export const createBooking = async (
     const creativeAssets = request.designFiles?.length
       ? await uploadFiles(request.designFiles)
       : [];
+    const ownerProfile = await getUserProfile(billboard.ownerId);
+    const ownerEmail = ownerProfile?.email || "";
+    const paymentRequestedAt = billboard.bookingRules.instantBook
+      ? new Date()
+      : undefined;
+    const paymentDueAt = paymentRequestedAt
+      ? addDays(paymentRequestedAt, 3)
+      : undefined;
 
     const booking: Omit<Booking, "id"> = {
       billboardId: billboard.id,
@@ -647,19 +749,22 @@ export const createBooking = async (
       advertiserEmail,
       ownerId: billboard.ownerId,
       ownerName: billboard.ownerName,
-      ownerEmail: "", // Will be fetched from user profile
+      ownerEmail,
       startDate: request.startDate,
       endDate: request.endDate,
       duration,
-      durationUnit: isHourly ? "hours" : "days",
+      durationUnit,
       pricePerDay: pricePerUnit, // Keep for backward compatibility
       pricePerUnit,
       totalAmount,
       currency: "NGN",
       status: billboard.bookingRules.instantBook ? "confirmed" : "pending",
       paymentStatus: "pending",
+      approvalDecisionAt: paymentRequestedAt,
+      paymentRequestedAt,
+      paymentDueAt,
       campaignPhotos: [],
-      campaignNotes: request.message?.trim() || undefined,
+      campaignNotes: request.message?.trim(),
       creativeRequirementType: request.creativeRequirementType,
       creativeAssets,
       creativeBrief: request.creativeBrief.trim(),
@@ -668,7 +773,10 @@ export const createBooking = async (
       updatedAt: new Date(),
     };
 
-    const docRef = await addDoc(collection(db, BOOKINGS_COLLECTION), booking);
+    const docRef = await addDoc(
+      collection(db, BOOKINGS_COLLECTION),
+      stripUndefinedDeep(booking)
+    );
 
     const creativeSummary =
       request.creativeRequirementType === "advertiser_upload"
@@ -700,6 +808,20 @@ export const createBooking = async (
       "/dashboard/owner/bookings"
     );
 
+    if (billboard.bookingRules.instantBook && paymentDueAt) {
+      await createNotification(
+        advertiserId,
+        "payment_due",
+        "Payment Due Within 3 Days",
+        `Your booking for "${billboard.title}" is confirmed. Complete payment by ${paymentDueAt.toLocaleDateString(
+          "en-NG",
+          { day: "numeric", month: "short", year: "numeric" }
+        )} so design work can start.`,
+        { bookingId: docRef.id, billboardId: billboard.id },
+        "/dashboard/advertiser/payments"
+      );
+    }
+
     return docRef.id;
   } catch (error) {
     console.error("Error creating booking:", error);
@@ -719,14 +841,7 @@ export const getBooking = async (
 
     if (docSnap.exists()) {
       const data = docSnap.data();
-      return {
-        id: docSnap.id,
-        ...data,
-        startDate: timestampToDate(data.startDate),
-        endDate: timestampToDate(data.endDate),
-        createdAt: timestampToDate(data.createdAt),
-        updatedAt: timestampToDate(data.updatedAt),
-      } as Booking;
+      return mapBookingData(docSnap.id, data);
     }
     return null;
   } catch (error) {
@@ -749,17 +864,9 @@ export const getAdvertiserBookings = async (
     );
 
     const querySnapshot = await getDocs(q);
-    const bookings = querySnapshot.docs.map((doc) => {
-      const data = doc.data();
-      return {
-        id: doc.id,
-        ...data,
-        startDate: timestampToDate(data.startDate),
-        endDate: timestampToDate(data.endDate),
-        createdAt: timestampToDate(data.createdAt),
-        updatedAt: timestampToDate(data.updatedAt),
-      } as Booking;
-    });
+    const bookings = querySnapshot.docs.map((doc) =>
+      mapBookingData(doc.id, doc.data())
+    );
     return bookings.sort(
       (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
     );
@@ -784,17 +891,9 @@ export const subscribeToAdvertiserBookings = (
   return onSnapshot(
     q,
     (snapshot) => {
-      const bookings = snapshot.docs.map((doc) => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          ...data,
-          startDate: timestampToDate(data.startDate),
-          endDate: timestampToDate(data.endDate),
-          createdAt: timestampToDate(data.createdAt),
-          updatedAt: timestampToDate(data.updatedAt),
-        } as Booking;
-      });
+      const bookings = snapshot.docs.map((doc) =>
+        mapBookingData(doc.id, doc.data())
+      );
       const sorted = bookings.sort(
         (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
       );
@@ -814,17 +913,9 @@ export const getOwnerBookings = async (ownerId: string): Promise<Booking[]> => {
     const q = query(collection(db, BOOKINGS_COLLECTION), where("ownerId", "==", ownerId));
 
     const querySnapshot = await getDocs(q);
-    const bookings = querySnapshot.docs.map((doc) => {
-      const data = doc.data();
-      return {
-        id: doc.id,
-        ...data,
-        startDate: timestampToDate(data.startDate),
-        endDate: timestampToDate(data.endDate),
-        createdAt: timestampToDate(data.createdAt),
-        updatedAt: timestampToDate(data.updatedAt),
-      } as Booking;
-    });
+    const bookings = querySnapshot.docs.map((doc) =>
+      mapBookingData(doc.id, doc.data())
+    );
     return bookings.sort(
       (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
     );
@@ -850,17 +941,7 @@ export const subscribeToOwnerBookings = (
     q,
     (snapshot) => {
       const bookings = snapshot.docs
-        .map((doc) => {
-          const data = doc.data();
-          return {
-            id: doc.id,
-            ...data,
-            startDate: timestampToDate(data.startDate),
-            endDate: timestampToDate(data.endDate),
-            createdAt: timestampToDate(data.createdAt),
-            updatedAt: timestampToDate(data.updatedAt),
-          } as Booking;
-        })
+        .map((doc) => mapBookingData(doc.id, doc.data()))
         .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
       callback(bookings);
@@ -876,8 +957,9 @@ export const subscribeToOwnerBookings = (
  */
 export const updateBookingStatus = async (
   bookingId: string,
-  status: Booking["status"]
-): Promise<void> => {
+  status: Booking["status"],
+  ownerDecisionNote?: string
+): Promise<Booking | null> => {
   try {
     const booking = await getBooking(bookingId);
     if (!booking) {
@@ -890,20 +972,47 @@ export const updateBookingStatus = async (
       updatedAt: new Date(),
     };
 
+    const sanitizedDecisionNote = ownerDecisionNote?.trim();
+
     if (status === "active") {
       updates.campaignStartedAt = new Date();
     }
 
-    await updateDoc(docRef, updates);
+    if (status === "confirmed") {
+      const now = new Date();
+      updates.approvalDecisionAt = now;
+      updates.paymentRequestedAt = now;
+      updates.paymentDueAt = addDays(now, 3);
+      updates.ownerDecisionNote = sanitizedDecisionNote || null;
+    }
+
+    if (status === "rejected") {
+      if (!sanitizedDecisionNote) {
+        throw new Error("Please provide a reason for rejecting this booking");
+      }
+
+      updates.approvalDecisionAt = new Date();
+      updates.paymentRequestedAt = null;
+      updates.paymentDueAt = null;
+      updates.ownerDecisionNote = sanitizedDecisionNote;
+    }
+
+    await updateDoc(docRef, stripUndefinedDeep(updates));
 
     if (status === "confirmed") {
+      const paymentDueAt = updates.paymentDueAt as Date;
       await createNotification(
         booking.advertiserId,
-        "booking_confirmed",
+        "payment_due",
         "Booking Approved",
-        `Your booking for "${booking.billboardTitle}" was approved. The owner can now review the creative before payment is due.`,
+        `Your booking for "${booking.billboardTitle}" was approved. Complete payment by ${paymentDueAt.toLocaleDateString(
+          "en-NG",
+          { day: "numeric", month: "short", year: "numeric" }
+        )} so design work can start.${
+          sanitizedDecisionNote ? ` Note from owner: ${sanitizedDecisionNote}` : ""
+        }`,
         { bookingId, billboardId: booking.billboardId },
-        "/dashboard/advertiser/campaigns"
+        "/dashboard/advertiser/payments"
       );
     }
 
@@ -912,7 +1021,9 @@ export const updateBookingStatus = async (
         booking.advertiserId,
         "booking_cancelled",
         "Booking Declined",
-        `Your booking request for "${booking.billboardTitle}" was declined by the owner.`,
+        `Your booking request for "${booking.billboardTitle}" was declined by the owner.${
+          sanitizedDecisionNote ? ` Reason: ${sanitizedDecisionNote}` : ""
+        }`,
         { bookingId, billboardId: booking.billboardId },
         "/dashboard/advertiser/campaigns"
       );
@@ -946,8 +1057,13 @@ export const updateBookingStatus = async (
         );
       }
     }
+
+    return await getBooking(bookingId);
   } catch (error) {
     console.error("Error updating booking status:", error);
+    if (error instanceof Error) {
+      throw error;
+    }
     throw new Error("Failed to update booking");
   }
 };
@@ -962,12 +1078,12 @@ export const updatePaymentStatus = async (
 ): Promise<void> => {
   try {
     const docRef = doc(db, BOOKINGS_COLLECTION, bookingId);
-    await updateDoc(docRef, {
+    await updateDoc(docRef, stripUndefinedDeep({
       paymentStatus,
       paymentId,
       paidAt: paymentStatus === "paid" ? new Date() : null,
       updatedAt: new Date(),
-    });
+    }));
   } catch (error) {
     console.error("Error updating payment status:", error);
     throw new Error("Failed to update payment");
@@ -1038,8 +1154,13 @@ export const updateCreativeApprovalStatus = async (
         "Creative Approved",
         `Your creative for \"${booking.billboardTitle}\" has been approved.${
           booking.paymentStatus === "paid"
-            ? " The campaign can now go live."
-            : " Complete payment to lock the booking and launch the campaign."
+            ? " Your campaign will go live once the booking start date arrives."
+            : booking.paymentDueAt
+            ? ` Complete payment by ${new Date(booking.paymentDueAt).toLocaleDateString(
+                "en-NG",
+                { day: "numeric", month: "short", year: "numeric" }
+              )} so launch prep can continue.`
+            : " Complete payment so launch prep can continue."
         }`,
         { bookingId, billboardId: booking.billboardId },
         booking.paymentStatus === "paid"
@@ -1134,14 +1255,13 @@ export const checkAndCompleteExpiredCampaigns = async (
     await Promise.all(
       snapshot.docs.map(async (docSnap) => {
         const data = docSnap.data();
-        const endDate: Date = data.endDate?.toDate
-          ? data.endDate.toDate()
-          : new Date(data.endDate);
+        const booking = mapBookingData(docSnap.id, data);
+        const endDate = new Date(booking.endDate);
 
         if (endDate < now) {
-          const bookingId = docSnap.id;
-          const billboardId = data.billboardId as string;
-          const billboardTitle = data.billboardTitle as string;
+          const bookingId = booking.id;
+          const billboardId = booking.billboardId;
+          const billboardTitle = booking.billboardTitle;
 
           // Mark completed
           await updateDoc(doc(db, BOOKINGS_COLLECTION, bookingId), {
@@ -1157,7 +1277,7 @@ export const checkAndCompleteExpiredCampaigns = async (
           }
 
           // Only send review notification if not already reviewed
-          if (!data.reviewedAt) {
+          if (!booking.reviewedAt) {
             await createNotification(
               advertiserId,
               "review_prompt",

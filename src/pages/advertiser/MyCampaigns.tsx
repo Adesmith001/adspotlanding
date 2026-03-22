@@ -189,10 +189,19 @@ const MyCampaigns: React.FC = () => {
 
     const isActive = (booking: Booking) => booking.status === 'active';
 
+    const getPaymentDueDate = (booking: Booking) =>
+        booking.paymentDueAt ? new Date(booking.paymentDueAt) : null;
+
+    const isPaymentOverdue = (booking: Booking) => {
+        const dueDate = getPaymentDueDate(booking);
+        return !!dueDate && dueDate.getTime() < Date.now() && !isPaidBooking(booking);
+    };
+
     const isReadyForPayment = (booking: Booking) =>
         booking.status === 'confirmed' &&
         !isPaidBooking(booking) &&
-        booking.creativeApprovalStatus === 'approved';
+        !!booking.paymentRequestedAt &&
+        !isPaymentOverdue(booking);
 
     const isCompleted = (booking: Booking) =>
         booking.status === 'completed' || new Date(booking.endDate) < new Date();
@@ -205,8 +214,8 @@ const MyCampaigns: React.FC = () => {
             case 'upcoming':
                 return bookings.filter(
                     (b) =>
-                        b.status === 'confirmed' &&
-                        new Date(b.startDate) > now,
+                        b.status === 'pending' ||
+                        (b.status === 'confirmed' && new Date(b.endDate) >= now),
                 );
             case 'completed':
                 return bookings.filter(isCompleted);
@@ -235,6 +244,21 @@ const MyCampaigns: React.FC = () => {
         const total = getDaysTotal(startDate, endDate);
         const remaining = getDaysRemaining(endDate);
         return Math.round(((total - remaining) / total) * 100);
+    };
+
+    const getPaymentDeadlineLabel = (booking: Booking) => {
+        const dueDate = getPaymentDueDate(booking);
+        if (!dueDate || isPaidBooking(booking)) {
+            return null;
+        }
+
+        const timeLeft = dueDate.getTime() - Date.now();
+        if (timeLeft < 0) {
+            return `Payment window expired on ${formatDate(dueDate)}`;
+        }
+
+        const daysLeft = Math.ceil(timeLeft / (1000 * 60 * 60 * 24));
+        return `Pay by ${formatDate(dueDate)} (${daysLeft} day${daysLeft === 1 ? '' : 's'} left)`;
     };
 
     const handleMessageOwner = async (booking: Booking) => {
@@ -338,9 +362,9 @@ const MyCampaigns: React.FC = () => {
         { key: 'active', label: 'Active', count: bookings.filter(isActive).length },
         {
             key: 'upcoming',
-            label: 'Upcoming',
+            label: 'Requests',
             count: bookings.filter(
-                (b) => b.status === 'confirmed' && new Date(b.startDate) > new Date(),
+                (b) => b.status === 'pending' || (b.status === 'confirmed' && new Date(b.endDate) >= new Date()),
             ).length,
         },
         { key: 'completed', label: 'Completed', count: bookings.filter(isCompleted).length },
@@ -352,8 +376,8 @@ const MyCampaigns: React.FC = () => {
             description: 'Campaigns currently running on billboards will appear here. Book a billboard to start advertising!',
         },
         upcoming: {
-            title: 'No Upcoming Campaigns',
-            description: 'Confirmed bookings scheduled to start will appear here.',
+            title: 'No Requests Yet',
+            description: 'Pending requests, approved bookings, and payment-ready campaigns will appear here.',
         },
         completed: {
             title: 'No Completed Campaigns',
@@ -464,6 +488,7 @@ const MyCampaigns: React.FC = () => {
                             const daysTotal = getDaysTotal(booking.startDate, booking.endDate);
                             const daysRemaining = getDaysRemaining(booking.endDate);
                             const paymentReference = getPaymentReference(booking);
+                            const paymentDeadlineLabel = getPaymentDeadlineLabel(booking);
                             const canReview = isCompleted(booking) && !booking.reviewedAt;
 
                             return (
@@ -582,6 +607,45 @@ const MyCampaigns: React.FC = () => {
                                                         </div>
                                                     )}
                                                 </div>
+
+                                                {(booking.status === 'pending' || paymentDeadlineLabel) && (
+                                                    <div className={`rounded-2xl border px-4 py-3 ${isPaymentOverdue(booking)
+                                                        ? 'border-red-200 bg-red-50'
+                                                        : booking.status === 'pending'
+                                                            ? 'border-amber-200 bg-amber-50'
+                                                            : 'border-primary-200 bg-primary-50/70'
+                                                        }`}>
+                                                        <div className="flex items-start gap-2">
+                                                            <MdPayment size={18} className={`${isPaymentOverdue(booking) ? 'text-red-500' : 'text-primary-600'} mt-0.5 flex-shrink-0`} />
+                                                            <div>
+                                                                <p className="text-sm font-semibold text-neutral-900">
+                                                                    {booking.status === 'pending'
+                                                                        ? 'Awaiting owner approval'
+                                                                        : isPaymentOverdue(booking)
+                                                                            ? 'Payment deadline missed'
+                                                                            : 'Payment unlocked'}
+                                                                </p>
+                                                                <p className={`text-xs mt-1 ${isPaymentOverdue(booking) ? 'text-red-700' : 'text-neutral-600'}`}>
+                                                                    {booking.status === 'pending'
+                                                                        ? 'The owner needs to approve this request before payment opens.'
+                                                                        : paymentDeadlineLabel}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {booking.ownerDecisionNote && (
+                                                    <div className={`rounded-2xl border px-4 py-3 ${booking.status === 'rejected'
+                                                        ? 'border-red-200 bg-red-50'
+                                                        : 'border-neutral-200 bg-white'
+                                                        }`}>
+                                                        <p className="text-sm font-semibold text-neutral-900">Owner note</p>
+                                                        <p className={`mt-1 text-sm leading-relaxed ${booking.status === 'rejected' ? 'text-red-700' : 'text-neutral-600'}`}>
+                                                            {booking.ownerDecisionNote}
+                                                        </p>
+                                                    </div>
+                                                )}
 
                                                 {/* Progress bar (active only) */}
                                                 {activeTab === 'active' && (

@@ -142,6 +142,10 @@ export interface Booking {
   paymentId?: string; // Paystack reference
   paymentMethod?: string;
   paidAt?: Date;
+  paymentRequestedAt?: Date;
+  paymentDueAt?: Date;
+  approvalDecisionAt?: Date;
+  ownerDecisionNote?: string;
 
   // Documents
   contractUrl?: string;
@@ -304,6 +308,7 @@ export type NotificationType =
   | "booking_request"
   | "booking_confirmed"
   | "booking_cancelled"
+  | "payment_due"
   | "payment_received"
   | "new_message"
   | "review_received"

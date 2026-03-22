@@ -9,6 +9,7 @@ import {
 } from "firebase/firestore";
 import { db } from "./firebase";
 import {
+  getBooking,
   syncBookingCampaignStatus,
   updatePaymentStatus,
 } from "./billboard.service";
@@ -92,6 +93,28 @@ export const processPayment = async (
   customerName: string,
   customerEmail: string,
 ): Promise<{ success: boolean; reference: string }> => {
+  const booking = await getBooking(bookingId);
+  if (!booking) {
+    throw new Error("Booking not found.");
+  }
+
+  if (booking.paymentStatus === "paid") {
+    throw new Error("This booking has already been paid for.");
+  }
+
+  if (!booking.paymentRequestedAt) {
+    throw new Error("Payment is not available until the owner approves the booking.");
+  }
+
+  if (
+    booking.paymentDueAt &&
+    new Date(booking.paymentDueAt).getTime() < Date.now()
+  ) {
+    throw new Error(
+      "The 3-day payment window has expired. Please contact the owner to reopen the booking."
+    );
+  }
+
   return new Promise((resolve, reject) => {
     const KoraSDK = window.Korapay || window.KoraPay;
 
@@ -166,7 +189,7 @@ export const processPayment = async (
             "Payment Successful",
             isActive
               ? `Your booking for "${billboardTitle}" is now active.`
-              : `Payment for "${billboardTitle}" was received. The campaign will go live after the owner approves the creative.`,
+              : `Payment for "${billboardTitle}" was received. Design work can now start while the owner finishes review and launch prep.`,
             { bookingId },
             "/dashboard/advertiser/campaigns",
           );

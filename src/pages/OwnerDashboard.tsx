@@ -28,6 +28,7 @@ const statusColor: Record<string, string> = {
     active: 'bg-[#d4f34a]/30 text-green-800',
     completed: 'bg-neutral-100 text-neutral-600',
     cancelled: 'bg-red-50 text-red-600',
+    rejected: 'bg-red-50 text-red-600',
 };
 
 const OwnerDashboard: React.FC = () => {

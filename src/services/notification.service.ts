@@ -14,6 +14,7 @@ import {
 } from "firebase/firestore";
 import { db } from "./firebase";
 import type { Notification, NotificationType } from "@/types/billboard.types";
+import { stripUndefinedDeep } from "@/utils/firestore.utils";
 
 const NOTIFICATIONS_COLLECTION = "notifications";
 
@@ -29,7 +30,7 @@ export const createNotification = async (
   actionUrl?: string,
 ): Promise<string> => {
   try {
-    const notification = {
+    const notification = stripUndefinedDeep({
       userId,
       type,
       title,
@@ -38,7 +39,7 @@ export const createNotification = async (
       metadata,
       actionUrl,
       createdAt: serverTimestamp(),
-    };
+    });
 
     const docRef = await addDoc(
       collection(db, NOTIFICATIONS_COLLECTION),

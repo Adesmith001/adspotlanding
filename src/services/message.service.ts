@@ -15,6 +15,7 @@ import { db } from "./firebase";
 import type { Conversation, Message } from "@/types/billboard.types";
 import { createNotification } from "./notification.service";
 import { getUserProfile } from "./user.service";
+import { stripUndefinedDeep } from "@/utils/firestore.utils";
 
 const CONVERSATIONS_COLLECTION = "conversations";
 const MESSAGES_COLLECTION = "messages";
@@ -56,7 +57,7 @@ export const startConversation = async (
     const receiverName = receiver?.displayName || "User";
 
     // Create new conversation
-    const conversationData = {
+    const conversationData = stripUndefinedDeep({
       participants: [senderId, receiverId],
       participantDetails: {
         [senderId]: {
@@ -78,7 +79,7 @@ export const startConversation = async (
         [receiverId]: initialMessage ? 1 : 0,
       },
       createdAt: serverTimestamp(),
-    };
+    });
 
     const docRef = await addDoc(
       collection(db, CONVERSATIONS_COLLECTION),

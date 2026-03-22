@@ -34,6 +34,9 @@ const getStatusIcon = (status: string) => {
 const formatPrice = (amount: number) =>
     new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', minimumFractionDigits: 0 }).format(amount);
 
+const formatDate = (date: Date) =>
+    new Date(date).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' });
+
 const Payments: React.FC = () => {
     const user = useAppSelector(selectUser);
 
@@ -41,6 +44,28 @@ const Payments: React.FC = () => {
     const [payableBookings, setPayableBookings] = useState<Booking[]>([]);
     const [loading, setLoading] = useState(true);
     const [payingBookingId, setPayingBookingId] = useState<string | null>(null);
+
+    const getPaymentDueDate = (booking: Booking) =>
+        booking.paymentDueAt ? new Date(booking.paymentDueAt) : null;
+
+    const isPaymentOverdue = (booking: Booking) => {
+        const dueDate = getPaymentDueDate(booking);
+        return !!dueDate && dueDate.getTime() < Date.now() && booking.paymentStatus !== 'paid';
+    };
+
+    const getPaymentDeadlineText = (booking: Booking) => {
+        const dueDate = getPaymentDueDate(booking);
+        if (!dueDate) {
+            return 'Waiting for owner approval';
+        }
+
+        if (isPaymentOverdue(booking)) {
+            return `Payment window expired on ${formatDate(dueDate)}`;
+        }
+
+        const daysLeft = Math.ceil((dueDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+        return `Pay by ${formatDate(dueDate)} (${daysLeft} day${daysLeft === 1 ? '' : 's'} left)`;
+    };
 
     const loadPaymentData = async () => {
         if (!user) {
@@ -58,7 +83,7 @@ const Payments: React.FC = () => {
                 (booking) =>
                     booking.status === 'confirmed' &&
                     booking.paymentStatus !== 'paid' &&
-                    booking.creativeApprovalStatus === 'approved',
+                    !!booking.paymentRequestedAt,
             ),
         );
     };
@@ -88,6 +113,10 @@ const Payments: React.FC = () => {
         const toastId = toast.loading('Launching payment...');
 
         try {
+            if (isPaymentOverdue(booking)) {
+                throw new Error('The 3-day payment window has expired. Message the owner to reopen the booking.');
+            }
+
             await processPayment(
                 booking.id,
                 booking.totalAmount,
@@ -127,7 +156,7 @@ const Payments: React.FC = () => {
                 <div className="text-sm">
                     <p className="font-semibold text-primary-900 mb-1">Pay only after owner approval</p>
                     <p className="text-primary-700 leading-relaxed">
-                        Once the owner approves your creative, the booking appears here for payment through Korapay. Your card information is encrypted and never stored on our servers.
+                        Once the owner approves your booking, you have 3 days to complete payment through Korapay so design work can begin. Your card information is encrypted and never stored on our servers.
                     </p>
                 </div>
             </motion.div>
@@ -146,7 +175,7 @@ const Payments: React.FC = () => {
                             </div>
                             <div>
                                 <h2 className="text-xl font-bold text-neutral-900">Ready for Payment</h2>
-                                <p className="text-sm text-neutral-500">Bookings unlocked after owner approval</p>
+                                <p className="text-sm text-neutral-500">Approved bookings waiting for payment within 3 days</p>
                             </div>
                         </div>
 
@@ -163,7 +192,7 @@ const Payments: React.FC = () => {
                                 </div>
                                 <h3 className="text-base font-semibold text-neutral-900">No payments waiting</h3>
                                 <p className="mt-2 text-sm text-neutral-500 max-w-xl mx-auto">
-                                    Approved creatives that are ready for checkout will appear here. If a booking is still under review, you can track it from My Campaigns.
+                                    Approved bookings that are ready for checkout will appear here. If a request is still under review, you can track it from My Campaigns.
                                 </p>
                             </div>
                         ) : (
@@ -177,17 +206,23 @@ const Payments: React.FC = () => {
                                             <div>
                                                 <div className="flex flex-wrap items-center gap-2">
                                                     <h3 className="text-lg font-bold text-neutral-900">{booking.billboardTitle}</h3>
-                                                    <span className="rounded-full bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-700">
-                                                        Creative approved
+                                                    <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${isPaymentOverdue(booking)
+                                                        ? 'bg-red-100 text-red-700'
+                                                        : 'bg-green-100 text-green-700'
+                                                        }`}>
+                                                        {isPaymentOverdue(booking) ? 'Payment overdue' : 'Owner approved'}
                                                     </span>
                                                 </div>
                                                 <p className="mt-2 text-sm text-neutral-600">
-                                                    {new Date(booking.startDate).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                    {formatDate(new Date(booking.startDate))}
                                                     {' '}to{' '}
-                                                    {new Date(booking.endDate).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                    {formatDate(new Date(booking.endDate))}
                                                 </p>
                                                 <p className="mt-1 text-sm text-neutral-500">
                                                     Owner: {booking.ownerName}
+                                                </p>
+                                                <p className={`mt-1 text-sm ${isPaymentOverdue(booking) ? 'text-red-600' : 'text-amber-700'}`}>
+                                                    {getPaymentDeadlineText(booking)}
                                                 </p>
                                             </div>
 
@@ -197,9 +232,9 @@ const Payments: React.FC = () => {
                                                 </p>
                                                 <Button
                                                     onClick={() => handlePayNow(booking)}
-                                                    disabled={payingBookingId === booking.id}
+                                                    disabled={payingBookingId === booking.id || isPaymentOverdue(booking)}
                                                 >
-                                                    {payingBookingId === booking.id ? 'Processing...' : 'Pay Now'}
+                                                    {payingBookingId === booking.id ? 'Processing...' : isPaymentOverdue(booking) ? 'Payment Closed' : 'Pay Now'}
                                                 </Button>
                                             </div>
                                         </div>

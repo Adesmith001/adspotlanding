@@ -6,6 +6,7 @@ import DashboardLayout from '@/components/DashboardLayout';
 import EmptyState from '@/components/EmptyState';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
+import Modal from '@/components/ui/Modal';
 import { useAppSelector } from '@/hooks/useRedux';
 import { selectUser } from '@/store/authSlice';
 import { getOwnerBookings, updateBookingStatus, updateCreativeApprovalStatus } from '@/services/billboard.service';
@@ -14,7 +15,7 @@ import type { Booking, BookingStatus } from '@/types/billboard.types';
 import { getAssetLabelFromUrl, isPdfUrl } from '@/utils/media.utils';
 import toast from 'react-hot-toast';
 
-type TabType = 'pending' | 'confirmed' | 'active' | 'completed' | 'cancelled';
+type TabType = 'pending' | 'confirmed' | 'active' | 'completed' | 'cancelled' | 'rejected';
 
 const containerVariants = {
     hidden: { opacity: 0 },
@@ -34,6 +35,10 @@ const OwnerBookings: React.FC = () => {
     const [activeTab, setActiveTab] = useState<TabType>('pending');
     const [messagingBookingId, setMessagingBookingId] = useState<string | null>(null);
     const [reviewingBookingId, setReviewingBookingId] = useState<string | null>(null);
+    const [decisionBooking, setDecisionBooking] = useState<Booking | null>(null);
+    const [decisionStatus, setDecisionStatus] = useState<'confirmed' | 'rejected'>('confirmed');
+    const [decisionNote, setDecisionNote] = useState('');
+    const [submittingDecision, setSubmittingDecision] = useState(false);
 
     useEffect(() => {
         const fetchBookings = async () => {
@@ -51,15 +56,56 @@ const OwnerBookings: React.FC = () => {
         fetchBookings();
     }, [user]);
 
-    const handleUpdateStatus = async (bookingId: string, status: BookingStatus) => {
+    const handleUpdateStatus = async (bookingId: string, status: BookingStatus, ownerDecisionNote?: string) => {
         try {
-            await updateBookingStatus(bookingId, status);
-            setBookings((prev) =>
-                prev.map((b) => (b.id === bookingId ? { ...b, status } : b))
+            const updated = await updateBookingStatus(bookingId, status, ownerDecisionNote);
+            if (updated) {
+                setBookings((prev) =>
+                    prev.map((b) => (b.id === bookingId ? updated : b))
+                );
+            }
+            toast.success(
+                status === 'confirmed'
+                    ? 'Booking accepted. Advertiser now has 3 days to pay.'
+                    : status === 'rejected'
+                        ? 'Booking declined'
+                        : `Booking ${status}`,
             );
-            toast.success(`Booking ${status === 'confirmed' ? 'accepted' : status}`);
+            return true;
         } catch (error) {
-            toast.error('Failed to update booking');
+            const message = error instanceof Error ? error.message : 'Failed to update booking';
+            toast.error(message);
+            return false;
+        }
+    };
+
+    const openDecisionModal = (booking: Booking, status: 'confirmed' | 'rejected') => {
+        setDecisionBooking(booking);
+        setDecisionStatus(status);
+        setDecisionNote(status === 'confirmed' ? booking.ownerDecisionNote || '' : '');
+    };
+
+    const closeDecisionModal = () => {
+        setDecisionBooking(null);
+        setDecisionNote('');
+        setDecisionStatus('confirmed');
+    };
+
+    const handleSubmitDecision = async () => {
+        if (!decisionBooking) return;
+        if (decisionStatus === 'rejected' && !decisionNote.trim()) {
+            toast.error('Please add a reason for rejecting this booking.');
+            return;
+        }
+
+        setSubmittingDecision(true);
+        try {
+            const success = await handleUpdateStatus(decisionBooking.id, decisionStatus, decisionNote);
+            if (success) {
+                closeDecisionModal();
+            }
+        } finally {
+            setSubmittingDecision(false);
         }
     };
 
@@ -125,12 +171,41 @@ const OwnerBookings: React.FC = () => {
         });
     };
 
+    const getPaymentDueDate = (booking: Booking) =>
+        booking.paymentDueAt ? new Date(booking.paymentDueAt) : null;
+
+    const isPaymentOverdue = (booking: Booking) => {
+        const dueDate = getPaymentDueDate(booking);
+        return !!dueDate && dueDate.getTime() < Date.now() && booking.paymentStatus !== 'paid';
+    };
+
+    const getConfirmedStatusLabel = (booking: Booking) => {
+        if (booking.paymentStatus === 'paid' && booking.creativeApprovalStatus === 'approved') {
+            return 'Ready To Launch';
+        }
+
+        if (booking.paymentStatus === 'paid') {
+            return 'Payment Received. Review Creative';
+        }
+
+        if (isPaymentOverdue(booking)) {
+            return 'Payment Window Expired';
+        }
+
+        if (booking.paymentDueAt) {
+            return `Awaiting Payment Until ${formatDate(booking.paymentDueAt)}`;
+        }
+
+        return 'Awaiting Advertiser Payment';
+    };
+
     const tabs: { key: TabType; label: string; count: number }[] = [
         { key: 'pending', label: 'Pending', count: bookings.filter((b) => b.status === 'pending').length },
         { key: 'confirmed', label: 'Confirmed', count: bookings.filter((b) => b.status === 'confirmed').length },
         { key: 'active', label: 'Active', count: bookings.filter((b) => b.status === 'active').length },
         { key: 'completed', label: 'Completed', count: bookings.filter((b) => b.status === 'completed').length },
         { key: 'cancelled', label: 'Cancelled', count: bookings.filter((b) => b.status === 'cancelled').length },
+        { key: 'rejected', label: 'Rejected', count: bookings.filter((b) => b.status === 'rejected').length },
     ];
 
     const getEmptyStateContent = (tab: TabType) => {
@@ -140,6 +215,7 @@ const OwnerBookings: React.FC = () => {
             active: { title: 'No Active Bookings', description: 'Campaigns currently running on your billboards will appear here.' },
             completed: { title: 'No Completed Bookings', description: 'Past bookings that have finished will appear here for your records.' },
             cancelled: { title: 'No Cancelled Bookings', description: 'Bookings that were cancelled will appear here.' },
+            rejected: { title: 'No Rejected Requests', description: 'Declined requests will appear here for reference.' },
         };
         return content[tab];
     };
@@ -277,6 +353,13 @@ const OwnerBookings: React.FC = () => {
                                                 <p className="font-bold text-neutral-900 text-lg">
                                                     {formatPrice(booking.totalAmount)}
                                                 </p>
+                                                {booking.status === 'confirmed' && booking.paymentDueAt && booking.paymentStatus !== 'paid' && (
+                                                    <p className={`text-xs mt-1 ${isPaymentOverdue(booking) ? 'text-red-600' : 'text-amber-600'}`}>
+                                                        {isPaymentOverdue(booking)
+                                                            ? `Payment expired on ${formatDate(booking.paymentDueAt)}`
+                                                            : `Payment due by ${formatDate(booking.paymentDueAt)}`}
+                                                    </p>
+                                                )}
                                             </div>
                                         </div>
 
@@ -328,6 +411,12 @@ const OwnerBookings: React.FC = () => {
                                                     Review note: {booking.creativeReviewNotes}
                                                 </p>
                                             )}
+
+                                            {booking.ownerDecisionNote && (
+                                                <p className="text-xs text-neutral-500 mt-2">
+                                                    Decision note: {booking.ownerDecisionNote}
+                                                </p>
+                                            )}
                                         </div>
 
                                         {/* Actions */}
@@ -337,7 +426,7 @@ const OwnerBookings: React.FC = () => {
                                                     <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
                                                         <Button
                                                             size="sm"
-                                                            onClick={() => handleUpdateStatus(booking.id, 'confirmed')}
+                                                            onClick={() => openDecisionModal(booking, 'confirmed')}
                                                             icon={<MdCheck />}
                                                         >
                                                             Accept
@@ -347,7 +436,7 @@ const OwnerBookings: React.FC = () => {
                                                         <Button
                                                             size="sm"
                                                             variant="outline"
-                                                            onClick={() => handleUpdateStatus(booking.id, 'rejected')}
+                                                            onClick={() => openDecisionModal(booking, 'rejected')}
                                                             icon={<MdClose />}
                                                         >
                                                             Decline
@@ -368,12 +457,13 @@ const OwnerBookings: React.FC = () => {
                                             )}
                                             {activeTab === 'confirmed' && (
                                                 <div className="flex flex-wrap items-center gap-2">
-                                                    <div className="flex items-center gap-2 text-amber-600 bg-amber-50 px-3 py-1.5 rounded-full">
+                                                    <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full ${isPaymentOverdue(booking)
+                                                        ? 'text-red-600 bg-red-50'
+                                                        : 'text-amber-600 bg-amber-50'
+                                                        }`}>
                                                         <MdAccessTime size={18} />
                                                         <span className="text-sm font-medium">
-                                                            {booking.creativeApprovalStatus === 'approved'
-                                                                ? (booking.paymentStatus === 'paid' ? 'Ready To Launch' : 'Awaiting Advertiser Payment')
-                                                                : 'Approve Creative To Unlock Payment'}
+                                                            {getConfirmedStatusLabel(booking)}
                                                         </span>
                                                     </div>
                                                     <Button
@@ -432,6 +522,66 @@ const OwnerBookings: React.FC = () => {
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            <Modal
+                isOpen={!!decisionBooking}
+                onClose={closeDecisionModal}
+                title={decisionStatus === 'confirmed' ? 'Approve Booking' : 'Decline Booking'}
+                size="md"
+            >
+                <div className="space-y-4">
+                    {decisionBooking && (
+                        <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
+                            <p className="text-sm font-semibold text-neutral-900">{decisionBooking.billboardTitle}</p>
+                            <p className="mt-1 text-xs text-neutral-500">
+                                Advertiser: {decisionBooking.advertiserName}
+                            </p>
+                            <p className="mt-1 text-xs text-neutral-500">
+                                {formatDate(decisionBooking.startDate)} - {formatDate(decisionBooking.endDate)}
+                            </p>
+                        </div>
+                    )}
+
+                    <div>
+                        <label className="block text-sm font-medium text-neutral-700 mb-1.5">
+                            {decisionStatus === 'rejected' ? 'Reason for rejection' : 'Approval note'}
+                            {decisionStatus === 'rejected' && <span className="text-red-500"> *</span>}
+                        </label>
+                        <textarea
+                            value={decisionNote}
+                            onChange={(e) => setDecisionNote(e.target.value)}
+                            rows={4}
+                            maxLength={400}
+                            placeholder={decisionStatus === 'rejected'
+                                ? 'Tell the advertiser why this request was declined.'
+                                : 'Optional note for the advertiser before payment starts.'}
+                            className="w-full rounded-xl border border-neutral-200 px-3 py-2.5 text-sm text-neutral-800 resize-none focus:outline-none focus:ring-2 focus:ring-neutral-900"
+                        />
+                        <p className="mt-1 text-right text-xs text-neutral-400">{decisionNote.length}/400</p>
+                    </div>
+
+                    <div className="flex gap-3 pt-1">
+                        <button
+                            onClick={closeDecisionModal}
+                            disabled={submittingDecision}
+                            className="flex-1 rounded-xl border border-neutral-200 px-4 py-2.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-60"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleSubmitDecision}
+                            disabled={submittingDecision || (decisionStatus === 'rejected' && !decisionNote.trim())}
+                            className={`flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60 ${decisionStatus === 'rejected' ? 'bg-red-600 hover:bg-red-700' : 'bg-neutral-900 hover:bg-neutral-800'}`}
+                        >
+                            {submittingDecision
+                                ? 'Saving...'
+                                : decisionStatus === 'rejected'
+                                    ? 'Decline Booking'
+                                    : 'Approve Booking'}
+                        </button>
+                    </div>
+                </div>
+            </Modal>
         </DashboardLayout>
     );
 };

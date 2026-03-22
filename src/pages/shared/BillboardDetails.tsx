@@ -399,6 +399,26 @@ const BillboardDetails: React.FC = () => {
       toast.error("Please select booking dates");
       return;
     }
+    if (bookingDuration <= 0) {
+      toast.error("End date must be after the start date");
+      return;
+    }
+    if (bookingDuration < minimumDuration) {
+      toast.error(
+        `Minimum booking is ${minimumDuration} ${isScreen ? "hour" : "day"}${
+          minimumDuration === 1 ? "" : "s"
+        }`
+      );
+      return;
+    }
+    if (bookingDuration > maximumDuration) {
+      toast.error(
+        `Maximum booking is ${maximumDuration} ${isScreen ? "hour" : "day"}${
+          maximumDuration === 1 ? "" : "s"
+        }`
+      );
+      return;
+    }
     if (
       creativeRequirementType === "advertiser_upload" &&
       designFiles.length === 0
@@ -442,8 +462,8 @@ const BillboardDetails: React.FC = () => {
       const isInstantBooking = billboard.bookingRules.instantBook;
       toast.success(
         isInstantBooking
-          ? "Booking created. The owner will review the creative before payment is due."
-          : "Booking request sent. Payment will be unlocked after owner approval.",
+          ? "Booking confirmed. Complete payment within 3 days so design work can start."
+          : "Booking request sent. If approved, payment will be due within 3 days.",
         { id: toastId }
       );
       navigate("/dashboard/advertiser/campaigns");
@@ -522,6 +542,39 @@ const BillboardDetails: React.FC = () => {
       year: "numeric",
     });
 
+  const formatDateInputValue = (date: Date, includeTime: boolean) => {
+    const year = date.getFullYear();
+    const month = `${date.getMonth() + 1}`.padStart(2, "0");
+    const day = `${date.getDate()}`.padStart(2, "0");
+
+    if (!includeTime) {
+      return `${year}-${month}-${day}`;
+    }
+
+    const hours = `${date.getHours()}`.padStart(2, "0");
+    const minutes = `${date.getMinutes()}`.padStart(2, "0");
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  };
+
+  const addDurationToInputValue = (
+    inputValue: string,
+    amount: number,
+    includeTime: boolean
+  ) => {
+    const next = new Date(inputValue);
+    if (Number.isNaN(next.getTime())) {
+      return inputValue;
+    }
+
+    if (includeTime) {
+      next.setHours(next.getHours() + amount);
+    } else {
+      next.setDate(next.getDate() + amount);
+    }
+
+    return formatDateInputValue(next, includeTime);
+  };
+
   const nextPhoto = () => {
     if (billboard?.photos.length)
       setCurrentPhotoIndex((prev) => (prev + 1) % billboard.photos.length);
@@ -542,6 +595,28 @@ const BillboardDetails: React.FC = () => {
       prev.forEach((url) => URL.revokeObjectURL(url));
       return nextFiles.map((file) => URL.createObjectURL(file));
     });
+  };
+
+  const handleStartDateChange = (value: string) => {
+    setStartDate(value);
+
+    if (!value) {
+      setEndDate("");
+      return;
+    }
+
+    const nextMinimumEndDate = addDurationToInputValue(
+      value,
+      minimumDuration,
+      isScreen
+    );
+
+    if (
+      !endDate ||
+      new Date(endDate).getTime() < new Date(nextMinimumEndDate).getTime()
+    ) {
+      setEndDate(nextMinimumEndDate);
+    }
   };
 
   /* ── Loading skeleton ──────────────────────────────────────────────────── */
@@ -606,6 +681,27 @@ const BillboardDetails: React.FC = () => {
   const unitPrice = isScreen
     ? billboard.pricing.hourly || 0
     : billboard.pricing.daily;
+  const minimumDuration = Math.max(1, billboard.bookingRules.minDuration || 1);
+  const maximumDuration = Math.max(
+    minimumDuration,
+    billboard.bookingRules.maxDuration || minimumDuration
+  );
+  const minimumSelectableStartDate = (() => {
+    const next = new Date();
+    if (!isScreen) {
+      next.setHours(0, 0, 0, 0);
+    }
+    next.setDate(
+      next.getDate() + Math.max(0, billboard.bookingRules.advanceNotice || 0)
+    );
+    return formatDateInputValue(next, isScreen);
+  })();
+  const minimumSelectableEndDate = startDate
+    ? addDurationToInputValue(startDate, minimumDuration, isScreen)
+    : minimumSelectableStartDate;
+  const bookingBelowMinimum =
+    bookingDuration > 0 && bookingDuration < minimumDuration;
+  const bookingAboveMaximum = bookingDuration > maximumDuration;
   const displayRating =
     billboard.rating > 0 ? billboard.rating.toFixed(1) : null;
   const photos = billboard.photos;
@@ -1481,12 +1577,8 @@ const BillboardDetails: React.FC = () => {
                       <input
                         type={isScreen ? "datetime-local" : "date"}
                         value={startDate}
-                        onChange={(e) => setStartDate(e.target.value)}
-                        min={
-                          isScreen
-                            ? new Date().toISOString().slice(0, 16)
-                            : new Date().toISOString().split("T")[0]
-                        }
+                        onChange={(e) => handleStartDateChange(e.target.value)}
+                        min={minimumSelectableStartDate}
                         className="w-full px-3 py-2.5 rounded-xl border border-neutral-300 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-neutral-900 transition-all"
                       />
                     </div>
@@ -1498,16 +1590,28 @@ const BillboardDetails: React.FC = () => {
                         type={isScreen ? "datetime-local" : "date"}
                         value={endDate}
                         onChange={(e) => setEndDate(e.target.value)}
-                        min={
-                          startDate ||
-                          (isScreen
-                            ? new Date().toISOString().slice(0, 16)
-                            : new Date().toISOString().split("T")[0])
-                        }
+                        min={minimumSelectableEndDate}
                         className="w-full px-3 py-2.5 rounded-xl border border-neutral-300 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-neutral-900 transition-all"
                       />
                     </div>
                   </div>
+                  <div className="rounded-xl bg-neutral-50 px-3 py-2 text-xs text-neutral-500">
+                    Minimum booking: {minimumDuration} {isScreen ? "hour" : "day"}
+                    {minimumDuration === 1 ? "" : "s"}
+                    {maximumDuration > minimumDuration && (
+                      <> • Maximum: {maximumDuration} {isScreen ? "hour" : "day"}{maximumDuration === 1 ? "" : "s"}</>
+                    )}
+                    {billboard.bookingRules.advanceNotice > 0 && (
+                      <> • Start at least {billboard.bookingRules.advanceNotice} day{billboard.bookingRules.advanceNotice === 1 ? "" : "s"} ahead</>
+                    )}
+                  </div>
+                  {(bookingBelowMinimum || bookingAboveMaximum) && (
+                    <p className="text-xs text-red-600">
+                      {bookingBelowMinimum
+                        ? `Selected booking is shorter than the ${minimumDuration}-${isScreen ? "hour" : "day"} minimum.`
+                        : `Selected booking is longer than the ${maximumDuration}-${isScreen ? "hour" : "day"} maximum.`}
+                    </p>
+                  )}
                 </div>
 
                 {/* Price breakdown */}
@@ -1559,8 +1663,8 @@ const BillboardDetails: React.FC = () => {
 
                 <p className="text-[11px] text-neutral-400 text-center mt-3 leading-relaxed">
                   {billboard.bookingRules.instantBook
-                    ? "Dates confirmed instantly. Payment collected only after creative approval."
-                    : "Owner reviews first. Payment collected only after approval."}
+                    ? "Dates confirm instantly. Payment is due within 3 days so design work can start."
+                    : "Owner reviews first. If approved, payment is due within 3 days."}
                 </p>
               </div>
 
