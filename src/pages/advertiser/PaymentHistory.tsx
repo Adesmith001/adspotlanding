@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { onAuthStateChanged } from 'firebase/auth';
 import { motion } from 'framer-motion';
 import {
     MdPayment,
@@ -17,6 +18,7 @@ import Button from '@/components/ui/Button';
 import { useAppSelector } from '@/hooks/useRedux';
 import { selectUser } from '@/store/authSlice';
 import { getPaymentHistory, PaymentTransaction } from '@/services/payment.service';
+import { auth } from '@/services/firebase';
 import toast from 'react-hot-toast';
 
 const containerVariants = {
@@ -33,10 +35,28 @@ const PaymentHistory: React.FC = () => {
     const user = useAppSelector(selectUser);
     const [payments, setPayments] = useState<PaymentTransaction[]>([]);
     const [loading, setLoading] = useState(true);
+    const [authReady, setAuthReady] = useState(false);
+
+    useEffect(() => {
+        if (!user) {
+            setAuthReady(false);
+            return;
+        }
+
+        if (auth.currentUser?.uid === user.uid) {
+            setAuthReady(true);
+        }
+
+        const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+            setAuthReady(firebaseUser?.uid === user.uid);
+        });
+
+        return unsubscribe;
+    }, [user]);
 
     useEffect(() => {
         const fetchPayments = async () => {
-            if (!user) return;
+            if (!user || !authReady) return;
             try {
                 const history = await getPaymentHistory(user.uid, 'advertiser');
                 setPayments(history);
@@ -48,7 +68,7 @@ const PaymentHistory: React.FC = () => {
             }
         };
         fetchPayments();
-    }, [user]);
+    }, [user, authReady]);
 
     const formatPrice = (price: number) => {
         return new Intl.NumberFormat('en-NG', {

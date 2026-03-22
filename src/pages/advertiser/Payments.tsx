@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { onAuthStateChanged } from 'firebase/auth';
 import { motion } from 'framer-motion';
 import { MdCreditCard, MdShield, MdCheckCircle, MdPending, MdError, MdReceipt, MdScheduleSend, MdCampaign } from 'react-icons/md';
 import DashboardLayout from '@/components/DashboardLayout';
@@ -10,6 +11,7 @@ import { useAppSelector } from '@/hooks/useRedux';
 import { selectUser } from '@/store/authSlice';
 import { getAdvertiserBookings, getBooking } from '@/services/billboard.service';
 import { ensurePaymentRecordForBooking, getPaymentHistory, PaymentTransaction, processPayment, verifyKorapayPayment } from '@/services/payment.service';
+import { auth } from '@/services/firebase';
 import type { Booking } from '@/types/billboard.types';
 
 const containerVariants = {
@@ -53,6 +55,7 @@ const Payments: React.FC = () => {
     const [allBookings, setAllBookings] = useState<Booking[]>([]);
     const [payableBookings, setPayableBookings] = useState<Booking[]>([]);
     const [loading, setLoading] = useState(true);
+    const [authReady, setAuthReady] = useState(false);
     const [payingBookingId, setPayingBookingId] = useState<string | null>(null);
     const [verifyingPayment, setVerifyingPayment] = useState(false);
 
@@ -146,7 +149,24 @@ const Payments: React.FC = () => {
     };
 
     useEffect(() => {
-        if (!user) return;
+        if (!user) {
+            setAuthReady(false);
+            return;
+        }
+
+        if (auth.currentUser?.uid === user.uid) {
+            setAuthReady(true);
+        }
+
+        const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+            setAuthReady(firebaseUser?.uid === user.uid);
+        });
+
+        return unsubscribe;
+    }, [user]);
+
+    useEffect(() => {
+        if (!user || !authReady) return;
         const load = async () => {
             setLoading(true);
             try {
@@ -159,10 +179,10 @@ const Payments: React.FC = () => {
             }
         };
         load();
-    }, [user]);
+    }, [user, authReady]);
 
     useEffect(() => {
-        if (!user) return;
+        if (!user || !authReady) return;
 
         const params = new URLSearchParams(window.location.search);
         const reference =
@@ -204,7 +224,7 @@ const Payments: React.FC = () => {
             .finally(() => {
                 setVerifyingPayment(false);
             });
-    }, [user, verifyingPayment]);
+    }, [user, authReady, verifyingPayment]);
 
     const handlePayNow = async (booking: Booking) => {
         if (!user) {
