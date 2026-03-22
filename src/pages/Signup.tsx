@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { motion } from 'framer-motion';
@@ -11,7 +11,10 @@ import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import Modal from '@/components/ui/Modal';
 import { cancelPendingGoogleSignUp } from '@/services/auth.service';
-import type { PendingGoogleSignup, PublicUserRole, SignupCredentials, UserRole } from '@/types/user.types';
+import { applyCouponDiscount, getActiveCouponByCode, type OwnerCoupon } from '@/services/coupon.service';
+import { DEFAULT_OWNER_PRICING_PLAN } from '@/services/user.service';
+import type { PendingGoogleSignup, PublicUserRole, SignupCredentials, UserRole, OwnerPricingPlanMode } from '@/types/user.types';
+import type { ListingCategory } from '@/types/billboard.types';
 
 interface SignupForm {
     displayName: string;
@@ -22,6 +25,13 @@ interface SignupForm {
     role: UserRole;
     agreeToTerms: boolean;
 }
+
+const formatPrice = (value: number) =>
+    new Intl.NumberFormat('en-NG', {
+        style: 'currency',
+        currency: 'NGN',
+        minimumFractionDigits: 0,
+    }).format(value);
 
 const roles = [
     {
@@ -45,6 +55,11 @@ const Signup: React.FC = () => {
     const [selectedRole, setSelectedRole] = useState<PublicUserRole>('advertiser');
     const [pendingGoogleProfile, setPendingGoogleProfile] = useState<PendingGoogleSignup | null>(null);
     const [googleLoading, setGoogleLoading] = useState(false);
+    const [primaryAssetType, setPrimaryAssetType] = useState<ListingCategory>('billboard');
+    const [ownerPlanMode, setOwnerPlanMode] = useState<OwnerPricingPlanMode>('fixed_monthly');
+    const [couponCode, setCouponCode] = useState('');
+    const [couponLoading, setCouponLoading] = useState(false);
+    const [appliedCoupon, setAppliedCoupon] = useState<OwnerCoupon | null>(null);
 
     const {
         register,
@@ -54,6 +69,30 @@ const Signup: React.FC = () => {
     } = useForm<SignupForm>({ defaultValues: { role: 'advertiser' } });
 
     const password = watch('password');
+
+    const discountedPlan = useMemo(
+        () =>
+            applyCouponDiscount({
+                mode: ownerPlanMode,
+                monthlyFee: DEFAULT_OWNER_PRICING_PLAN.fixedMonthlyFee,
+                yearlyFee: DEFAULT_OWNER_PRICING_PLAN.fixedYearlyFee,
+                revenueSharePercent: DEFAULT_OWNER_PRICING_PLAN.revenueSharePercent,
+                coupon: appliedCoupon,
+            }),
+        [ownerPlanMode, appliedCoupon],
+    );
+
+    const buildOwnerPlanPayload = () => ({
+        mode: ownerPlanMode,
+        fixedMonthlyFee: DEFAULT_OWNER_PRICING_PLAN.fixedMonthlyFee,
+        fixedYearlyFee: DEFAULT_OWNER_PRICING_PLAN.fixedYearlyFee,
+        revenueSharePercent: DEFAULT_OWNER_PRICING_PLAN.revenueSharePercent,
+        effectiveMonthlyFee: discountedPlan.effectiveMonthlyFee,
+        effectiveYearlyFee: discountedPlan.effectiveYearlyFee,
+        effectiveRevenueSharePercent: discountedPlan.effectiveRevenueSharePercent,
+        coupon: discountedPlan.coupon,
+        paymentStatus: 'active' as const,
+    });
 
     const navigateToRoleDashboard = (role: UserRole) => {
         if (role === 'owner') { navigate('/dashboard/owner'); return; }
@@ -69,6 +108,8 @@ const Signup: React.FC = () => {
                 displayName: data.displayName,
                 role: selectedRole,
                 phoneNumber: data.phoneNumber,
+                primaryAssetType: selectedRole === 'owner' ? primaryAssetType : undefined,
+                ownerPricingPlan: selectedRole === 'owner' ? buildOwnerPlanPayload() : undefined,
             };
             await dispatch(signUp(credentials)).unwrap();
             toast.success('Account created successfully!');
@@ -94,7 +135,17 @@ const Signup: React.FC = () => {
 
     const handleCompleteGoogleSignup = async () => {
         try {
-            const user = await dispatch(completeGoogleSignupRole(selectedRole)).unwrap();
+            const user = await dispatch(
+                completeGoogleSignupRole(
+                    selectedRole === 'owner'
+                        ? {
+                            role: selectedRole,
+                            primaryAssetType,
+                            ownerPricingPlan: buildOwnerPlanPayload(),
+                        }
+                        : selectedRole,
+                ),
+            ).unwrap();
             setPendingGoogleProfile(null);
             toast.success('Account created successfully!');
             navigateToRoleDashboard(user.role);
@@ -107,6 +158,161 @@ const Signup: React.FC = () => {
         setPendingGoogleProfile(null);
         try { await cancelPendingGoogleSignUp(); } catch { /* best-effort */ }
     };
+
+    const handleApplyCoupon = async () => {
+        const normalizedCode = couponCode.trim().toUpperCase();
+        if (!normalizedCode) {
+            toast.error('Enter a coupon code first');
+            return;
+        }
+
+        setCouponLoading(true);
+        try {
+            const coupon = await getActiveCouponByCode(normalizedCode);
+            if (!coupon) {
+                setAppliedCoupon(null);
+                toast.error('Coupon not found or inactive');
+                return;
+            }
+
+            setAppliedCoupon(coupon);
+            setCouponCode(coupon.code);
+            toast.success(`${coupon.percentOff}% discount applied`);
+        } catch (error) {
+            console.error('Error applying coupon:', error);
+            toast.error('Could not validate coupon right now');
+        } finally {
+            setCouponLoading(false);
+        }
+    };
+
+    const renderOwnerOnboarding = () => (
+        <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.24 }}
+            className="mb-7 rounded-[2rem] border border-neutral-200 bg-white p-6 shadow-sm"
+        >
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                    <p className="text-xs font-semibold uppercase tracking-widest text-neutral-500">Owner onboarding</p>
+                    <h2 className="mt-1 text-xl font-bold text-neutral-900">Choose your access plan before entering the app</h2>
+                    <p className="mt-1 text-sm text-neutral-500">
+                        Owners get access immediately after selecting a plan during signup.
+                    </p>
+                </div>
+                <span className="rounded-full bg-[#d4f34a]/40 px-3 py-1 text-xs font-semibold text-green-900">
+                    Access unlocked on signup
+                </span>
+            </div>
+
+            <div className="mt-6">
+                <p className="mb-3 text-sm font-semibold text-neutral-900">What do you primarily rent out?</p>
+                <div className="grid grid-cols-2 gap-3">
+                    {([
+                        { value: 'billboard', label: 'Billboards' },
+                        { value: 'screen', label: 'Screens' },
+                    ] as const).map((item) => (
+                        <button
+                            key={item.value}
+                            type="button"
+                            onClick={() => setPrimaryAssetType(item.value)}
+                            className={`rounded-2xl border px-4 py-4 text-left transition-colors ${
+                                primaryAssetType === item.value
+                                    ? 'border-neutral-900 bg-neutral-900 text-white'
+                                    : 'border-neutral-200 bg-neutral-50 text-neutral-700 hover:border-neutral-300'
+                            }`}
+                        >
+                            <p className="font-semibold">{item.label}</p>
+                            <p className={`mt-1 text-xs ${primaryAssetType === item.value ? 'text-white/70' : 'text-neutral-500'}`}>
+                                This becomes your default owner inventory focus.
+                            </p>
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            <div className="mt-6">
+                <p className="mb-3 text-sm font-semibold text-neutral-900">Choose how you want to pay AdSpot</p>
+                <div className="grid gap-3 md:grid-cols-3">
+                    {([
+                        {
+                            value: 'fixed_monthly',
+                            title: 'Monthly',
+                            price: formatPrice(discountedPlan.effectiveMonthlyFee),
+                            sub: `${formatPrice(DEFAULT_OWNER_PRICING_PLAN.fixedMonthlyFee)}/month base`,
+                        },
+                        {
+                            value: 'fixed_yearly',
+                            title: 'Yearly',
+                            price: formatPrice(discountedPlan.effectiveYearlyFee),
+                            sub: `${formatPrice(DEFAULT_OWNER_PRICING_PLAN.fixedYearlyFee)}/year base`,
+                        },
+                        {
+                            value: 'revenue_share',
+                            title: 'Revenue share',
+                            price: `${discountedPlan.effectiveRevenueSharePercent}%`,
+                            sub: `of weekly earnings from the 15% base`,
+                        },
+                    ] as const).map((item) => (
+                        <button
+                            key={item.value}
+                            type="button"
+                            onClick={() => setOwnerPlanMode(item.value)}
+                            className={`rounded-2xl border p-4 text-left transition-colors ${
+                                ownerPlanMode === item.value
+                                    ? 'border-primary-600 bg-primary-50'
+                                    : 'border-neutral-200 bg-white hover:border-neutral-300'
+                            }`}
+                        >
+                            <p className="text-sm font-semibold text-neutral-900">{item.title}</p>
+                            <p className="mt-2 text-2xl font-bold text-neutral-900">{item.price}</p>
+                            <p className="mt-1 text-xs text-neutral-500">{item.sub}</p>
+                            {appliedCoupon && (
+                                <p className="mt-2 text-xs font-medium text-green-700">
+                                    Coupon {appliedCoupon.code} applied: {appliedCoupon.percentOff}% off
+                                </p>
+                            )}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            <div className="mt-6 rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
+                <div className="flex flex-col gap-3 md:flex-row md:items-end">
+                    <div className="flex-1">
+                        <label className="mb-1.5 block text-sm font-medium text-neutral-700">Coupon code</label>
+                        <Input
+                            type="text"
+                            placeholder="Enter owner coupon"
+                            value={couponCode}
+                            onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                        />
+                    </div>
+                    <div className="flex gap-2">
+                        <Button type="button" onClick={handleApplyCoupon} disabled={couponLoading}>
+                            {couponLoading ? 'Applying...' : 'Apply Coupon'}
+                        </Button>
+                        {appliedCoupon && (
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => {
+                                    setAppliedCoupon(null);
+                                    setCouponCode('');
+                                }}
+                            >
+                                Remove
+                            </Button>
+                        )}
+                    </div>
+                </div>
+                <p className="mt-3 text-xs text-neutral-500">
+                    Coupons reduce the selected owner plan by percentage. Fixed plans reduce the naira total, and revenue share reduces the weekly percentage.
+                </p>
+            </div>
+        </motion.div>
+    );
 
     return (
         <div className="min-h-screen bg-[#fafaf9] flex flex-col">
@@ -166,12 +372,15 @@ const Signup: React.FC = () => {
                         className="text-center mb-8"
                     >
                         <h1 className="text-5xl sm:text-6xl font-bold leading-tight text-neutral-900 tracking-tight">
-                            <span className="italic font-light">Create Your</span>{' '}Free
+                            <span className="italic font-light">Create Your</span>{' '}
+                            {selectedRole === 'owner' ? 'Owner' : 'Free'}
                             <br />
                             <span className="italic font-light">Account</span>
                         </h1>
                         <p className="mt-4 text-neutral-500 text-base">
-                            Join Nigeria's Premier Marketplace for Outdoor Advertising
+                            {selectedRole === 'owner'
+                                ? 'Choose your owner access plan, apply any coupon, and enter the app immediately.'
+                                : "Join Nigeria's Premier Marketplace for Outdoor Advertising"}
                         </p>
                     </motion.div>
 
@@ -216,6 +425,8 @@ const Signup: React.FC = () => {
                             ))}
                         </div>
                     </motion.div>
+
+                    {selectedRole === 'owner' && renderOwnerOnboarding()}
 
                     {/* Two-column form layout */}
                     <motion.div
@@ -384,6 +595,12 @@ const Signup: React.FC = () => {
                             </button>
                         ))}
                     </div>
+
+                    {selectedRole === 'owner' && (
+                        <div className="pt-1">
+                            {renderOwnerOnboarding()}
+                        </div>
+                    )}
 
                     <div className="flex gap-3 pt-1">
                         <Button type="button" variant="outline" fullWidth onClick={handleCloseGoogleRoleModal}>

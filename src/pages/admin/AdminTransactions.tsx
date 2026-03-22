@@ -4,6 +4,9 @@ import { MdPayment, MdSearch } from 'react-icons/md';
 import DashboardLayout from '@/components/DashboardLayout';
 import Card from '@/components/ui/Card';
 import { getAdminTransactions } from '@/services/admin.service';
+import { ensureAdminPayoutReminders, getDuePayouts, markPayoutCompleted } from '@/services/payout.service';
+import type { Payout } from '@/types/billboard.types';
+import Button from '@/components/ui/Button';
 import toast from 'react-hot-toast';
 
 const formatPrice = (price: number) =>
@@ -11,14 +14,20 @@ const formatPrice = (price: number) =>
 
 const AdminTransactions: React.FC = () => {
     const [transactions, setTransactions] = useState<any[]>([]);
+    const [duePayouts, setDuePayouts] = useState<Payout[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
 
     useEffect(() => {
         const fetchTransactions = async () => {
             try {
-                const data = await getAdminTransactions(100);
+                await ensureAdminPayoutReminders();
+                const [data, payouts] = await Promise.all([
+                    getAdminTransactions(100),
+                    getDuePayouts(25),
+                ]);
                 setTransactions(data);
+                setDuePayouts(payouts);
             } catch (error) {
                 console.error('Error fetching transactions:', error);
                 toast.error('Failed to load transactions');
@@ -28,6 +37,17 @@ const AdminTransactions: React.FC = () => {
         };
         fetchTransactions();
     }, []);
+
+    const handleMarkPayoutSent = async (payoutId: string) => {
+        try {
+            await markPayoutCompleted(payoutId);
+            setDuePayouts(prev => prev.filter((payout) => payout.id !== payoutId));
+            toast.success('Payout marked as sent');
+        } catch (error) {
+            console.error('Error completing payout:', error);
+            toast.error('Failed to update payout');
+        }
+    };
 
     const filtered = transactions.filter((t) =>
         (t.billboardTitle || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -59,6 +79,46 @@ const AdminTransactions: React.FC = () => {
     return (
         <DashboardLayout userRole="admin" title="Transactions" subtitle="Monitor all platform payment activity">
             <div className="space-y-6">
+                <Card className="p-5">
+                    <div className="flex items-center justify-between gap-4 mb-4">
+                        <div>
+                            <h3 className="text-lg font-bold text-neutral-900">Monday Payout Queue</h3>
+                            <p className="text-sm text-neutral-500">Admin collects advertiser payments and disburses owner payouts every Monday.</p>
+                        </div>
+                        <span className="rounded-full bg-[#d4f34a]/30 px-3 py-1 text-xs font-semibold text-green-800">
+                            {duePayouts.length} due
+                        </span>
+                    </div>
+
+                    {duePayouts.length === 0 ? (
+                        <p className="text-sm text-neutral-500">No owner payouts are waiting for disbursement.</p>
+                    ) : (
+                        <div className="space-y-3">
+                            {duePayouts.map((payout) => (
+                                <div key={payout.id} className="flex flex-col gap-3 rounded-2xl border border-neutral-200 p-4 md:flex-row md:items-center md:justify-between">
+                                    <div>
+                                        <p className="font-semibold text-neutral-900">{payout.ownerName}</p>
+                                        <p className="text-sm text-neutral-500">
+                                            {formatPrice(payout.amount)} due on {payout.payoutDate.toLocaleDateString('en-NG', { weekday: 'long', day: 'numeric', month: 'short' })}
+                                        </p>
+                                        <p className="text-xs text-neutral-400">
+                                            {payout.paymentCount} payment{payout.paymentCount === 1 ? '' : 's'} bundled into this payout
+                                        </p>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <span className="rounded-full bg-neutral-100 px-3 py-1 text-xs font-semibold capitalize text-neutral-700">
+                                            {payout.status}
+                                        </span>
+                                        <Button size="sm" onClick={() => handleMarkPayoutSent(payout.id)}>
+                                            Mark Sent
+                                        </Button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </Card>
+
                 {/* Search */}
                 <Card className="p-4">
                     <div className="relative">

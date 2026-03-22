@@ -46,6 +46,7 @@ export interface Billboard {
   ownerName: string;
   ownerPhoto?: string;
   ownerVerified: boolean;
+  primaryAssetType?: ListingCategory;
 
   // Basic Info
   title: string;
@@ -324,6 +325,8 @@ export type NotificationType =
   | "booking_cancelled"
   | "payment_due"
   | "payment_received"
+  | "payout_scheduled"
+  | "payout_ready_for_disbursement"
   | "new_message"
   | "review_received"
   | "creative_changes_requested"
@@ -343,6 +346,7 @@ export interface Notification {
     bookingId?: string;
     billboardId?: string;
     conversationId?: string;
+    payoutId?: string;
   };
   createdAt: Date;
 }
@@ -360,17 +364,26 @@ export interface PaymentIntent {
 export interface Payout {
   id: string;
   ownerId: string;
+  ownerName: string;
+  ownerEmail?: string;
   amount: number;
   currency: string;
-  status: "pending" | "processing" | "completed" | "failed";
+  status: "scheduled" | "ready" | "processing" | "completed" | "failed";
   bookingIds: string[];
-  bankAccount: {
+  paymentIds: string[];
+  paymentCount: number;
+  payoutDate: Date;
+  weekKey: string;
+  bankAccount?: {
     accountNumber: string;
     bankName: string;
     accountName: string;
   };
+  adminReminderSentAt?: Date;
+  lastPaymentReceivedAt?: Date;
   processedAt?: Date;
   createdAt: Date;
+  updatedAt: Date;
 }
 
 // Form Types

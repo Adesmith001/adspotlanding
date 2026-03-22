@@ -247,8 +247,10 @@ const MyListings: React.FC = () => {
                                             {/* Stats */}
                                             <div className="flex items-center justify-between text-sm mb-4">
                                                 <div>
-                                                    <p className="text-neutral-500 text-xs">Daily Rate</p>
-                                                    <p className="font-bold text-neutral-900">{formatPrice(billboard.pricing.daily)}</p>
+                                                    <p className="text-neutral-500 text-xs">{billboard.category === 'screen' ? 'Hourly Rate' : 'Daily Rate'}</p>
+                                                    <p className="font-bold text-neutral-900">
+                                                        {formatPrice(billboard.category === 'screen' ? (billboard.pricing.hourly || 0) : billboard.pricing.daily)}
+                                                    </p>
                                                 </div>
                                                 <div className="text-right">
                                                     <p className="text-neutral-500 text-xs">Views</p>

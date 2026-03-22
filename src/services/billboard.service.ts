@@ -63,6 +63,7 @@ const mapBillboardData = (id: string, data: any): Billboard =>
   ({
     id,
     ...data,
+    primaryAssetType: data.primaryAssetType || data.category || "billboard",
     unavailableDates: Array.isArray(data.unavailableDates)
       ? data.unavailableDates.map((period: any) => ({
           ...period,
@@ -240,12 +241,26 @@ export const createBillboard = async (
   try {
     // Upload photos to Cloudinary
     const photoUrls = await uploadImages(photos);
+    const resolvedCategory = data.category || "billboard";
+    const resolvedHourlyPrice =
+      resolvedCategory === "screen" ? data.hourlyPrice || 0 : 0;
+    const resolvedDailyPrice =
+      resolvedCategory === "screen" ? 0 : data.dailyPrice;
+    const resolvedWeeklyPrice =
+      resolvedCategory === "screen"
+        ? 0
+        : data.weeklyPrice || data.dailyPrice * 7;
+    const resolvedMonthlyPrice =
+      resolvedCategory === "screen"
+        ? 0
+        : data.monthlyPrice || data.dailyPrice * 30;
 
     // Create billboard document
     const billboard: Omit<Billboard, "id"> = {
       ownerId,
       ownerName,
       ownerVerified: false,
+      primaryAssetType: resolvedCategory,
       title: data.title,
       description: data.description,
       location: {
@@ -262,7 +277,7 @@ export const createBillboard = async (
         height: data.height,
         unit: data.unit,
       },
-      category: data.category || "billboard",
+      category: resolvedCategory,
       type: data.type,
       hasLighting: data.hasLighting,
       trafficScore: data.trafficScore,
@@ -271,14 +286,14 @@ export const createBillboard = async (
       photos: photoUrls,
       streetViewAvailable: Boolean(data.latitude && data.longitude),
       pricing: {
-        hourly: data.hourlyPrice || 0,
-        daily: data.dailyPrice,
-        weekly: data.weeklyPrice,
-        monthly: data.monthlyPrice,
+        hourly: resolvedHourlyPrice,
+        daily: resolvedDailyPrice,
+        weekly: resolvedWeeklyPrice,
+        monthly: resolvedMonthlyPrice,
         currency: "NGN",
       },
-      pricePerDay: data.dailyPrice, // Keeping for backward compatibility
-      pricePerHour: data.hourlyPrice,
+      pricePerDay: resolvedDailyPrice, // Keeping for backward compatibility
+      pricePerHour: resolvedHourlyPrice,
       unavailableDates: [],
       bookingRules: {
         instantBook: data.instantBook,
@@ -870,13 +885,16 @@ export const createBooking = async (
     } else {
       pricePerUnit = billboard.pricing.daily;
       totalAmount = pricePerUnit * duration;
+      const weeklyRate = billboard.pricing.weekly || billboard.pricing.daily * 7;
+      const monthlyRate =
+        billboard.pricing.monthly || billboard.pricing.daily * 30;
 
       // Apply weekly/monthly pricing if applicable
       if (duration >= 30) {
-        totalAmount = billboard.pricing.monthly * Math.ceil(duration / 30);
+        totalAmount = monthlyRate * Math.ceil(duration / 30);
         pricePerUnit = totalAmount / duration;
       } else if (duration >= 7) {
-        totalAmount = billboard.pricing.weekly * Math.ceil(duration / 7);
+        totalAmount = weeklyRate * Math.ceil(duration / 7);
         pricePerUnit = totalAmount / duration;
       }
     }

@@ -24,6 +24,10 @@ import {
   getCurrentBrowserLocation,
   reverseGeocodeCoordinates,
 } from "@/services/location.service";
+import {
+  getUserProfile,
+  updateOwnerCommercialSettings,
+} from "@/services/user.service";
 import type {
   BillboardType,
   CreateBillboardForm,
@@ -411,7 +415,16 @@ const CreateListing: React.FC = () => {
         formData,
         photos
       );
-      toast.success("Billboard listing created successfully!");
+
+      try {
+        await updateOwnerCommercialSettings(user.uid, {
+          primaryAssetType: formData.category,
+        });
+      } catch (profileError) {
+        console.error("Unable to sync owner asset preference:", profileError);
+      }
+
+      toast.success("Listing created successfully!");
       localStorage.removeItem(getDraftKey());
       setHasUnsavedChanges(false);
       navigate("/dashboard/owner/listings");
@@ -548,6 +561,31 @@ const CreateListing: React.FC = () => {
   }, [user?.uid]);
 
   useEffect(() => {
+    const loadOwnerDefaults = async () => {
+      if (!user?.uid || pendingDraftRef.current) {
+        return;
+      }
+
+      try {
+        const profile = await getUserProfile(user.uid);
+        if (!profile?.primaryAssetType) {
+          return;
+        }
+
+        setFormData((prev) =>
+          prev.title || prev.description || prev.category === profile.primaryAssetType
+            ? prev
+            : { ...prev, category: profile.primaryAssetType || "billboard" },
+        );
+      } catch (error) {
+        console.error("Failed to load owner defaults:", error);
+      }
+    };
+
+    void loadOwnerDefaults();
+  }, [user?.uid]);
+
+  useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       if (!hasUnsavedChanges) {
         return;
@@ -573,8 +611,12 @@ const CreateListing: React.FC = () => {
           <div className="space-y-6">
             <div>
               <label className="block text-sm font-medium text-neutral-700 mb-2">
-                Listing Category *
+                What do you primarily rent out? *
               </label>
+              <p className="text-xs text-neutral-500 mb-3">
+                This sets the main inventory type for this listing and becomes
+                your default owner focus unless you change it later.
+              </p>
               <div className="flex gap-4">
                 {(["billboard", "screen"] as const).map((category) => (
                   <motion.button
@@ -590,7 +632,7 @@ const CreateListing: React.FC = () => {
                     }`}
                   >
                     <span className="capitalize font-bold text-neutral-900">
-                      {category}
+                      {category === "billboard" ? "Billboards" : "Screens"}
                     </span>
                   </motion.button>
                 ))}
@@ -1082,6 +1124,16 @@ const CreateListing: React.FC = () => {
       case 5:
         return (
           <div className="space-y-6">
+            <Card className="p-5 bg-primary-50/50 border-primary-100">
+              <p className="text-sm font-semibold text-neutral-900">
+                Rental pricing
+              </p>
+              <p className="text-sm text-neutral-600 mt-1">
+                These are the advertiser-facing rates for this listing. Your
+                AdSpot owner billing model is managed separately in Billing &
+                Payments.
+              </p>
+            </Card>
             {formData.category === "screen" ? (
               <div>
                 <label className="block text-sm font-medium text-neutral-700 mb-2">
@@ -1342,7 +1394,7 @@ const CreateListing: React.FC = () => {
               <div className="space-y-5">
                 {[
                   {
-                    label: "Category",
+                    label: "Primary asset",
                     value:
                       formData.category === "screen" ? "Screen" : "Billboard",
                   },

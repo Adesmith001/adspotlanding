@@ -25,15 +25,22 @@ import {
     getUserProfile,
     updateUserProfile,
     updateUserPreferences,
+    updateOwnerCommercialSettings,
     syncUserProfile,
     getSavedCards,
     addSavedCard,
     removeSavedCard,
     setDefaultCard,
+    DEFAULT_OWNER_PRICING_PLAN,
+    OWNER_PRICING_BENCHMARKS,
 } from '@/services/user.service';
 import type { SavedCard } from '@/services/user.service';
 import { getPaymentHistory } from '@/services/payment.service';
 import type { PaymentTransaction } from '@/services/payment.service';
+import { getOwnerScheduledPayouts } from '@/services/payout.service';
+import type { Payout } from '@/types/billboard.types';
+import type { OwnerPricingPlanMode } from '@/types/user.types';
+import { createOwnerCoupon, getOwnerCoupons, setOwnerCouponActiveState, type OwnerCoupon } from '@/services/coupon.service';
 import { changePassword } from '@/services/auth.service';
 import { auth } from '@/services/firebase';
 import toast from 'react-hot-toast';
@@ -66,11 +73,26 @@ const Settings: React.FC<SettingsProps> = ({ userRole }) => {
         smsAlerts: false,
         newBookings: true,
         marketingUpdates: false,
-        securityAlerts: true
+        securityAlerts: true,
+        payoutAlerts: true,
     });
 
     // Payment History State
     const [payments, setPayments] = useState<PaymentTransaction[]>([]);
+    const [scheduledPayouts, setScheduledPayouts] = useState<Payout[]>([]);
+    const [ownerCommercialSettings, setOwnerCommercialSettings] = useState({
+        primaryAssetType: 'billboard' as 'billboard' | 'screen',
+        mode: DEFAULT_OWNER_PRICING_PLAN.mode as OwnerPricingPlanMode,
+        fixedMonthlyFee: DEFAULT_OWNER_PRICING_PLAN.fixedMonthlyFee,
+        fixedYearlyFee: DEFAULT_OWNER_PRICING_PLAN.fixedYearlyFee,
+        revenueSharePercent: DEFAULT_OWNER_PRICING_PLAN.revenueSharePercent,
+    });
+    const [isSavingOwnerSettings, setIsSavingOwnerSettings] = useState(false);
+    const [coupons, setCoupons] = useState<OwnerCoupon[]>([]);
+    const [couponCode, setCouponCode] = useState('');
+    const [couponPercent, setCouponPercent] = useState('');
+    const [couponDescription, setCouponDescription] = useState('');
+    const [isSavingCoupon, setIsSavingCoupon] = useState(false);
 
     // Saved Cards State
     const [savedCards, setSavedCards] = useState<SavedCard[]>([]);
@@ -116,6 +138,16 @@ const Settings: React.FC<SettingsProps> = ({ userRole }) => {
                     if (profile.preferences) {
                         setNotifications(prev => ({ ...prev, ...profile.preferences }));
                     }
+
+                    if (userRole === 'owner') {
+                        setOwnerCommercialSettings({
+                            primaryAssetType: profile.primaryAssetType || 'billboard',
+                            mode: profile.ownerPricingPlan?.mode || DEFAULT_OWNER_PRICING_PLAN.mode,
+                            fixedMonthlyFee: profile.ownerPricingPlan?.fixedMonthlyFee || DEFAULT_OWNER_PRICING_PLAN.fixedMonthlyFee,
+                            fixedYearlyFee: profile.ownerPricingPlan?.fixedYearlyFee || DEFAULT_OWNER_PRICING_PLAN.fixedYearlyFee,
+                            revenueSharePercent: profile.ownerPricingPlan?.revenueSharePercent || DEFAULT_OWNER_PRICING_PLAN.revenueSharePercent,
+                        });
+                    }
                 }
             } catch (error) {
                 console.error('Error loading profile:', error);
@@ -138,6 +170,37 @@ const Settings: React.FC<SettingsProps> = ({ userRole }) => {
 
         fetchData();
     }, [user, userRole]);
+
+    useEffect(() => {
+        if (activeTab !== 'billing' || !user || userRole !== 'owner') return;
+
+        const fetchOwnerPayouts = async () => {
+            try {
+                const payouts = await getOwnerScheduledPayouts(user.uid, 8);
+                setScheduledPayouts(payouts);
+            } catch (error) {
+                console.error('Error loading owner payouts:', error);
+            }
+        };
+
+        fetchOwnerPayouts();
+    }, [activeTab, user, userRole]);
+
+    useEffect(() => {
+        if (activeTab !== 'billing' || !user || userRole !== 'admin') return;
+
+        const fetchCoupons = async () => {
+            try {
+                const data = await getOwnerCoupons();
+                setCoupons(data);
+            } catch (error) {
+                console.error('Error loading coupons:', error);
+                toast.error('Failed to load coupons');
+            }
+        };
+
+        fetchCoupons();
+    }, [activeTab, user, userRole]);
 
     // Load saved cards when billing tab is opened
     useEffect(() => {
@@ -265,6 +328,94 @@ const Settings: React.FC<SettingsProps> = ({ userRole }) => {
         } catch (error) {
             console.error('Error updating profile:', error);
             toast.error('Failed to update profile');
+        }
+    };
+
+    const handleOwnerSettingsSave = async () => {
+        if (!user) return;
+
+        setIsSavingOwnerSettings(true);
+        try {
+            await updateOwnerCommercialSettings(user.uid, {
+                primaryAssetType: ownerCommercialSettings.primaryAssetType,
+                ownerPricingPlan: {
+                    mode: ownerCommercialSettings.mode,
+                    fixedMonthlyFee: ownerCommercialSettings.fixedMonthlyFee,
+                    fixedYearlyFee: ownerCommercialSettings.fixedYearlyFee,
+                    revenueSharePercent: ownerCommercialSettings.revenueSharePercent,
+                    effectiveMonthlyFee: ownerCommercialSettings.fixedMonthlyFee,
+                    effectiveYearlyFee: ownerCommercialSettings.fixedYearlyFee,
+                    effectiveRevenueSharePercent: ownerCommercialSettings.revenueSharePercent,
+                    paymentStatus: 'active',
+                    benchmarks: OWNER_PRICING_BENCHMARKS,
+                },
+            });
+            toast.success('Owner billing model updated');
+        } catch (error) {
+            console.error('Error updating owner billing model:', error);
+            toast.error('Failed to save owner billing model');
+        } finally {
+            setIsSavingOwnerSettings(false);
+        }
+    };
+
+    const handleCreateCoupon = async () => {
+        if (!user) return;
+
+        const percentOff = Number(couponPercent);
+        if (!couponCode.trim()) {
+            toast.error('Coupon code is required');
+            return;
+        }
+        if (!percentOff || percentOff <= 0 || percentOff > 100) {
+            toast.error('Enter a valid coupon percentage');
+            return;
+        }
+
+        setIsSavingCoupon(true);
+        try {
+            const couponId = await createOwnerCoupon(user.uid, {
+                code: couponCode,
+                percentOff,
+                description: couponDescription,
+            });
+            setCoupons(prev => [
+                {
+                    id: couponId,
+                    code: couponCode.trim().toUpperCase(),
+                    percentOff,
+                    active: true,
+                    description: couponDescription.trim() || undefined,
+                    createdBy: user.uid,
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                },
+                ...prev,
+            ]);
+            setCouponCode('');
+            setCouponPercent('');
+            setCouponDescription('');
+            toast.success('Coupon created');
+        } catch (error: any) {
+            console.error('Error creating coupon:', error);
+            toast.error(error.message || 'Failed to create coupon');
+        } finally {
+            setIsSavingCoupon(false);
+        }
+    };
+
+    const handleToggleCoupon = async (coupon: OwnerCoupon) => {
+        try {
+            await setOwnerCouponActiveState(coupon.id, !coupon.active);
+            setCoupons(prev => prev.map(item =>
+                item.id === coupon.id
+                    ? { ...item, active: !item.active, updatedAt: new Date() }
+                    : item
+            ));
+            toast.success(`Coupon ${coupon.active ? 'disabled' : 'enabled'}`);
+        } catch (error) {
+            console.error('Error updating coupon:', error);
+            toast.error('Failed to update coupon');
         }
     };
 
@@ -636,6 +787,7 @@ const Settings: React.FC<SettingsProps> = ({ userRole }) => {
                                 { key: 'emailAlerts', label: 'Email Notifications', desc: 'Receive important updates via email' },
                                 { key: 'smsAlerts', label: 'SMS Notifications', desc: 'Get text messages for urgent alerts' },
                                 { key: 'newBookings', label: 'Booking Updates', desc: 'Notify me when booking status changes' },
+                                { key: 'payoutAlerts', label: 'Payout Alerts', desc: 'Get notified when payouts are scheduled or due' },
                                 { key: 'securityAlerts', label: 'Security Alerts', desc: 'Notify me about suspicious activity' },
                                 { key: 'marketingUpdates', label: 'Marketing & Tips', desc: 'Receive tips to optimize your campaigns' }
                             ].map((item, index) => (
@@ -669,8 +821,193 @@ const Settings: React.FC<SettingsProps> = ({ userRole }) => {
             case 'billing':
                 return (
                     <div className="space-y-6">
-                        {userRole === 'owner' ? (
+                        {userRole === 'admin' ? (
                             <>
+                                <Card className="p-6">
+                                    <div className="flex items-center justify-between gap-4">
+                                        <div>
+                                            <h3 className="text-lg font-bold text-neutral-900">Owner Coupon Manager</h3>
+                                            <p className="mt-1 text-sm text-neutral-500">
+                                                Create percentage discounts owners can use during onboarding to reduce monthly, yearly, or revenue-share pricing.
+                                            </p>
+                                        </div>
+                                        <span className="rounded-full bg-[#d4f34a]/30 px-3 py-1 text-xs font-semibold text-green-800">
+                                            {coupons.filter(coupon => coupon.active).length} active
+                                        </span>
+                                    </div>
+
+                                    <div className="mt-6 grid gap-4 md:grid-cols-3">
+                                        <div>
+                                            <label className="mb-1.5 block text-sm font-medium text-neutral-700">Coupon code</label>
+                                            <Input
+                                                type="text"
+                                                placeholder="e.g. OWNER20"
+                                                value={couponCode}
+                                                onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="mb-1.5 block text-sm font-medium text-neutral-700">Discount %</label>
+                                            <Input
+                                                type="number"
+                                                placeholder="e.g. 20"
+                                                value={couponPercent}
+                                                onChange={(e) => setCouponPercent(e.target.value)}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="mb-1.5 block text-sm font-medium text-neutral-700">Description</label>
+                                            <Input
+                                                type="text"
+                                                placeholder="Optional internal note"
+                                                value={couponDescription}
+                                                onChange={(e) => setCouponDescription(e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-5 flex justify-end">
+                                        <Button onClick={handleCreateCoupon} disabled={isSavingCoupon}>
+                                            {isSavingCoupon ? 'Creating...' : 'Create Coupon'}
+                                        </Button>
+                                    </div>
+                                </Card>
+
+                                <Card className="p-6">
+                                    <h4 className="text-base font-bold text-neutral-900">Existing Coupons</h4>
+                                    <div className="mt-4 space-y-3">
+                                        {coupons.length === 0 ? (
+                                            <p className="text-sm text-neutral-500">No coupons created yet.</p>
+                                        ) : (
+                                            coupons.map((coupon) => (
+                                                <div key={coupon.id} className="flex flex-col gap-3 rounded-2xl border border-neutral-200 p-4 md:flex-row md:items-center md:justify-between">
+                                                    <div>
+                                                        <p className="font-semibold text-neutral-900">{coupon.code}</p>
+                                                        <p className="text-sm text-neutral-500">{coupon.percentOff}% off owner onboarding pricing</p>
+                                                        {coupon.description && (
+                                                            <p className="text-xs text-neutral-400 mt-1">{coupon.description}</p>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex items-center gap-3">
+                                                        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${coupon.active ? 'bg-green-100 text-green-700' : 'bg-neutral-100 text-neutral-600'}`}>
+                                                            {coupon.active ? 'active' : 'inactive'}
+                                                        </span>
+                                                        <Button
+                                                            size="sm"
+                                                            variant={coupon.active ? 'outline' : 'primary'}
+                                                            onClick={() => handleToggleCoupon(coupon)}
+                                                        >
+                                                            {coupon.active ? 'Disable' : 'Enable'}
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </Card>
+                            </>
+                        ) : userRole === 'owner' ? (
+                            <>
+                                <Card className="p-6">
+                                    <div>
+                                        <h3 className="text-lg font-bold text-neutral-900">Owner Billing Model</h3>
+                                        <p className="mt-1 text-sm text-neutral-500">
+                                            Choose your default inventory type and the AdSpot charging model you prefer.
+                                        </p>
+                                    </div>
+
+                                    <div className="mt-6 grid gap-6 lg:grid-cols-2">
+                                        <div>
+                                            <p className="mb-3 text-sm font-semibold text-neutral-900">Primary inventory focus</p>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                {([
+                                                    { value: 'billboard', label: 'Billboards' },
+                                                    { value: 'screen', label: 'Screens' },
+                                                ] as const).map((item) => (
+                                                    <button
+                                                        key={item.value}
+                                                        type="button"
+                                                        onClick={() => setOwnerCommercialSettings(prev => ({ ...prev, primaryAssetType: item.value }))}
+                                                        className={`rounded-2xl border px-4 py-4 text-left transition-colors ${
+                                                            ownerCommercialSettings.primaryAssetType === item.value
+                                                                ? 'border-primary-600 bg-primary-50 text-neutral-900'
+                                                                : 'border-neutral-200 text-neutral-600 hover:border-neutral-300'
+                                                        }`}
+                                                    >
+                                                        <p className="font-semibold">{item.label}</p>
+                                                        <p className="mt-1 text-xs">Use this as the default when you create listings.</p>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <p className="mb-3 text-sm font-semibold text-neutral-900">Hybrid platform pricing</p>
+                                            <div className="space-y-3">
+                                                {([
+                                                    { value: 'fixed_monthly', title: 'Fixed monthly', desc: 'Predictable recurring software cost.' },
+                                                    { value: 'fixed_yearly', title: 'Fixed yearly', desc: 'Lower effective cost when you prepay annually.' },
+                                                    { value: 'revenue_share', title: 'Revenue share', desc: 'Pay only a percentage when bookings close.' },
+                                                ] as const).map((item) => (
+                                                    <button
+                                                        key={item.value}
+                                                        type="button"
+                                                        onClick={() => setOwnerCommercialSettings(prev => ({ ...prev, mode: item.value }))}
+                                                        className={`w-full rounded-2xl border px-4 py-4 text-left transition-colors ${
+                                                            ownerCommercialSettings.mode === item.value
+                                                                ? 'border-primary-600 bg-primary-50'
+                                                                : 'border-neutral-200 hover:border-neutral-300'
+                                                        }`}
+                                                    >
+                                                        <p className="font-semibold text-neutral-900">{item.title}</p>
+                                                        <p className="mt-1 text-sm text-neutral-500">{item.desc}</p>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-6 grid gap-4 md:grid-cols-3">
+                                        <div>
+                                            <label className="mb-1.5 block text-sm font-medium text-neutral-700">Monthly fee (NGN)</label>
+                                            <Input
+                                                type="number"
+                                                value={ownerCommercialSettings.fixedMonthlyFee}
+                                                onChange={(e) => setOwnerCommercialSettings(prev => ({ ...prev, fixedMonthlyFee: Number(e.target.value) }))}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="mb-1.5 block text-sm font-medium text-neutral-700">Yearly fee (NGN)</label>
+                                            <Input
+                                                type="number"
+                                                value={ownerCommercialSettings.fixedYearlyFee}
+                                                onChange={(e) => setOwnerCommercialSettings(prev => ({ ...prev, fixedYearlyFee: Number(e.target.value) }))}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="mb-1.5 block text-sm font-medium text-neutral-700">Revenue share (%)</label>
+                                            <Input
+                                                type="number"
+                                                value={ownerCommercialSettings.revenueSharePercent}
+                                                onChange={(e) => setOwnerCommercialSettings(prev => ({ ...prev, revenueSharePercent: Number(e.target.value) }))}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-4 rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
+                                        <p className="text-sm font-semibold text-neutral-900">Research-backed defaults</p>
+                                        <p className="mt-1 text-sm text-neutral-600">
+                                            Owner onboarding defaults are NGN {OWNER_PRICING_BENCHMARKS.fixedMonthly.toLocaleString()}/month, NGN {OWNER_PRICING_BENCHMARKS.fixedYearly.toLocaleString()}/year, or {OWNER_PRICING_BENCHMARKS.revenueSharePercent}% of weekly earnings.
+                                        </p>
+                                        <p className="mt-2 text-xs text-neutral-500">{OWNER_PRICING_BENCHMARKS.rationale}</p>
+                                    </div>
+
+                                    <div className="mt-5 flex justify-end">
+                                        <Button onClick={handleOwnerSettingsSave} disabled={isSavingOwnerSettings}>
+                                            {isSavingOwnerSettings ? 'Saving...' : 'Save Owner Billing Model'}
+                                        </Button>
+                                    </div>
+                                </Card>
                                 <h3 className="text-lg font-bold text-neutral-900 mb-4">Payout Settings</h3>
                                 <Card className="p-6 mb-6">
                                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
@@ -685,7 +1022,28 @@ const Settings: React.FC<SettingsProps> = ({ userRole }) => {
                                         </div>
                                         <Button variant="outline" size="sm">Change</Button>
                                     </div>
-                                    <p className="text-sm text-neutral-500">Payouts are processed weekly on Mondays.</p>
+                                    <p className="text-sm text-neutral-500">Admin receives advertiser payments first, and owner payouts are processed weekly on Mondays.</p>
+                                    <div className="mt-5 space-y-3">
+                                        {scheduledPayouts.length === 0 ? (
+                                            <p className="text-sm text-neutral-500">No scheduled payouts yet.</p>
+                                        ) : (
+                                            scheduledPayouts.map((payout) => (
+                                                <div key={payout.id} className="flex items-center justify-between rounded-2xl border border-neutral-200 px-4 py-3">
+                                                    <div>
+                                                        <p className="font-medium text-neutral-900">
+                                                            {new Intl.NumberFormat('en-NG', { style: 'currency', currency: payout.currency || 'NGN', minimumFractionDigits: 0 }).format(payout.amount)}
+                                                        </p>
+                                                        <p className="text-sm text-neutral-500">
+                                                            {payout.paymentCount} payment{payout.paymentCount === 1 ? '' : 's'} scheduled for {payout.payoutDate.toLocaleDateString('en-NG', { weekday: 'long', day: 'numeric', month: 'short' })}
+                                                        </p>
+                                                    </div>
+                                                    <span className="rounded-full bg-neutral-100 px-3 py-1 text-xs font-semibold capitalize text-neutral-700">
+                                                        {payout.status}
+                                                    </span>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
                                 </Card>
                             </>
                         ) : (

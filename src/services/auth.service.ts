@@ -16,6 +16,7 @@ import {
 } from "firebase/auth";
 import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "./firebase";
+import { DEFAULT_OWNER_PRICING_PLAN } from "./user.service";
 import {
   User,
   PublicUserRole,
@@ -35,9 +36,46 @@ const isPublicSignupRole = (role: string): role is PublicUserRole =>
 const getRoleConflictMessage = (role: string) =>
   `This account is already registered as ${role}. Each account can only have one role.`;
 
+const buildOwnerPlanForSignup = (credentials: {
+  role: PublicUserRole;
+  primaryAssetType?: SignupCredentials["primaryAssetType"];
+  ownerPricingPlan?: SignupCredentials["ownerPricingPlan"];
+}) => {
+  if (credentials.role !== "owner") {
+    return {};
+  }
+
+  const selectedPlan = credentials.ownerPricingPlan || DEFAULT_OWNER_PRICING_PLAN;
+
+  return {
+    primaryAssetType: credentials.primaryAssetType || "billboard",
+    ownerPricingPlan: {
+      mode: selectedPlan.mode,
+      fixedMonthlyFee: selectedPlan.fixedMonthlyFee,
+      fixedYearlyFee: selectedPlan.fixedYearlyFee,
+      revenueSharePercent: selectedPlan.revenueSharePercent,
+      effectiveMonthlyFee:
+        selectedPlan.effectiveMonthlyFee ?? selectedPlan.fixedMonthlyFee,
+      effectiveYearlyFee:
+        selectedPlan.effectiveYearlyFee ?? selectedPlan.fixedYearlyFee,
+      effectiveRevenueSharePercent:
+        selectedPlan.effectiveRevenueSharePercent ??
+        selectedPlan.revenueSharePercent,
+      coupon: selectedPlan.coupon,
+      paymentStatus: "active" as const,
+      activatedAt: serverTimestamp(),
+      benchmarks: DEFAULT_OWNER_PRICING_PLAN.benchmarks,
+    },
+  };
+};
+
 const createUserProfileDocument = async (
   firebaseUser: FirebaseUser,
   role: PublicUserRole,
+  options?: Pick<
+    SignupCredentials,
+    "primaryAssetType" | "ownerPricingPlan"
+  >,
 ): Promise<User> => {
   const userRef = doc(db, USERS_COLLECTION, firebaseUser.uid);
   const existingUserDoc = await getDoc(userRef);
@@ -63,6 +101,11 @@ const createUserProfileDocument = async (
 
   await setDoc(userRef, {
     ...userData,
+    ...buildOwnerPlanForSignup({
+      role,
+      primaryAssetType: options?.primaryAssetType,
+      ownerPricingPlan: options?.ownerPricingPlan,
+    }),
     emailLowercase: firebaseUser.email?.toLowerCase() || null,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -110,6 +153,7 @@ export const signUpWithEmail = async (
 
     await setDoc(doc(db, "users", userCredential.user.uid), {
       ...userData,
+      ...buildOwnerPlanForSignup(credentials),
       emailLowercase: credentials.email.toLowerCase(),
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
@@ -179,10 +223,19 @@ export const beginGoogleSignUp = async (): Promise<GoogleSignupResult> => {
  * Complete Google sign up after role selection.
  */
 export const completeGoogleSignUp = async (
-  role: PublicUserRole,
+  payload:
+    | PublicUserRole
+    | {
+        role: PublicUserRole;
+        primaryAssetType?: SignupCredentials["primaryAssetType"];
+        ownerPricingPlan?: SignupCredentials["ownerPricingPlan"];
+      },
 ): Promise<User> => {
   try {
-    if (!isPublicSignupRole(role)) {
+    const resolvedPayload =
+      typeof payload === "string" ? { role: payload } : payload;
+
+    if (!isPublicSignupRole(resolvedPayload.role)) {
       throw new Error("Please choose a valid account role.");
     }
 
@@ -191,7 +244,10 @@ export const completeGoogleSignUp = async (
       throw new Error("Google authentication expired. Please try again.");
     }
 
-    return createUserProfileDocument(currentUser, role);
+    return createUserProfileDocument(currentUser, resolvedPayload.role, {
+      primaryAssetType: resolvedPayload.primaryAssetType,
+      ownerPricingPlan: resolvedPayload.ownerPricingPlan,
+    });
   } catch (error: any) {
     throw new Error(error.message || getAuthErrorMessage(error.code));
   }

@@ -1,3 +1,16 @@
+import type { ListingCategory } from "./billboard.types";
+
+export type OwnerPricingPlanMode =
+  | "fixed_monthly"
+  | "fixed_yearly"
+  | "revenue_share";
+
+export interface AppliedOwnerCoupon {
+  couponId?: string;
+  code: string;
+  percentOff: number;
+}
+
 export interface User {
   uid: string;
   email: string | null;
@@ -21,6 +34,19 @@ export interface UserProfile extends User {
   state?: string;
   country?: string;
   emailVerified: boolean;
+  primaryAssetType?: ListingCategory;
+  ownerPricingPlan?: {
+    mode: OwnerPricingPlanMode;
+    fixedMonthlyFee: number;
+    fixedYearlyFee: number;
+    revenueSharePercent: number;
+    effectiveMonthlyFee?: number;
+    effectiveYearlyFee?: number;
+    effectiveRevenueSharePercent?: number;
+    coupon?: AppliedOwnerCoupon;
+    paymentStatus?: "active";
+    activatedAt?: Date;
+  };
 }
 
 export interface AuthState {
@@ -42,6 +68,19 @@ export interface SignupCredentials {
   displayName: string;
   role: PublicUserRole;
   phoneNumber?: string;
+  primaryAssetType?: ListingCategory;
+  ownerPricingPlan?: {
+    mode: OwnerPricingPlanMode;
+    fixedMonthlyFee: number;
+    fixedYearlyFee: number;
+    revenueSharePercent: number;
+    effectiveMonthlyFee?: number;
+    effectiveYearlyFee?: number;
+    effectiveRevenueSharePercent?: number;
+    coupon?: AppliedOwnerCoupon;
+    paymentStatus?: "active";
+    activatedAt?: Date;
+  };
 }
 
 export interface PendingGoogleSignup {

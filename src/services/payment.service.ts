@@ -14,6 +14,7 @@ import {
   updatePaymentStatus,
 } from "./billboard.service";
 import { createNotification } from "./notification.service";
+import { scheduleOwnerPayoutFromPayment } from "./payout.service";
 import { Booking, PaymentStatus } from "@/types/billboard.types";
 
 const PAYMENTS_COLLECTION = "payments";
@@ -94,7 +95,9 @@ const buildPaymentRecordPayload = (
   };
 };
 
-const mapBookingToPaymentTransaction = (booking: Booking): PaymentTransaction => {
+const mapBookingToPaymentTransaction = (
+  booking: Booking,
+): PaymentTransaction => {
   const unitPrice = booking.pricePerUnit || booking.pricePerDay || 0;
   const baseAmount = unitPrice * booking.duration;
 
@@ -127,7 +130,10 @@ const ensurePaymentRecordForBookingInternal = async (
   paymentReference: string,
 ) => {
   const existingPayments = await getDocs(
-    query(collection(db, PAYMENTS_COLLECTION), where("bookingId", "==", booking.id)),
+    query(
+      collection(db, PAYMENTS_COLLECTION),
+      where("bookingId", "==", booking.id),
+    ),
   );
 
   if (existingPayments.empty) {
@@ -144,7 +150,6 @@ const generateReference = (): string => {
     .substr(2, 9)
     .toUpperCase()}`;
 };
-
 
 const recordSuccessfulPayment = async (
   bookingId: string,
@@ -181,13 +186,31 @@ const recordSuccessfulPayment = async (
   );
 
   if (!wasAlreadyPaid) {
+    const scheduledPayout = await scheduleOwnerPayoutFromPayment({
+      ownerId,
+      ownerName: refreshedBooking.ownerName,
+      ownerEmail: refreshedBooking.ownerEmail,
+      amount,
+      currency: refreshedBooking.currency || "NGN",
+      bookingId,
+      paymentId: resolvedReference,
+      paidAt: new Date(),
+    });
+
     await createNotification(
       ownerId,
-      "payment_received",
-      "Payment Received",
-      `You received ₦${amount.toLocaleString()} for booking on "${billboardTitle}"`,
-      { bookingId },
-      "/dashboard/owner/analytics",
+      "payout_scheduled",
+      "Payout scheduled",
+      `AdSpot received payment for "${billboardTitle}". Your payout is scheduled for ${scheduledPayout.payoutDate.toLocaleDateString(
+        "en-NG",
+        {
+          weekday: "long",
+          day: "numeric",
+          month: "short",
+        },
+      )}.`,
+      { bookingId, payoutId: scheduledPayout.id },
+      "/dashboard/owner/settings",
     );
 
     await createNotification(
@@ -372,7 +395,10 @@ export const getPaymentHistory = async (
 ): Promise<PaymentTransaction[]> => {
   try {
     const field = role === "owner" ? "ownerId" : "advertiserId";
-    const q = query(collection(db, BOOKINGS_COLLECTION), where(field, "==", userId));
+    const q = query(
+      collection(db, BOOKINGS_COLLECTION),
+      where(field, "==", userId),
+    );
 
     const snapshot = await getDocs(q);
     const results = snapshot.docs
@@ -393,12 +419,9 @@ export const getPaymentHistory = async (
       .filter((booking) => booking.paymentStatus === "paid" && !!booking.paidAt)
       .map(mapBookingToPaymentTransaction);
 
-    return results.sort(
-      (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
-    );
+    return results.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   } catch (error) {
     console.error("Error fetching payment history:", error);
     throw error;
   }
 };
-

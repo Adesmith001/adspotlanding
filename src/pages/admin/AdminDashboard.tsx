@@ -14,6 +14,8 @@ import {
 } from 'react-icons/md';
 import DashboardLayout from '@/components/DashboardLayout';
 import { getAdminStats, getAllReports, type Report } from '@/services/admin.service';
+import { ensureAdminPayoutReminders, getDuePayouts } from '@/services/payout.service';
+import type { Payout } from '@/types/billboard.types';
 
 const formatPrice = (price: number) =>
     new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', minimumFractionDigits: 0 }).format(price);
@@ -27,14 +29,21 @@ const reportStatusStyle: Record<string, string> = {
 const AdminDashboard: React.FC = () => {
     const [stats, setStats] = useState<any>(null);
     const [reports, setReports] = useState<Report[]>([]);
+    const [duePayouts, setDuePayouts] = useState<Payout[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const fetchStats = async () => {
             try {
-                const [data, reportData] = await Promise.all([getAdminStats(), getAllReports()]);
+                const [data, reportData] = await Promise.all([
+                    getAdminStats(),
+                    getAllReports(),
+                    ensureAdminPayoutReminders(),
+                ]);
                 setStats(data);
                 setReports(reportData);
+                const payouts = await getDuePayouts(4);
+                setDuePayouts(payouts);
             } catch (error) {
                 console.error('Error fetching admin stats:', error);
             } finally {
@@ -92,6 +101,7 @@ const AdminDashboard: React.FC = () => {
     ];
 
     const openReports = reports.filter(r => r.status === 'open').length;
+    const duePayoutAmount = duePayouts.reduce((sum, payout) => sum + payout.amount, 0);
 
     return (
         <DashboardLayout userRole="admin" title="Admin Dashboard" subtitle="Platform overview and management">
@@ -208,6 +218,39 @@ const AdminDashboard: React.FC = () => {
                                     <p className="text-base font-semibold text-white/70">{stats?.totalUsers || 0}</p>
                                 </div>
                             </div>
+                        </motion.div>
+
+                        <motion.div
+                            initial={{ opacity: 0, y: 12 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.2 }}
+                            className="bg-white rounded-2xl border border-neutral-100 p-5"
+                        >
+                            <p className="text-xs font-semibold uppercase tracking-widest text-neutral-400">Monday Payout Queue</p>
+                            <p className="mt-2 text-2xl font-bold text-neutral-900">{formatPrice(duePayoutAmount)}</p>
+                            <p className="mt-1 text-xs text-neutral-500">{duePayouts.length} owner payout{duePayouts.length === 1 ? '' : 's'} waiting for admin action</p>
+                            <div className="mt-4 space-y-3">
+                                {duePayouts.length === 0 ? (
+                                    <p className="text-sm text-neutral-500">No payouts are waiting right now.</p>
+                                ) : (
+                                    duePayouts.slice(0, 3).map((payout) => (
+                                        <div key={payout.id} className="flex items-center justify-between rounded-xl bg-neutral-50 px-3 py-2">
+                                            <div>
+                                                <p className="text-sm font-semibold text-neutral-900">{payout.ownerName}</p>
+                                                <p className="text-xs text-neutral-500">{payout.payoutDate.toLocaleDateString('en-NG', { weekday: 'short', day: 'numeric', month: 'short' })}</p>
+                                            </div>
+                                            <span className="text-sm font-semibold text-neutral-900">{formatPrice(payout.amount)}</span>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                            <Link
+                                to="/dashboard/admin/transactions"
+                                className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-primary-700"
+                            >
+                                Open payout queue
+                                <MdArrowForward size={14} />
+                            </Link>
                         </motion.div>
 
                         {/* Quick Actions */}

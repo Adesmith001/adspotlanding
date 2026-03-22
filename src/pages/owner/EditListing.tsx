@@ -114,6 +114,11 @@ const EditListing: React.FC = () => {
 
         setSaving(true);
         try {
+            const resolvedWeeklyPrice =
+                listing.category === 'screen' ? 0 : weeklyPrice || dailyPrice * 7;
+            const resolvedMonthlyPrice =
+                listing.category === 'screen' ? 0 : monthlyPrice || dailyPrice * 30;
+
             await updateBillboard(listing.id, {
                 title: title.trim(),
                 description: description.trim(),
@@ -134,11 +139,12 @@ const EditListing: React.FC = () => {
                 trafficScore,
                 pricing: {
                     ...listing.pricing,
-                    hourly: hourlyPrice,
+                    hourly: listing.category === 'screen' ? hourlyPrice : 0,
                     daily: dailyPrice,
-                    weekly: weeklyPrice,
-                    monthly: monthlyPrice,
+                    weekly: resolvedWeeklyPrice,
+                    monthly: resolvedMonthlyPrice,
                 },
+                primaryAssetType: listing.category || 'billboard',
             } as Partial<Billboard>);
 
             toast.success('Listing updated successfully');
@@ -271,10 +277,12 @@ const EditListing: React.FC = () => {
                                 <div>
                                     <label className="block text-sm font-medium text-neutral-700 mb-2">Weekly Price</label>
                                     <Input type="number" value={weeklyPrice || ''} onChange={(e) => setWeeklyPrice(Number(e.target.value))} />
+                                    <p className="mt-2 text-xs text-neutral-500">Leave blank to use 7 x the daily price.</p>
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-neutral-700 mb-2">Monthly Price</label>
                                     <Input type="number" value={monthlyPrice || ''} onChange={(e) => setMonthlyPrice(Number(e.target.value))} />
+                                    <p className="mt-2 text-xs text-neutral-500">Leave blank to use 30 x the daily price.</p>
                                 </div>
                             </>
                         )}

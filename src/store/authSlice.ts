@@ -18,6 +18,7 @@ import type {
   LoginCredentials,
   SignupCredentials,
   PublicUserRole,
+  OwnerPricingPlanMode,
 } from "@/types/user.types";
 
 const initialState: AuthState = {
@@ -79,9 +80,32 @@ export const beginGoogleSignupFlow = createAsyncThunk(
 
 export const completeGoogleSignupRole = createAsyncThunk(
   "auth/completeGoogleSignupRole",
-  async (role: PublicUserRole, { rejectWithValue }) => {
+  async (
+    payload:
+      | PublicUserRole
+      | {
+          role: PublicUserRole;
+          primaryAssetType?: "billboard" | "screen";
+          ownerPricingPlan?: {
+            mode: OwnerPricingPlanMode;
+            fixedMonthlyFee: number;
+            fixedYearlyFee: number;
+            revenueSharePercent: number;
+            effectiveMonthlyFee?: number;
+            effectiveYearlyFee?: number;
+            effectiveRevenueSharePercent?: number;
+            coupon?: {
+              couponId?: string;
+              code: string;
+              percentOff: number;
+            };
+            paymentStatus?: "active";
+          };
+        },
+    { rejectWithValue },
+  ) => {
     try {
-      const user = await completeGoogleSignUp(role);
+      const user = await completeGoogleSignUp(payload);
       return user;
     } catch (error: any) {
       return rejectWithValue(error.message);

@@ -15,6 +15,12 @@ service cloud.firestore {
       return role in ['owner', 'advertiser'];
     }
 
+    function isAdmin() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
     function isViewIncrementOnly() {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views']) &&
              request.resource.data.views == resource.data.views + 1;
@@ -28,9 +34,10 @@ service cloud.firestore {
       allow create: if isOwner(userId) &&
                       isValidPublicRole(request.resource.data.role);
       // Role is immutable after account creation.
-      allow update: if isOwner(userId) &&
-                      request.resource.data.role == resource.data.role;
-      allow delete: if isOwner(userId);
+      allow update: if (isOwner(userId) &&
+                      request.resource.data.role == resource.data.role) ||
+                      isAdmin();
+      allow delete: if isOwner(userId) || isAdmin();
     }
     
     // Listings collection
@@ -56,9 +63,11 @@ service cloud.firestore {
                       request.resource.data.ownerId == request.auth.uid;
       // Only the owner can update or delete their billboard
       allow update: if (isAuthenticated() && resource.data.ownerId == request.auth.uid) ||
+                      isAdmin() ||
                       isViewIncrementOnly();
-      allow delete: if isAuthenticated() && 
-                      resource.data.ownerId == request.auth.uid;
+      allow delete: if (isAuthenticated() && 
+                      resource.data.ownerId == request.auth.uid) ||
+                      isAdmin();
     }
     
     // Reviews collection
@@ -91,17 +100,20 @@ service cloud.firestore {
       // Only involved parties (advertiser or owner) can read
       allow read: if isAuthenticated() && 
         (request.auth.uid == resource.data.advertiserId || 
-         request.auth.uid == resource.data.ownerId);
+         request.auth.uid == resource.data.ownerId ||
+         isAdmin());
       // Only authenticated users can create bookings
       allow create: if isAuthenticated() &&
                       request.resource.data.advertiserId == request.auth.uid;
       // Both parties can update (for status changes, etc.)
       allow update: if isAuthenticated() && 
         (request.auth.uid == resource.data.advertiserId || 
-         request.auth.uid == resource.data.ownerId);
+         request.auth.uid == resource.data.ownerId ||
+         isAdmin());
       // Only the owner can delete bookings
-      allow delete: if isAuthenticated() && 
-                      request.auth.uid == resource.data.ownerId;
+      allow delete: if (isAuthenticated() && 
+                      request.auth.uid == resource.data.ownerId) ||
+                      isAdmin();
     }
 
     // Conversations collection
@@ -154,9 +166,30 @@ service cloud.firestore {
     match /payments/{paymentId} {
       allow read: if isAuthenticated() && 
         (request.auth.uid == resource.data.advertiserId || 
-         request.auth.uid == resource.data.ownerId);
+         request.auth.uid == resource.data.ownerId ||
+         isAdmin());
       allow create: if isAuthenticated();
       allow update: if isAuthenticated();
+    }
+
+    // Payout batches for owner disbursements
+    match /payouts/{payoutId} {
+      allow read: if isAuthenticated() &&
+        (request.auth.uid == resource.data.ownerId || isAdmin());
+      allow create, update: if isAuthenticated();
+      allow delete: if isAdmin();
+    }
+
+    match /ownerCoupons/{couponId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Reports collection
+    match /reports/{reportId} {
+      allow create: if isAuthenticated() &&
+        request.resource.data.reporterId == request.auth.uid;
+      allow read, update, delete: if isAdmin();
     }
 
     // Public booking windows used for date availability checks

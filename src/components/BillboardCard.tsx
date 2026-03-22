@@ -13,6 +13,7 @@ interface BillboardCardProps {
 const BillboardCard: React.FC<BillboardCardProps> = ({ billboard, onFavorite, isFavorited = false }) => {
     const [currentPhoto, setCurrentPhoto] = useState(0);
     const [isImageLoaded, setIsImageLoaded] = useState(false);
+    const isScreen = (billboard.primaryAssetType || billboard.category) === 'screen';
 
     const formatPrice = (price: number) => {
         return new Intl.NumberFormat('en-NG', {
@@ -82,9 +83,9 @@ const BillboardCard: React.FC<BillboardCardProps> = ({ billboard, onFavorite, is
                 {/* Overlay badges */}
                 <div className="absolute top-3 left-3 flex flex-wrap gap-2">
                     <span className="px-3 py-1 bg-white/95 backdrop-blur-sm rounded-full text-xs font-semibold text-neutral-900 shadow-lg capitalize">
-                        {billboard.category === 'screen' ? 'Screen' : getBillboardTypeLabel(billboard.type || '')}
+                        {isScreen ? 'Screen' : getBillboardTypeLabel(billboard.type || '')}
                     </span>
-                    {billboard.hasLighting && billboard.category !== 'screen' && (
+                    {billboard.hasLighting && !isScreen && (
                         <span className="px-3 py-1 bg-amber-500/95 backdrop-blur-sm rounded-full text-xs font-semibold text-white shadow-lg flex items-center gap-1">
                             <MdLightMode size={12} />
                             Lit
@@ -190,9 +191,9 @@ const BillboardCard: React.FC<BillboardCardProps> = ({ billboard, onFavorite, is
                 <div className="flex items-center justify-between">
                     <div>
                         <p className="text-2xl font-bold text-neutral-900">
-                            {formatPrice(billboard.category === 'screen' ? (billboard.pricing.hourly || 0) : billboard.pricing.daily)}
+                            {formatPrice(isScreen ? (billboard.pricing.hourly || 0) : billboard.pricing.daily)}
                         </p>
-                        <p className="text-xs text-neutral-500">per {billboard.category === 'screen' ? 'hour' : 'day'}</p>
+                        <p className="text-xs text-neutral-500">per {isScreen ? 'hour' : 'day'}</p>
                     </div>
                     <Link
                         to={`/billboards/${billboard.id}`}

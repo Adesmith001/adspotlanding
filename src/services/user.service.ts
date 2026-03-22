@@ -11,6 +11,11 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { db } from "./firebase";
+import type { ListingCategory } from "@/types/billboard.types";
+import type {
+  AppliedOwnerCoupon,
+  OwnerPricingPlanMode,
+} from "@/types/user.types";
 
 // Collections
 const USERS_COLLECTION = "users";
@@ -21,6 +26,30 @@ export interface UserPreferences {
   newBookings: boolean;
   marketingUpdates: boolean;
   securityAlerts: boolean;
+  payoutAlerts: boolean;
+}
+
+export interface OwnerPricingBenchmarks {
+  fixedMonthly: number;
+  fixedYearly: number;
+  revenueSharePercent: number;
+  rationale: string;
+  sources: string[];
+  updatedAt: string;
+}
+
+export interface OwnerPricingPlan {
+  mode: OwnerPricingPlanMode;
+  fixedMonthlyFee: number;
+  fixedYearlyFee: number;
+  revenueSharePercent: number;
+  effectiveMonthlyFee: number;
+  effectiveYearlyFee: number;
+  effectiveRevenueSharePercent: number;
+  coupon?: AppliedOwnerCoupon;
+  paymentStatus?: "active";
+  activatedAt?: any;
+  benchmarks: OwnerPricingBenchmarks;
 }
 
 export interface UserProfile {
@@ -34,9 +63,33 @@ export interface UserProfile {
   website?: string;
   role: "owner" | "advertiser" | "admin";
   preferences: UserPreferences;
+  primaryAssetType?: ListingCategory;
+  ownerPricingPlan?: OwnerPricingPlan;
   createdAt?: any;
   updatedAt?: any;
 }
+
+export const OWNER_PRICING_BENCHMARKS: OwnerPricingBenchmarks = {
+  fixedMonthly: 10000,
+  fixedYearly: 110000,
+  revenueSharePercent: 15,
+  rationale:
+    "Configured onboarding plan: owners choose NGN 10,000 monthly, NGN 110,000 yearly, or 15% of weekly earnings, with admin coupons able to reduce the selected amount.",
+  sources: [],
+  updatedAt: "2026-03-22",
+};
+
+export const DEFAULT_OWNER_PRICING_PLAN: OwnerPricingPlan = {
+  mode: "fixed_monthly",
+  fixedMonthlyFee: OWNER_PRICING_BENCHMARKS.fixedMonthly,
+  fixedYearlyFee: OWNER_PRICING_BENCHMARKS.fixedYearly,
+  revenueSharePercent: OWNER_PRICING_BENCHMARKS.revenueSharePercent,
+  effectiveMonthlyFee: OWNER_PRICING_BENCHMARKS.fixedMonthly,
+  effectiveYearlyFee: OWNER_PRICING_BENCHMARKS.fixedYearly,
+  effectiveRevenueSharePercent: OWNER_PRICING_BENCHMARKS.revenueSharePercent,
+  paymentStatus: "active",
+  benchmarks: OWNER_PRICING_BENCHMARKS,
+};
 
 const DEFAULT_PREFERENCES: UserPreferences = {
   emailAlerts: true,
@@ -44,6 +97,7 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   newBookings: true,
   marketingUpdates: false,
   securityAlerts: true,
+  payoutAlerts: true,
 };
 
 /**
@@ -67,15 +121,33 @@ export const syncUserProfile = async (
         displayName,
         role,
         preferences: DEFAULT_PREFERENCES,
+        primaryAssetType: role === "owner" ? "billboard" : undefined,
+        ownerPricingPlan:
+          role === "owner" ? DEFAULT_OWNER_PRICING_PLAN : undefined,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
       await setDoc(userRef, newUser);
     } else {
-      // Update existing user login time or basic info if needed
-      await updateDoc(userRef, {
+      const profile = userSnap.data() as UserProfile;
+      const patch: Partial<UserProfile> & { updatedAt: any } = {
         updatedAt: serverTimestamp(),
-      });
+      };
+
+      if (!profile.preferences) {
+        patch.preferences = DEFAULT_PREFERENCES;
+      }
+
+      if (role === "owner") {
+        if (!profile.primaryAssetType) {
+          patch.primaryAssetType = "billboard";
+        }
+        if (!profile.ownerPricingPlan) {
+          patch.ownerPricingPlan = DEFAULT_OWNER_PRICING_PLAN;
+        }
+      }
+
+      await updateDoc(userRef, patch);
     }
   } catch (error) {
     console.error("Error syncing user profile:", error);
@@ -142,6 +214,25 @@ export const updateUserPreferences = async (
     }
   } catch (error) {
     console.error("Error updating user preferences:", error);
+    throw error;
+  }
+};
+
+export const updateOwnerCommercialSettings = async (
+  uid: string,
+  data: {
+    primaryAssetType?: ListingCategory;
+    ownerPricingPlan?: OwnerPricingPlan;
+  },
+): Promise<void> => {
+  try {
+    const userRef = doc(db, USERS_COLLECTION, uid);
+    await updateDoc(userRef, {
+      ...data,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    console.error("Error updating owner commercial settings:", error);
     throw error;
   }
 };

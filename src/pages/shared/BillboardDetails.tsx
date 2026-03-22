@@ -168,10 +168,14 @@ const BillboardDetails: React.FC = () => {
         if (isHourly) {
           price = (billboard.pricing.hourly || 0) * duration;
         } else {
+          const weeklyRate =
+            billboard.pricing.weekly || billboard.pricing.daily * 7;
+          const monthlyRate =
+            billboard.pricing.monthly || billboard.pricing.daily * 30;
           if (duration >= 30) {
-            price = billboard.pricing.monthly * Math.ceil(duration / 30);
+            price = monthlyRate * Math.ceil(duration / 30);
           } else if (duration >= 7) {
-            price = billboard.pricing.weekly * Math.ceil(duration / 7);
+            price = weeklyRate * Math.ceil(duration / 7);
           } else {
             price = billboard.pricing.daily * duration;
           }
@@ -715,6 +719,9 @@ const BillboardDetails: React.FC = () => {
   const unitPrice = isScreen
     ? billboard.pricing.hourly || 0
     : billboard.pricing.daily;
+  const weeklyPrice = billboard.pricing.weekly || billboard.pricing.daily * 7;
+  const monthlyPrice =
+    billboard.pricing.monthly || billboard.pricing.daily * 30;
   const minimumDuration = Math.max(1, billboard.bookingRules.minDuration || 1);
   const maximumDuration = Math.max(
     minimumDuration,
@@ -1614,14 +1621,14 @@ const BillboardDetails: React.FC = () => {
                     <div className="flex items-center gap-4 mt-2 text-xs text-neutral-500">
                       <span>
                         <span className="font-semibold text-neutral-700">
-                          {formatPrice(billboard.pricing.weekly)}
+                          {formatPrice(weeklyPrice)}
                         </span>{" "}
                         / week
                       </span>
                       <span className="text-neutral-300">·</span>
                       <span>
                         <span className="font-semibold text-neutral-700">
-                          {formatPrice(billboard.pricing.monthly)}
+                          {formatPrice(monthlyPrice)}
                         </span>{" "}
                         / month
                       </span>
