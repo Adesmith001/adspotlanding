@@ -11,10 +11,17 @@
     @apply bg-white text-neutral-900 antialiased;
     font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont,
       sans-serif;
+    overflow-y: auto;
   }
 
   html {
     scroll-behavior: smooth;
+  }
+
+  html,
+  body,
+  #root {
+    min-height: 100%;
   }
 }
 

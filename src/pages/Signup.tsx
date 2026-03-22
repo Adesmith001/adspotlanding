@@ -191,24 +191,24 @@ const Signup: React.FC = () => {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.24 }}
-            className="mb-7 rounded-[2rem] border border-neutral-200 bg-white p-6 shadow-sm"
+            className="mb-10 rounded-[2rem] border border-neutral-200 bg-white p-6 shadow-sm sm:p-8 lg:p-10"
         >
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                     <p className="text-xs font-semibold uppercase tracking-widest text-neutral-500">Owner onboarding</p>
-                    <h2 className="mt-1 text-xl font-bold text-neutral-900">Choose your access plan before entering the app</h2>
-                    <p className="mt-1 text-sm text-neutral-500">
+                    <h2 className="mt-2 max-w-2xl text-2xl font-bold leading-tight text-neutral-900 sm:text-3xl">Choose your access plan before entering the app</h2>
+                    <p className="mt-3 max-w-2xl text-base leading-relaxed text-neutral-500">
                         Owners get access immediately after selecting a plan during signup.
                     </p>
                 </div>
-                <span className="rounded-full bg-[#d4f34a]/40 px-3 py-1 text-xs font-semibold text-green-900">
+                <span className="rounded-full bg-[#d4f34a]/40 px-4 py-2 text-sm font-semibold text-green-900">
                     Access unlocked on signup
                 </span>
             </div>
 
-            <div className="mt-6">
+            <div className="mt-8">
                 <p className="mb-3 text-sm font-semibold text-neutral-900">What do you primarily rent out?</p>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-3 md:grid-cols-2">
                     {([
                         { value: 'billboard', label: 'Billboards' },
                         { value: 'screen', label: 'Screens' },
@@ -232,7 +232,7 @@ const Signup: React.FC = () => {
                 </div>
             </div>
 
-            <div className="mt-6">
+            <div className="mt-8">
                 <p className="mb-3 text-sm font-semibold text-neutral-900">Choose how you want to pay AdSpot</p>
                 <div className="grid gap-3 md:grid-cols-3">
                     {([
@@ -278,7 +278,7 @@ const Signup: React.FC = () => {
                 </div>
             </div>
 
-            <div className="mt-6 rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
+            <div className="mt-8 rounded-2xl border border-neutral-200 bg-neutral-50 p-4 sm:p-5">
                 <div className="flex flex-col gap-3 md:flex-row md:items-end">
                     <div className="flex-1">
                         <label className="mb-1.5 block text-sm font-medium text-neutral-700">Coupon code</label>
@@ -315,9 +315,10 @@ const Signup: React.FC = () => {
     );
 
     return (
-        <div className="min-h-screen bg-[#fafaf9] flex flex-col">
+        <div className="min-h-screen overflow-x-hidden bg-[#fafaf9]">
             {/* Top Nav */}
-            <nav className="w-full flex items-center justify-between px-6 sm:px-12 py-5">
+            <nav className="w-full border-b border-neutral-100 bg-[#fafaf9]/95 px-6 py-5 backdrop-blur sm:px-12">
+                <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4">
                 <Link to="/" className="flex items-center gap-1">
                     <span className="text-xl font-bold tracking-tight text-neutral-900">adspot</span>
                     <span className="text-xl font-bold text-neutral-900">.</span>
@@ -335,15 +336,16 @@ const Signup: React.FC = () => {
                         Browse Billboards
                     </Link>
                 </div>
+                </div>
             </nav>
 
             {/* Main Content */}
-            <div className="flex-1 flex flex-col items-center justify-start px-4 pb-16 pt-6">
+            <main className="px-4 pb-24 pt-8 sm:px-6 sm:pt-12 lg:pb-28">
                 <motion.div
                     initial={{ opacity: 0, y: 24 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.55, ease: 'easeOut' }}
-                    className="w-full max-w-2xl"
+                    className={`mx-auto w-full ${selectedRole === 'owner' ? 'max-w-5xl' : 'max-w-2xl'}`}
                 >
                     {/* Eyebrow badge */}
                     <motion.div
@@ -433,7 +435,7 @@ const Signup: React.FC = () => {
                         initial={{ opacity: 0, y: 12 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.28 }}
-                        className="flex flex-col sm:flex-row items-start gap-0"
+                        className="rounded-[2rem] border border-neutral-200 bg-white px-5 py-6 shadow-sm sm:flex sm:items-start sm:px-7 sm:py-8"
                     >
                         {/* Left col — email form */}
                         <div className="w-full sm:flex-1 sm:pr-8">
@@ -525,7 +527,7 @@ const Signup: React.FC = () => {
                         </div>
 
                         {/* Divider */}
-                        <div className="flex sm:flex-col items-center justify-center gap-3 my-5 sm:my-0 w-full sm:w-auto">
+                        <div className="my-6 flex w-full items-center justify-center gap-3 sm:my-0 sm:w-auto sm:flex-col">
                             <div className="flex-1 sm:flex-none sm:h-32 w-full sm:w-px bg-neutral-200" />
                             <span className="text-sm text-neutral-400 font-medium">/</span>
                             <div className="flex-1 sm:flex-none sm:h-32 w-full sm:w-px bg-neutral-200" />
@@ -547,16 +549,18 @@ const Signup: React.FC = () => {
                         </div>
                     </motion.div>
                 </motion.div>
-            </div>
+            </main>
 
             {/* Footer */}
-            <footer className="w-full flex items-center justify-between px-6 sm:px-12 py-5 border-t border-neutral-100">
+            <footer className="border-t border-neutral-100 px-6 py-5 sm:px-12">
+                <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 text-xs text-neutral-400 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-4 text-xs text-neutral-400">
                     <Link to="/privacy-policy" className="hover:text-neutral-700 transition-colors">Privacy Policy</Link>
                     <span>|</span>
                     <Link to="/terms-of-service" className="hover:text-neutral-700 transition-colors">Terms &amp; Conditions</Link>
                 </div>
                 <p className="text-xs text-neutral-400">Copyrights @adspot.ng {new Date().getFullYear()}</p>
+                </div>
             </footer>
 
             {/* Google Role Selection Modal */}
