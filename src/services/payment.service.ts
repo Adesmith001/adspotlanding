@@ -17,6 +17,7 @@ import { createNotification } from "./notification.service";
 import { Booking, PaymentStatus } from "@/types/billboard.types";
 
 const PAYMENTS_COLLECTION = "payments";
+const BOOKINGS_COLLECTION = "bookings";
 
 export interface PaymentTransaction {
   id: string;
@@ -93,6 +94,33 @@ const buildPaymentRecordPayload = (
   };
 };
 
+const mapBookingToPaymentTransaction = (booking: Booking): PaymentTransaction => {
+  const unitPrice = booking.pricePerUnit || booking.pricePerDay || 0;
+  const baseAmount = unitPrice * booking.duration;
+
+  return {
+    id: booking.id,
+    bookingId: booking.id,
+    billboardTitle: booking.billboardTitle,
+    advertiserId: booking.advertiserId,
+    ownerId: booking.ownerId,
+    amount: booking.totalAmount,
+    currency: booking.currency || "NGN",
+    status: booking.paymentStatus,
+    paymentMethod: booking.paymentMethod || "korapay",
+    reference: booking.paymentId || "",
+    createdAt: booking.paidAt || booking.updatedAt || booking.createdAt,
+    bookingStartDate: booking.startDate,
+    bookingEndDate: booking.endDate,
+    duration: booking.duration,
+    durationUnit: booking.durationUnit || "days",
+    unitPrice,
+    baseAmount,
+    discountAmount: Math.max(0, baseAmount - booking.totalAmount),
+    pricingLabel: getPricingLabel(booking),
+  };
+};
+
 const ensurePaymentRecordForBookingInternal = async (
   booking: Booking,
   amount: number,
@@ -157,7 +185,7 @@ const recordSuccessfulPayment = async (
       ownerId,
       "payment_received",
       "Payment Received",
-      `You received ?${amount.toLocaleString()} for booking on "${billboardTitle}"`,
+      `You received ₦${amount.toLocaleString()} for booking on "${billboardTitle}"`,
       { bookingId },
       "/dashboard/owner/analytics",
     );
@@ -295,7 +323,7 @@ export const subscribeToAdvertiserPaidBookings = (
   callback: (paidBookings: Record<string, PaidBookingInfo>) => void,
 ): (() => void) => {
   const q = query(
-    collection(db, PAYMENTS_COLLECTION),
+    collection(db, BOOKINGS_COLLECTION),
     where("advertiserId", "==", advertiserId),
   );
 
@@ -305,17 +333,21 @@ export const subscribeToAdvertiserPaidBookings = (
       const paidBookings = snapshot.docs.reduce<Record<string, PaidBookingInfo>>(
         (acc, doc) => {
           const data = doc.data();
-          if (data.status !== "paid" || !data.bookingId) {
+          if (data.paymentStatus !== "paid") {
             return acc;
           }
 
-          const createdAt = data.createdAt?.toDate?.() || new Date();
-          const existing = acc[data.bookingId];
+          const createdAt =
+            data.paidAt?.toDate?.() ||
+            data.updatedAt?.toDate?.() ||
+            data.createdAt?.toDate?.() ||
+            new Date();
+          const existing = acc[doc.id];
           if (!existing || existing.createdAt.getTime() < createdAt.getTime()) {
-            acc[data.bookingId] = {
-              bookingId: data.bookingId,
-              reference: data.reference || "",
-              amount: data.amount || 0,
+            acc[doc.id] = {
+              bookingId: doc.id,
+              reference: data.paymentId || "",
+              amount: data.totalAmount || 0,
               createdAt,
             };
           }
@@ -340,16 +372,26 @@ export const getPaymentHistory = async (
 ): Promise<PaymentTransaction[]> => {
   try {
     const field = role === "owner" ? "ownerId" : "advertiserId";
-    const q = query(collection(db, PAYMENTS_COLLECTION), where(field, "==", userId));
+    const q = query(collection(db, BOOKINGS_COLLECTION), where(field, "==", userId));
 
     const snapshot = await getDocs(q);
-    const results = snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-      createdAt: doc.data().createdAt?.toDate() || new Date(),
-      bookingStartDate: doc.data().bookingStartDate?.toDate?.(),
-      bookingEndDate: doc.data().bookingEndDate?.toDate?.(),
-    })) as PaymentTransaction[];
+    const results = snapshot.docs
+      .map((doc) => {
+        const data = doc.data();
+        const booking = {
+          id: doc.id,
+          ...data,
+          startDate: data.startDate?.toDate?.() || data.startDate,
+          endDate: data.endDate?.toDate?.() || data.endDate,
+          paidAt: data.paidAt?.toDate?.() || data.paidAt,
+          createdAt: data.createdAt?.toDate?.() || data.createdAt || new Date(),
+          updatedAt: data.updatedAt?.toDate?.() || data.updatedAt || new Date(),
+        } as Booking;
+
+        return booking;
+      })
+      .filter((booking) => booking.paymentStatus === "paid" && !!booking.paidAt)
+      .map(mapBookingToPaymentTransaction);
 
     return results.sort(
       (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
