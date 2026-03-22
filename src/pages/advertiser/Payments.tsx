@@ -9,7 +9,7 @@ import toast from 'react-hot-toast';
 import { useAppSelector } from '@/hooks/useRedux';
 import { selectUser } from '@/store/authSlice';
 import { getAdvertiserBookings } from '@/services/billboard.service';
-import { getPaymentHistory, PaymentTransaction, processPayment } from '@/services/payment.service';
+import { getPaymentHistory, PaymentTransaction, processPayment, verifyKorapayPayment } from '@/services/payment.service';
 import type { Booking } from '@/types/billboard.types';
 
 const containerVariants = {
@@ -44,6 +44,7 @@ const Payments: React.FC = () => {
     const [payableBookings, setPayableBookings] = useState<Booking[]>([]);
     const [loading, setLoading] = useState(true);
     const [payingBookingId, setPayingBookingId] = useState<string | null>(null);
+    const [verifyingPayment, setVerifyingPayment] = useState(false);
 
     const getPaymentDueDate = (booking: Booking) =>
         booking.paymentDueAt ? new Date(booking.paymentDueAt) : null;
@@ -104,13 +105,56 @@ const Payments: React.FC = () => {
         load();
     }, [user]);
 
+    useEffect(() => {
+        if (!user) return;
+
+        const params = new URLSearchParams(window.location.search);
+        const reference =
+            params.get('reference') ||
+            params.get('payment_reference') ||
+            params.get('transaction_reference');
+        const bookingId = params.get('bookingId');
+
+        if (!reference || !bookingId || verifyingPayment) {
+            return;
+        }
+
+        const booking = payableBookings.find((item) => item.id === bookingId);
+        if (!booking) {
+            return;
+        }
+
+        setVerifyingPayment(true);
+        const toastId = toast.loading('Verifying payment...');
+
+        verifyKorapayPayment(
+            booking.id,
+            user.uid,
+            booking.ownerId,
+            booking.billboardTitle,
+            booking.totalAmount,
+            reference,
+        )
+            .then(async () => {
+                await loadPaymentData();
+                toast.success('Payment completed successfully.', { id: toastId });
+                window.history.replaceState({}, '', '/dashboard/advertiser/payments');
+            })
+            .catch((error: any) => {
+                toast.error(error.message || 'Unable to verify payment.', { id: toastId });
+            })
+            .finally(() => {
+                setVerifyingPayment(false);
+            });
+    }, [user, payableBookings, verifyingPayment]);
+
     const handlePayNow = async (booking: Booking) => {
         if (!user) {
             return;
         }
 
         setPayingBookingId(booking.id);
-        const toastId = toast.loading('Launching payment...');
+        const toastId = toast.loading('Redirecting to secure checkout...');
 
         try {
             if (isPaymentOverdue(booking)) {
@@ -127,9 +171,6 @@ const Payments: React.FC = () => {
                 user.displayName || 'Advertiser',
                 user.email || '',
             );
-
-            await loadPaymentData();
-            toast.success('Payment completed successfully.', { id: toastId });
         } catch (error: any) {
             toast.error(error.message || 'Payment failed. Please try again.', { id: toastId });
         } finally {
