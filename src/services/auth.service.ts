@@ -36,6 +36,20 @@ const isPublicSignupRole = (role: string): role is PublicUserRole =>
 const getRoleConflictMessage = (role: string) =>
   `This account is already registered as ${role}. Each account can only have one role.`;
 
+const buildStoredOwnerCoupon = (
+  coupon?: NonNullable<SignupCredentials["ownerPricingPlan"]>["coupon"],
+) => {
+  if (!coupon) {
+    return undefined;
+  }
+
+  return {
+    ...(coupon.couponId ? { couponId: coupon.couponId } : {}),
+    code: coupon.code,
+    percentOff: coupon.percentOff,
+  };
+};
+
 const buildOwnerPlanForSignup = (credentials: {
   role: PublicUserRole;
   primaryAssetType?: SignupCredentials["primaryAssetType"];
@@ -46,6 +60,7 @@ const buildOwnerPlanForSignup = (credentials: {
   }
 
   const selectedPlan = credentials.ownerPricingPlan || DEFAULT_OWNER_PRICING_PLAN;
+  const storedCoupon = buildStoredOwnerCoupon(selectedPlan.coupon);
 
   return {
     primaryAssetType: credentials.primaryAssetType || "billboard",
@@ -61,7 +76,7 @@ const buildOwnerPlanForSignup = (credentials: {
       effectiveRevenueSharePercent:
         selectedPlan.effectiveRevenueSharePercent ??
         selectedPlan.revenueSharePercent,
-      coupon: selectedPlan.coupon,
+      ...(storedCoupon ? { coupon: storedCoupon } : {}),
       paymentStatus: "active" as const,
       activatedAt: serverTimestamp(),
       benchmarks: DEFAULT_OWNER_PRICING_PLAN.benchmarks,
