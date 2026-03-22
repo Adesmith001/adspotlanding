@@ -237,7 +237,10 @@ const AdminDashboard: React.FC = () => {
                                         <div key={payout.id} className="flex items-center justify-between rounded-xl bg-neutral-50 px-3 py-2">
                                             <div>
                                                 <p className="text-sm font-semibold text-neutral-900">{payout.ownerName}</p>
-                                                <p className="text-xs text-neutral-500">{payout.payoutDate.toLocaleDateString('en-NG', { weekday: 'short', day: 'numeric', month: 'short' })}</p>
+                                                <p className="text-xs text-neutral-500">
+                                                    {payout.payoutDate.toLocaleDateString('en-NG', { weekday: 'short', day: 'numeric', month: 'short' })}
+                                                    {payout.platformFeeAmount ? ` • fee ${formatPrice(payout.platformFeeAmount)}` : ' • full payout'}
+                                                </p>
                                             </div>
                                             <span className="text-sm font-semibold text-neutral-900">{formatPrice(payout.amount)}</span>
                                         </div>

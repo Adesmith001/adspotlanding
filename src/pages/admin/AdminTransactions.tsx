@@ -101,6 +101,15 @@ const AdminTransactions: React.FC = () => {
                                         <p className="text-sm text-neutral-500">
                                             {formatPrice(payout.amount)} due on {payout.payoutDate.toLocaleDateString('en-NG', { weekday: 'long', day: 'numeric', month: 'short' })}
                                         </p>
+                                        {payout.platformFeeAmount ? (
+                                            <p className="text-xs text-neutral-400">
+                                                Gross {formatPrice(payout.grossAmount || payout.amount)} less {formatPrice(payout.platformFeeAmount)} AdSpot fee ({payout.platformFeePercent || 0}% revenue share)
+                                            </p>
+                                        ) : (
+                                            <p className="text-xs text-neutral-400">
+                                                Full booking earnings will be paid out to this owner.
+                                            </p>
+                                        )}
                                         <p className="text-xs text-neutral-400">
                                             {payout.paymentCount} payment{payout.paymentCount === 1 ? '' : 's'} bundled into this payout
                                         </p>

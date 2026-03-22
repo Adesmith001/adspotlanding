@@ -1,3 +1,5 @@
+import type { OwnerPricingPlanMode } from "./user.types";
+
 // Billboard Types
 export type ListingCategory = "billboard" | "screen";
 export type BillboardType = "flex" | "digital" | "led";
@@ -367,6 +369,10 @@ export interface Payout {
   ownerName: string;
   ownerEmail?: string;
   amount: number;
+  grossAmount?: number;
+  platformFeeAmount?: number;
+  platformFeePercent?: number;
+  ownerPlanMode?: OwnerPricingPlanMode;
   currency: string;
   status: "scheduled" | "ready" | "processing" | "completed" | "failed";
   bookingIds: string[];

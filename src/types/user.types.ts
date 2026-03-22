@@ -5,6 +5,8 @@ export type OwnerPricingPlanMode =
   | "fixed_yearly"
   | "revenue_share";
 
+export type OwnerPlanPaymentStatus = "pending" | "active";
+
 export interface AppliedOwnerCoupon {
   couponId?: string;
   code: string;
@@ -44,7 +46,7 @@ export interface UserProfile extends User {
     effectiveYearlyFee?: number;
     effectiveRevenueSharePercent?: number;
     coupon?: AppliedOwnerCoupon;
-    paymentStatus?: "active";
+    paymentStatus?: OwnerPlanPaymentStatus;
     activatedAt?: Date;
   };
 }
@@ -78,7 +80,7 @@ export interface SignupCredentials {
     effectiveYearlyFee?: number;
     effectiveRevenueSharePercent?: number;
     coupon?: AppliedOwnerCoupon;
-    paymentStatus?: "active";
+    paymentStatus?: OwnerPlanPaymentStatus;
     activatedAt?: Date;
   };
 }

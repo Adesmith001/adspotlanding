@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { motion } from 'framer-motion';
 import { FcGoogle } from 'react-icons/fc';
@@ -9,7 +9,8 @@ import { useAppDispatch, useAppSelector } from '@/hooks/useRedux';
 import { beginGoogleSignupFlow, completeGoogleSignupRole, signUp, selectAuthLoading } from '@/store/authSlice';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
-import { cancelPendingGoogleSignUp } from '@/services/auth.service';
+import { activateOwnerPlanPayment, cancelPendingGoogleSignUp } from '@/services/auth.service';
+import { auth } from '@/services/firebase';
 import { applyCouponDiscount, getActiveCouponByCode, type OwnerCoupon } from '@/services/coupon.service';
 import { DEFAULT_OWNER_PRICING_PLAN } from '@/services/user.service';
 import type { ListingCategory } from '@/types/billboard.types';
@@ -34,13 +35,16 @@ const formatPrice = (value: number) =>
     new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', minimumFractionDigits: 0 }).format(value);
 
 const Signup: React.FC = () => {
+    const location = useLocation();
     const navigate = useNavigate();
     const dispatch = useAppDispatch();
     const loading = useAppSelector(selectAuthLoading);
+    const processedOwnerPlanReference = useRef<string | null>(null);
     const [selectedRole, setSelectedRole] = useState<PublicUserRole>('advertiser');
     const [pendingGoogleProfile, setPendingGoogleProfile] = useState<PendingGoogleSignup | null>(null);
     const [googleLoading, setGoogleLoading] = useState(false);
     const [googleSignupStep, setGoogleSignupStep] = useState<1 | 2>(1);
+    const [ownerPlanCheckoutBusy, setOwnerPlanCheckoutBusy] = useState(false);
     const [primaryAssetType, setPrimaryAssetType] = useState<ListingCategory>('billboard');
     const [ownerPlanMode, setOwnerPlanMode] = useState<OwnerPricingPlanMode>('fixed_monthly');
     const [couponCode, setCouponCode] = useState('');
@@ -58,6 +62,12 @@ const Signup: React.FC = () => {
         coupon: appliedCoupon,
     }), [ownerPlanMode, appliedCoupon]);
 
+    const ownerPlanCheckoutAmount = ownerPlanMode === 'fixed_yearly'
+        ? discountedPlan.effectiveYearlyFee
+        : discountedPlan.effectiveMonthlyFee;
+
+    const ownerPlanRequiresCheckout = ownerPlanMode !== 'revenue_share' && ownerPlanCheckoutAmount > 0;
+
     const buildOwnerPlanPayload = () => ({
         mode: ownerPlanMode,
         fixedMonthlyFee: DEFAULT_OWNER_PRICING_PLAN.fixedMonthlyFee,
@@ -67,12 +77,112 @@ const Signup: React.FC = () => {
         effectiveYearlyFee: discountedPlan.effectiveYearlyFee,
         effectiveRevenueSharePercent: discountedPlan.effectiveRevenueSharePercent,
         coupon: discountedPlan.coupon,
-        paymentStatus: 'active' as const,
+        paymentStatus: ownerPlanRequiresCheckout ? 'pending' as const : 'active' as const,
     });
 
     const navigateToRoleDashboard = (role: UserRole) => {
         navigate(role === 'owner' ? '/dashboard/owner' : '/dashboard/advertiser');
     };
+
+    const startOwnerPlanCheckout = async (customerName: string, customerEmail?: string | null) => {
+        if (!customerEmail) {
+            throw new Error('A valid email is required before starting owner plan payment.');
+        }
+
+        const currentUser = auth.currentUser;
+        if (!currentUser) {
+            throw new Error('Your session expired before payment could start. Please sign in again.');
+        }
+
+        setOwnerPlanCheckoutBusy(true);
+
+        try {
+            const reference = `OWNERPLAN-${currentUser.uid}-${Date.now()}`;
+            const redirectUrl = `${window.location.origin}/signup?ownerPlanCheckout=1&reference=${encodeURIComponent(reference)}`;
+            const response = await fetch('/api/korapay/initialize', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    amount: ownerPlanCheckoutAmount,
+                    currency: 'NGN',
+                    reference,
+                    redirectUrl,
+                    customerName,
+                    customerEmail,
+                    description: ownerPlanMode === 'fixed_yearly'
+                        ? 'AdSpot owner yearly access plan'
+                        : 'AdSpot owner monthly access plan',
+                }),
+            });
+
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok || !payload?.checkoutUrl) {
+                throw new Error(payload?.message || 'Unable to start owner plan payment.');
+            }
+
+            window.location.assign(payload.checkoutUrl);
+        } catch (error) {
+            setOwnerPlanCheckoutBusy(false);
+            throw error;
+        }
+    };
+
+    useEffect(() => {
+        const params = new URLSearchParams(location.search);
+        const ownerPlanCheckout = params.get('ownerPlanCheckout');
+        const reference = params.get('reference');
+
+        if (loading || ownerPlanCheckout !== '1' || !reference) {
+            return;
+        }
+
+        if (processedOwnerPlanReference.current === reference) {
+            return;
+        }
+
+        processedOwnerPlanReference.current = reference;
+        let active = true;
+
+        const verifyOwnerPlanPayment = async () => {
+            setOwnerPlanCheckoutBusy(true);
+
+            try {
+                const currentUser = auth.currentUser;
+                if (!currentUser) {
+                    throw new Error('Please sign in again to complete your owner plan payment.');
+                }
+
+                const response = await fetch(`/api/korapay/verify?reference=${encodeURIComponent(reference)}`);
+                const payload = await response.json().catch(() => ({}));
+                const paymentStatus = String(payload?.status || '').toLowerCase();
+
+                if (!response.ok) {
+                    throw new Error(payload?.message || 'Unable to verify owner plan payment.');
+                }
+
+                if (!['success', 'successful', 'paid'].includes(paymentStatus)) {
+                    throw new Error('Owner plan payment has not been confirmed yet.');
+                }
+
+                await activateOwnerPlanPayment(currentUser.uid);
+                toast.success('Owner plan payment confirmed. Welcome to your dashboard!');
+                navigate('/dashboard/owner', { replace: true });
+            } catch (error: any) {
+                toast.error(error?.message || 'Unable to confirm owner plan payment right now.');
+                navigate('/signup', { replace: true });
+            } finally {
+                if (active) {
+                    setOwnerPlanCheckoutBusy(false);
+                }
+            }
+        };
+
+        void verifyOwnerPlanPayment();
+
+        return () => {
+            active = false;
+        };
+    }, [loading, location.search, navigate]);
 
     const onSubmit = async (data: SignupForm) => {
         if (!data.agreeToTerms) return toast.error('Please accept the terms and conditions');
@@ -87,6 +197,17 @@ const Signup: React.FC = () => {
                 ownerPricingPlan: selectedRole === 'owner' ? buildOwnerPlanPayload() : undefined,
             };
             await dispatch(signUp(credentials)).unwrap();
+
+            if (selectedRole === 'owner' && ownerPlanRequiresCheckout) {
+                try {
+                    toast.success('Account created. Redirecting you to Korapay to complete owner plan payment.');
+                    await startOwnerPlanCheckout(data.displayName, data.email);
+                } catch (checkoutError: any) {
+                    toast.error(checkoutError?.message || 'Your account was created, but Korapay could not be started.');
+                }
+                return;
+            }
+
             toast.success('Account created successfully!');
             navigateToRoleDashboard(selectedRole);
         } catch (err: any) {
@@ -114,12 +235,27 @@ const Signup: React.FC = () => {
 
     const handleCompleteGoogleSignup = async () => {
         try {
+            const googleProfile = pendingGoogleProfile;
             const payload = selectedRole === 'owner'
                 ? { role: selectedRole, primaryAssetType, ownerPricingPlan: buildOwnerPlanPayload() }
                 : selectedRole;
             const user = await dispatch(completeGoogleSignupRole(payload)).unwrap();
             setGoogleSignupStep(1);
             setPendingGoogleProfile(null);
+
+            if (selectedRole === 'owner' && ownerPlanRequiresCheckout) {
+                try {
+                    toast.success('Account created. Redirecting you to Korapay to complete owner plan payment.');
+                    await startOwnerPlanCheckout(
+                        googleProfile?.displayName || user.displayName || 'Owner',
+                        googleProfile?.email || user.email,
+                    );
+                } catch (checkoutError: any) {
+                    toast.error(checkoutError?.message || 'Your account was created, but Korapay could not be started.');
+                }
+                return;
+            }
+
             toast.success('Account created successfully!');
             navigateToRoleDashboard(user.role);
         } catch (err: any) {
@@ -210,6 +346,9 @@ const Signup: React.FC = () => {
             </div>
             <div className="mt-8">
                 <p className="mb-3 text-sm font-semibold text-neutral-900">Choose how you want to pay AdSpot</p>
+                <p className="mb-4 text-xs text-neutral-500">
+                    Monthly and yearly plans redirect to Korapay at signup. Revenue share skips upfront payment and is only deducted from payouts when there are earnings to disburse.
+                </p>
                 <div className="grid gap-3 md:grid-cols-3">
                     {([
                         { value: 'fixed_monthly', title: 'Monthly', price: formatPrice(discountedPlan.effectiveMonthlyFee), sub: `${formatPrice(DEFAULT_OWNER_PRICING_PLAN.fixedMonthlyFee)}/month base` },
@@ -278,7 +417,7 @@ const Signup: React.FC = () => {
                                 <div className="mt-6">{renderRoleCards(true)}</div>
                                 <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
                                     <Button type="button" variant="ghost" onClick={handleCancelGoogleFlow} className="justify-center sm:justify-start">Cancel and go back</Button>
-                                    <Button type="button" onClick={handleContinueGoogleSignup} loading={loading} className="sm:min-w-[240px]">{selectedRole === 'owner' ? 'Continue to owner setup' : 'Finish signup as advertiser'}</Button>
+                                    <Button type="button" onClick={handleContinueGoogleSignup} loading={loading || ownerPlanCheckoutBusy} className="sm:min-w-[240px]">{selectedRole === 'owner' ? 'Continue to owner setup' : 'Finish signup as advertiser'}</Button>
                                 </div>
                             </div>
                         )}
@@ -295,7 +434,9 @@ const Signup: React.FC = () => {
                                 {renderOwnerOnboarding('mb-0')}
                                 <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row">
                                     <Button type="button" variant="outline" fullWidth onClick={() => setGoogleSignupStep(1)}>Back to role selection</Button>
-                                    <Button type="button" fullWidth loading={loading} onClick={handleCompleteGoogleSignup}>Finish signup</Button>
+                                    <Button type="button" fullWidth loading={loading || ownerPlanCheckoutBusy} onClick={handleCompleteGoogleSignup}>
+                                        {ownerPlanRequiresCheckout ? 'Continue to Korapay' : 'Finish signup'}
+                                    </Button>
                                 </div>
                             </div>
                         )}
@@ -304,7 +445,7 @@ const Signup: React.FC = () => {
                         <p className="text-xs font-semibold uppercase tracking-widest text-neutral-500">What happens next</p>
                         <div className="mt-5 space-y-4 text-sm leading-relaxed text-neutral-600">
                             <div className="flex gap-3"><span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-neutral-900 text-xs font-semibold text-white">1</span><p>Choose whether this Google account will act as an advertiser or a billboard owner.</p></div>
-                            <div className="flex gap-3"><span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-neutral-900 text-xs font-semibold text-white">2</span><p>{selectedRole === 'owner' ? 'Pick your inventory focus, pricing plan, and coupon before entering the owner dashboard.' : 'Finish signup immediately and head straight into the advertiser dashboard.'}</p></div>
+                            <div className="flex gap-3"><span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-neutral-900 text-xs font-semibold text-white">2</span><p>{selectedRole === 'owner' ? (ownerPlanRequiresCheckout ? 'Pick your inventory focus and fixed plan, then continue to Korapay before entering the owner dashboard.' : 'Choose revenue share and enter the owner dashboard immediately.') : 'Finish signup immediately and head straight into the advertiser dashboard.'}</p></div>
                             <div className="flex gap-3"><span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-neutral-900 text-xs font-semibold text-white">3</span><p>Your Google account stays linked, so future sign-ins will take you directly to the right workspace.</p></div>
                         </div>
                         <div className="mt-8 rounded-2xl bg-[#003c30] p-5 text-white">
@@ -347,8 +488,8 @@ const Signup: React.FC = () => {
                             <input type="checkbox" id="agreeToTerms" {...register('agreeToTerms', { required: true })} className="mt-0.5 h-4 w-4 flex-shrink-0 rounded border-neutral-300 text-neutral-900 focus:ring-neutral-900" />
                             <span className="text-xs leading-relaxed text-neutral-500">I agree to the <Link to="/terms-of-service" className="font-medium text-neutral-900 underline hover:no-underline">Terms of Service</Link> and <Link to="/privacy-policy" className="font-medium text-neutral-900 underline hover:no-underline">Privacy Policy</Link></span>
                         </label>
-                        <motion.button type="submit" disabled={loading} whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }} className="flex w-full items-center justify-between gap-3 rounded-full bg-neutral-900 px-6 py-4 text-sm font-semibold text-white transition-colors hover:bg-neutral-800 disabled:opacity-60">
-                            <span>{loading ? 'Creating account...' : 'Create Your Account'}</span>
+                        <motion.button type="submit" disabled={loading || ownerPlanCheckoutBusy} whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }} className="flex w-full items-center justify-between gap-3 rounded-full bg-neutral-900 px-6 py-4 text-sm font-semibold text-white transition-colors hover:bg-neutral-800 disabled:opacity-60">
+                            <span>{loading || ownerPlanCheckoutBusy ? 'Processing...' : selectedRole === 'owner' && ownerPlanRequiresCheckout ? 'Create Account & Pay via Korapay' : 'Create Your Account'}</span>
                             <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-white/20"><MdArrowForward size={15} /></span>
                         </motion.button>
                     </form>

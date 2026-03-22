@@ -99,7 +99,7 @@ export const completeGoogleSignupRole = createAsyncThunk(
               code: string;
               percentOff: number;
             };
-            paymentStatus?: "active";
+            paymentStatus?: "pending" | "active";
           };
         },
     { rejectWithValue },

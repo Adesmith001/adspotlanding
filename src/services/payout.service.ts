@@ -51,6 +51,37 @@ const toDateKey = (date: Date) => date.toISOString().slice(0, 10);
 const buildPayoutId = (ownerId: string, weekKey: string) =>
   `${ownerId}_${weekKey}`;
 
+const roundCurrency = (value: number) => Number(value.toFixed(2));
+
+const getOwnerPayoutBreakdown = async (ownerId: string, grossAmount: number) => {
+  const ownerSnap = await getDoc(doc(db, USERS_COLLECTION, ownerId));
+  const ownerPlan = ownerSnap.data()?.ownerPricingPlan;
+  const ownerPlanMode = ownerPlan?.mode;
+
+  if (ownerPlanMode !== "revenue_share") {
+    return {
+      grossAmount,
+      netAmount: grossAmount,
+      platformFeeAmount: 0,
+      platformFeePercent: 0,
+      ownerPlanMode,
+    };
+  }
+
+  const platformFeePercent = Number(
+    ownerPlan?.effectiveRevenueSharePercent ?? ownerPlan?.revenueSharePercent ?? 0,
+  );
+  const platformFeeAmount = roundCurrency((grossAmount * platformFeePercent) / 100);
+
+  return {
+    grossAmount,
+    netAmount: Math.max(0, roundCurrency(grossAmount - platformFeeAmount)),
+    platformFeeAmount,
+    platformFeePercent,
+    ownerPlanMode,
+  };
+};
+
 export const getNextMonday = (fromDate: Date = new Date()) => {
   const next = new Date(fromDate);
   next.setHours(9, 0, 0, 0);
@@ -78,13 +109,22 @@ export const scheduleOwnerPayoutFromPayment = async (params: {
   const payoutId = buildPayoutId(params.ownerId, weekKey);
   const payoutRef = doc(db, PAYOUTS_COLLECTION, payoutId);
   const payoutSnap = await getDoc(payoutRef);
+  const payoutBreakdown = await getOwnerPayoutBreakdown(params.ownerId, params.amount);
 
   if (!payoutSnap.exists()) {
     await setDoc(payoutRef, {
       ownerId: params.ownerId,
       ownerName: params.ownerName,
       ownerEmail: params.ownerEmail || null,
-      amount: params.amount,
+      amount: payoutBreakdown.netAmount,
+      grossAmount: payoutBreakdown.grossAmount,
+      platformFeeAmount: payoutBreakdown.platformFeeAmount,
+      ...(payoutBreakdown.platformFeePercent > 0
+        ? { platformFeePercent: payoutBreakdown.platformFeePercent }
+        : {}),
+      ...(payoutBreakdown.ownerPlanMode
+        ? { ownerPlanMode: payoutBreakdown.ownerPlanMode }
+        : {}),
       currency: params.currency || "NGN",
       status: "scheduled",
       bookingIds: [params.bookingId],
@@ -97,11 +137,24 @@ export const scheduleOwnerPayoutFromPayment = async (params: {
       updatedAt: serverTimestamp(),
     });
   } else {
+    const currentData = payoutSnap.data();
     await updateDoc(payoutRef, {
-      amount: (payoutSnap.data().amount || 0) + params.amount,
+      amount: roundCurrency((currentData.amount || 0) + payoutBreakdown.netAmount),
+      grossAmount: roundCurrency(
+        (currentData.grossAmount || currentData.amount || 0) + payoutBreakdown.grossAmount,
+      ),
+      platformFeeAmount: roundCurrency(
+        (currentData.platformFeeAmount || 0) + payoutBreakdown.platformFeeAmount,
+      ),
+      ...(payoutBreakdown.platformFeePercent > 0
+        ? { platformFeePercent: payoutBreakdown.platformFeePercent }
+        : {}),
+      ...(payoutBreakdown.ownerPlanMode
+        ? { ownerPlanMode: payoutBreakdown.ownerPlanMode }
+        : {}),
       bookingIds: arrayUnion(params.bookingId),
       paymentIds: arrayUnion(params.paymentId),
-      paymentCount: (payoutSnap.data().paymentCount || 0) + 1,
+      paymentCount: (currentData.paymentCount || 0) + 1,
       lastPaymentReceivedAt: paidAt,
       updatedAt: serverTimestamp(),
     });

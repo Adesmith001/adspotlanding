@@ -47,7 +47,7 @@ export interface OwnerPricingPlan {
   effectiveYearlyFee: number;
   effectiveRevenueSharePercent: number;
   coupon?: AppliedOwnerCoupon;
-  paymentStatus?: "active";
+  paymentStatus?: "pending" | "active";
   activatedAt?: any;
   benchmarks: OwnerPricingBenchmarks;
 }

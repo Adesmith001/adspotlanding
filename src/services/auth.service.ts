@@ -14,7 +14,7 @@ import {
   signInWithPhoneNumber,
   ConfirmationResult,
 } from "firebase/auth";
-import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
+import { doc, setDoc, getDoc, serverTimestamp, updateDoc } from "firebase/firestore";
 import { auth, db } from "./firebase";
 import { DEFAULT_OWNER_PRICING_PLAN } from "./user.service";
 import {
@@ -77,8 +77,12 @@ const buildOwnerPlanForSignup = (credentials: {
         selectedPlan.effectiveRevenueSharePercent ??
         selectedPlan.revenueSharePercent,
       ...(storedCoupon ? { coupon: storedCoupon } : {}),
-      paymentStatus: "active" as const,
-      activatedAt: serverTimestamp(),
+      paymentStatus:
+        selectedPlan.paymentStatus ||
+        (selectedPlan.mode === "revenue_share" ? "active" : "pending"),
+      ...(selectedPlan.mode === "revenue_share"
+        ? { activatedAt: serverTimestamp() }
+        : {}),
       benchmarks: DEFAULT_OWNER_PRICING_PLAN.benchmarks,
     },
   };
@@ -273,6 +277,14 @@ export const completeGoogleSignUp = async (
  */
 export const cancelPendingGoogleSignUp = async (): Promise<void> => {
   await signOut(auth);
+};
+
+export const activateOwnerPlanPayment = async (uid: string): Promise<void> => {
+  await updateDoc(doc(db, USERS_COLLECTION, uid), {
+    "ownerPricingPlan.paymentStatus": "active",
+    "ownerPricingPlan.activatedAt": serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
 };
 
 /**
