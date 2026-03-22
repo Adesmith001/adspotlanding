@@ -1,4 +1,6 @@
 import React, { useEffect, useRef } from "react";
+import { createRoot, Root } from "react-dom/client";
+import { useNavigate } from "react-router-dom";
 import { useGoogleMaps } from "@/hooks/useGoogleMaps";
 import type { Billboard } from "@/types/billboard.types";
 
@@ -13,9 +15,12 @@ const GoogleMultiPointMap: React.FC<GoogleMultiPointMapProps> = ({
   center,
   heightClassName = "h-[420px] md:h-[600px]",
 }) => {
+  const navigate = useNavigate();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
+  const infoWindowRootRef = useRef<Root | null>(null);
+  const infoWindowContentRef = useRef<HTMLDivElement | null>(null);
   const { isLoaded, loadError, hasApiKey } = useGoogleMaps();
 
   useEffect(() => {
@@ -40,6 +45,11 @@ const GoogleMultiPointMap: React.FC<GoogleMultiPointMapProps> = ({
 
     const infoWindow = new googleMaps.InfoWindow();
 
+    if (!infoWindowContentRef.current) {
+      infoWindowContentRef.current = document.createElement("div");
+      infoWindowRootRef.current = createRoot(infoWindowContentRef.current);
+    }
+
     billboards
       .filter((billboard) => billboard.location.lat !== 0 && billboard.location.lng !== 0)
       .forEach((billboard) => {
@@ -50,21 +60,46 @@ const GoogleMultiPointMap: React.FC<GoogleMultiPointMapProps> = ({
           animation: googleMaps.Animation.DROP,
         });
 
-        const contentString = `
-          <div style="max-width: 200px; padding: 0;">
-            ${billboard.photos[0] ? `<img src="${billboard.photos[0]}" alt="${billboard.title}" style="width: 100%; height: 96px; object-fit: cover; border-radius: 8px; margin-bottom: 8px;" />` : ""}
-            <h4 style="font-weight: bold; font-size: 14px; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${billboard.title}</h4>
-            <p style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">${billboard.location.address}, ${billboard.location.city}</p>
-            <p style="font-size: 14px; font-weight: bold; color: #047857;">NGN ${billboard.pricing.daily.toLocaleString()}/day</p>
-            <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
-              <span style="font-size: 10px; padding: 2px 8px; background-color: #f3f4f6; border-radius: 9999px; color: #4b5563; text-transform: uppercase;">${billboard.type}</span>
-              <span style="font-size: 10px; color: #9ca3af;">Traffic: ${billboard.trafficScore}/10</span>
-            </div>
-          </div>
-        `;
-
         marker.addListener("click", () => {
-          infoWindow.setContent(contentString);
+          if (infoWindowRootRef.current && infoWindowContentRef.current) {
+            infoWindowRootRef.current.render(
+              <div className="max-w-[220px] p-0">
+                {billboard.photos[0] && (
+                  <img
+                    src={billboard.photos[0]}
+                    alt={billboard.title}
+                    className="mb-2 h-24 w-full rounded-lg object-cover"
+                  />
+                )}
+                <h4 className="mb-1 truncate text-sm font-bold text-neutral-900">
+                  {billboard.title}
+                </h4>
+                <p className="mb-1 text-xs text-neutral-500">
+                  {billboard.location.address}, {billboard.location.city}
+                </p>
+                <p className="text-sm font-bold text-emerald-700">
+                  NGN {billboard.pricing.daily.toLocaleString()}/day
+                </p>
+                <div className="mt-2 flex items-center gap-2">
+                  <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] uppercase text-neutral-600">
+                    {billboard.type}
+                  </span>
+                  <span className="text-[10px] text-neutral-400">
+                    Traffic: {billboard.trafficScore}/10
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/billboards/${billboard.id}`)}
+                  className="mt-3 w-full rounded-full bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-neutral-700"
+                >
+                  View Billboard
+                </button>
+              </div>,
+            );
+          }
+
+          infoWindow.setContent(infoWindowContentRef.current);
           infoWindow.open({
             anchor: marker,
             map: mapRef.current,
@@ -73,7 +108,12 @@ const GoogleMultiPointMap: React.FC<GoogleMultiPointMapProps> = ({
 
         markersRef.current.push(marker);
       });
-  }, [billboards, center, hasApiKey, isLoaded]);
+    return () => {
+      infoWindowRootRef.current?.unmount();
+      infoWindowRootRef.current = null;
+      infoWindowContentRef.current = null;
+    };
+  }, [billboards, center, hasApiKey, isLoaded, navigate]);
 
   const overlay = loadError
     ? {

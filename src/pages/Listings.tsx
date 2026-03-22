@@ -6,7 +6,10 @@ import {
     MdClose,
     MdLightMode,
     MdBolt,
+    MdMap,
+    MdViewList,
 } from 'react-icons/md';
+import GoogleMultiPointMap from '@/components/GoogleMultiPointMap';
 import { useBillboards } from '@/hooks/useBillboards';
 import DashboardLayout from '@/components/DashboardLayout';
 import BillboardCard from '@/components/BillboardCard';
@@ -16,6 +19,8 @@ import { useAppSelector } from '@/hooks/useRedux';
 import { selectUser, selectIsAuthenticated } from '@/store/authSlice';
 import toast from 'react-hot-toast';
 import type { SearchFilters, SortOption, BillboardType } from '@/types/billboard.types';
+
+const defaultCenter: [number, number] = [6.5244, 3.3792];
 
 const Listings: React.FC = () => {
     const user = useAppSelector(selectUser);
@@ -27,6 +32,7 @@ const Listings: React.FC = () => {
     const [favorites, setFavorites] = useState<Set<string>>(new Set());
     // @ts-expect-error - Variable used in future implementation
     const [loadingFavorites, setLoadingFavorites] = useState(false);
+    const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
 
     // Filter states - Initialize from URL params
     const [selectedCity, setSelectedCity] = useState(searchParams.get('city') || '');
@@ -168,6 +174,13 @@ const Listings: React.FC = () => {
         'Lagos', 'Abuja', 'Port Harcourt', 'Kano', 'Ibadan', 'Kaduna', 'Benin City', 'Enugu'
     ];
 
+    const mapCenterCalc: [number, number] = useMemo(() => {
+        const withCoords = billboards.find((billboard) => billboard.location.lat !== 0 && billboard.location.lng !== 0);
+        return withCoords
+            ? [withCoords.location.lat, withCoords.location.lng]
+            : defaultCenter;
+    }, [billboards]);
+
     return (
         <DashboardLayout
             userRole="advertiser"
@@ -214,20 +227,44 @@ const Listings: React.FC = () => {
                     )}
                 </div>
 
-                {/* Sort */}
-                <div className="flex items-center gap-2 w-full sm:w-auto">
-                    <span className="text-sm text-neutral-600 whitespace-nowrap">Sort by:</span>
-                    <select
-                        value={sortBy}
-                        onChange={(e) => setSortBy(e.target.value as SortOption)}
-                        className="px-4 py-2 bg-white border border-neutral-200 rounded-full text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary-500 w-full sm:w-auto"
-                    >
-                        <option value="newest">Newest</option>
-                        <option value="price-asc">Price: Low to High</option>
-                        <option value="price-desc">Price: High to Low</option>
-                        <option value="traffic-desc">Highest Traffic</option>
-                        <option value="rating-desc">Highest Rated</option>
-                    </select>
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
+                    <div className="flex items-center bg-neutral-100 rounded-full p-1 w-full sm:w-auto">
+                        <button
+                            onClick={() => setViewMode('list')}
+                            className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all ${viewMode === 'list'
+                                ? 'bg-white text-neutral-900 shadow-sm'
+                                : 'text-neutral-500 hover:text-neutral-700'
+                                }`}
+                        >
+                            <MdViewList size={16} />
+                            List
+                        </button>
+                        <button
+                            onClick={() => setViewMode('map')}
+                            className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all ${viewMode === 'map'
+                                ? 'bg-white text-neutral-900 shadow-sm'
+                                : 'text-neutral-500 hover:text-neutral-700'
+                                }`}
+                        >
+                            <MdMap size={16} />
+                            Map
+                        </button>
+                    </div>
+
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                        <span className="text-sm text-neutral-600 whitespace-nowrap">Sort by:</span>
+                        <select
+                            value={sortBy}
+                            onChange={(e) => setSortBy(e.target.value as SortOption)}
+                            className="px-4 py-2 bg-white border border-neutral-200 rounded-full text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary-500 w-full sm:w-auto"
+                        >
+                            <option value="newest">Newest</option>
+                            <option value="price-asc">Price: Low to High</option>
+                            <option value="price-desc">Price: High to Low</option>
+                            <option value="traffic-desc">Highest Traffic</option>
+                            <option value="rating-desc">Highest Rated</option>
+                        </select>
+                    </div>
                 </div>
             </div>
 
@@ -351,18 +388,29 @@ const Listings: React.FC = () => {
                 </div>
             )}
 
+            {viewMode === 'map' && (
+                <div className="mb-8 rounded-2xl overflow-hidden border-2 border-neutral-200 shadow-soft relative z-0">
+                    <GoogleMultiPointMap
+                        billboards={billboards}
+                        center={mapCenterCalc}
+                        heightClassName="h-[420px] md:h-[600px] w-full"
+                    />
+                </div>
+            )}
 
             {/* Grid View */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {billboards.map((billboard) => (
-                    <BillboardCard
-                        key={billboard.id}
-                        billboard={billboard}
-                        onFavorite={handleToggleFavorite}
-                        isFavorited={favorites.has(billboard.id)}
-                    />
-                ))}
-            </div>
+            {viewMode === 'list' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {billboards.map((billboard) => (
+                        <BillboardCard
+                            key={billboard.id}
+                            billboard={billboard}
+                            onFavorite={handleToggleFavorite}
+                            isFavorited={favorites.has(billboard.id)}
+                        />
+                    ))}
+                </div>
+            )}
 
             {/* Load More */}
             {hasMore && !loading && (
