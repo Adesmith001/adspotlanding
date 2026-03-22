@@ -702,6 +702,17 @@ const BillboardDetails: React.FC = () => {
   const bookingBelowMinimum =
     bookingDuration > 0 && bookingDuration < minimumDuration;
   const bookingAboveMaximum = bookingDuration > maximumDuration;
+  const baseBookingPrice = unitPrice * bookingDuration;
+  const packageSavings =
+    !isScreen && bookingDuration > 0
+      ? Math.max(0, baseBookingPrice - totalPrice)
+      : 0;
+  const appliedPricingLabel =
+    !isScreen && bookingDuration >= 30
+      ? "Monthly package applied"
+      : !isScreen && bookingDuration >= 7
+      ? "Weekly package applied"
+      : null;
   const displayRating =
     billboard.rating > 0 ? billboard.rating.toFixed(1) : null;
   const photos = billboard.photos;
@@ -1631,14 +1642,25 @@ const BillboardDetails: React.FC = () => {
                             {bookingDuration !== 1 ? "s" : ""}
                           </span>
                           <span>
-                            {formatPrice(unitPrice * bookingDuration)}
+                            {formatPrice(baseBookingPrice)}
                           </span>
                         </div>
+                        {appliedPricingLabel && (
+                          <div className="flex justify-between text-green-700">
+                            <span>{appliedPricingLabel}</span>
+                            <span>-{formatPrice(packageSavings)}</span>
+                          </div>
+                        )}
                         <div className="h-px bg-neutral-200" />
                         <div className="flex justify-between font-bold text-neutral-900">
                           <span>Total</span>
                           <span>{formatPrice(totalPrice)}</span>
                         </div>
+                        {appliedPricingLabel && (
+                          <p className="text-xs text-neutral-500">
+                            Long bookings use the discounted weekly or monthly rate instead of the standard daily total.
+                          </p>
+                        )}
                       </div>
                     </motion.div>
                   )}

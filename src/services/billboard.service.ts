@@ -5,6 +5,7 @@ import {
   getDocs,
   addDoc,
   updateDoc,
+  increment,
   deleteDoc,
   query,
   where,
@@ -619,12 +620,9 @@ export const incrementBillboardViews = async (
 ): Promise<void> => {
   try {
     const docRef = doc(db, BILLBOARDS_COLLECTION, billboardId);
-    const billboard = await getDoc(docRef);
-    if (billboard.exists()) {
-      await updateDoc(docRef, {
-        views: (billboard.data().views || 0) + 1,
-      });
-    }
+    await updateDoc(docRef, {
+      views: increment(1),
+    });
   } catch (error) {
     console.error("Error incrementing views:", error);
   }

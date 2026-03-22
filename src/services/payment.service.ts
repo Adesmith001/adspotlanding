@@ -19,6 +19,8 @@ import { PaymentStatus } from "@/types/billboard.types";
 const PAYMENTS_COLLECTION = "payments";
 
 const KORAPAY_PUBLIC_KEY = import.meta.env.VITE_KORAPAY_PUBLIC_KEY || "";
+const KORAPAY_SDK_URL =
+  "https://korablobstorage.blob.core.windows.net/modal-bucket/korapay-collections.min.js";
 
 declare global {
   interface Window {
@@ -80,6 +82,56 @@ const generateReference = (): string => {
     .toUpperCase()}`;
 };
 
+const getKorapaySdk = () => window.Korapay || window.KoraPay;
+
+const loadKorapaySdk = async (): Promise<any> => {
+  const existingSdk = getKorapaySdk();
+  if (existingSdk) {
+    return existingSdk;
+  }
+
+  return new Promise((resolve, reject) => {
+    const existingScript = document.querySelector(
+      `script[src="${KORAPAY_SDK_URL}"]`,
+    ) as HTMLScriptElement | null;
+
+    const resolveSdk = () => {
+      const sdk = getKorapaySdk();
+      if (sdk) {
+        resolve(sdk);
+        return;
+      }
+
+      reject(
+        new Error(
+          "KoraPay SDK loaded but was unavailable. Please refresh the page and try again.",
+        ),
+      );
+    };
+
+    const handleError = () => {
+      reject(
+        new Error(
+          "Failed to load the KoraPay SDK. Please check your connection and try again.",
+        ),
+      );
+    };
+
+    if (existingScript) {
+      existingScript.addEventListener("load", resolveSdk, { once: true });
+      existingScript.addEventListener("error", handleError, { once: true });
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = KORAPAY_SDK_URL;
+    script.async = true;
+    script.addEventListener("load", resolveSdk, { once: true });
+    script.addEventListener("error", handleError, { once: true });
+    document.head.appendChild(script);
+  });
+};
+
 /**
  * Launch KoraPay checkout popup and process payment
  */
@@ -115,18 +167,9 @@ export const processPayment = async (
     );
   }
 
+  const KoraSDK = await loadKorapaySdk();
+
   return new Promise((resolve, reject) => {
-    const KoraSDK = window.Korapay || window.KoraPay;
-
-    if (!KoraSDK) {
-      reject(
-        new Error(
-          "KoraPay SDK not loaded. Please refresh the page and try again.",
-        ),
-      );
-      return;
-    }
-
     if (
       !KORAPAY_PUBLIC_KEY ||
       KORAPAY_PUBLIC_KEY === "your_korapay_public_key_here"
