@@ -21,6 +21,7 @@ const PAYMENTS_COLLECTION = "payments";
 const KORAPAY_PUBLIC_KEY = import.meta.env.VITE_KORAPAY_PUBLIC_KEY || "";
 const KORAPAY_SDK_URL =
   "https://korablobstorage.blob.core.windows.net/modal-bucket/korapay-collections.min.js";
+const KORAPAY_SDK_SCRIPT_ID = "korapay-sdk-script";
 
 declare global {
   interface Window {
@@ -91,44 +92,68 @@ const loadKorapaySdk = async (): Promise<any> => {
   }
 
   return new Promise((resolve, reject) => {
-    const existingScript = document.querySelector(
-      `script[src="${KORAPAY_SDK_URL}"]`,
-    ) as HTMLScriptElement | null;
+    let settled = false;
+
+    const resolveWithSdk = () => {
+      const sdk = getKorapaySdk();
+      if (!sdk || settled) {
+        return;
+      }
+
+      settled = true;
+      resolve(sdk);
+    };
+
+    const rejectOnce = (message: string) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      reject(new Error(message));
+    };
 
     const resolveSdk = () => {
       const sdk = getKorapaySdk();
       if (sdk) {
-        resolve(sdk);
+        resolveWithSdk();
         return;
       }
 
-      reject(
-        new Error(
-          "KoraPay SDK loaded but was unavailable. Please refresh the page and try again.",
-        ),
+      rejectOnce(
+        "KoraPay SDK loaded but was unavailable. Please refresh the page and try again.",
       );
     };
 
     const handleError = () => {
-      reject(
-        new Error(
-          "Failed to load the KoraPay SDK. Please check your connection and try again.",
-        ),
+      rejectOnce(
+        "Failed to load the KoraPay SDK. Please check your connection and try again.",
       );
     };
 
+    const existingScript = document.getElementById(
+      KORAPAY_SDK_SCRIPT_ID,
+    ) as HTMLScriptElement | null;
+
     if (existingScript) {
-      existingScript.addEventListener("load", resolveSdk, { once: true });
-      existingScript.addEventListener("error", handleError, { once: true });
-      return;
+      existingScript.remove();
     }
 
     const script = document.createElement("script");
+    script.id = KORAPAY_SDK_SCRIPT_ID;
     script.src = KORAPAY_SDK_URL;
     script.async = true;
     script.addEventListener("load", resolveSdk, { once: true });
     script.addEventListener("error", handleError, { once: true });
     document.head.appendChild(script);
+
+    window.setTimeout(() => {
+      if (!getKorapaySdk()) {
+        rejectOnce(
+          "KoraPay SDK could not be initialized. Please disable blockers or try again.",
+        );
+      }
+    }, 10000);
   });
 };
 
