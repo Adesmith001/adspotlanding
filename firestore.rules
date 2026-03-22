@@ -158,5 +158,26 @@ service cloud.firestore {
       allow create: if isAuthenticated();
       allow update: if isAuthenticated();
     }
+
+    // Public booking windows used for date availability checks
+    match /billboardAvailability/{bookingId} {
+      allow read: if true;
+      allow create, update: if isAuthenticated() &&
+        exists(/databases/$(database)/documents/bookings/$(bookingId)) &&
+        (request.auth.uid == get(/databases/$(database)/documents/bookings/$(bookingId)).data.advertiserId ||
+         request.auth.uid == get(/databases/$(database)/documents/bookings/$(bookingId)).data.ownerId) &&
+        request.resource.data.bookingId == bookingId &&
+        request.resource.data.billboardId == get(/databases/$(database)/documents/bookings/$(bookingId)).data.billboardId &&
+        request.resource.data.advertiserId == get(/databases/$(database)/documents/bookings/$(bookingId)).data.advertiserId &&
+        request.resource.data.ownerId == get(/databases/$(database)/documents/bookings/$(bookingId)).data.ownerId &&
+        request.resource.data.startDate == get(/databases/$(database)/documents/bookings/$(bookingId)).data.startDate &&
+        request.resource.data.endDate == get(/databases/$(database)/documents/bookings/$(bookingId)).data.endDate &&
+        request.resource.data.status in ['confirmed', 'active'] &&
+        request.resource.data.paymentStatus in ['pending', 'paid'];
+      allow delete: if isAuthenticated() &&
+        exists(/databases/$(database)/documents/bookings/$(bookingId)) &&
+        (request.auth.uid == get(/databases/$(database)/documents/bookings/$(bookingId)).data.advertiserId ||
+         request.auth.uid == get(/databases/$(database)/documents/bookings/$(bookingId)).data.ownerId);
+    }
   }
 }

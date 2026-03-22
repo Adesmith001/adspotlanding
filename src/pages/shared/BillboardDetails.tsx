@@ -39,6 +39,7 @@ import {
   createBooking,
   incrementBillboardViews,
   getBillboardReviews,
+  getBillboardAvailabilityWindows,
   toggleFavorite,
   isBillboardFavorited,
   searchBillboards,
@@ -69,6 +70,9 @@ const BillboardDetails: React.FC = () => {
   const [billboard, setBillboard] = useState<Billboard | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [relatedBillboards, setRelatedBillboards] = useState<Billboard[]>([]);
+  const [availabilityWindows, setAvailabilityWindows] = useState<
+    { startDate: Date; endDate: Date }[]
+  >([]);
   const [loadingRelated, setLoadingRelated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
@@ -119,6 +123,21 @@ const BillboardDetails: React.FC = () => {
         if (billboardData) {
           setBillboard(billboardData);
           incrementBillboardViews(id);
+          try {
+            const windows = await getBillboardAvailabilityWindows(id);
+            setAvailabilityWindows(
+              windows.map((window) => ({
+                startDate: new Date(window.startDate),
+                endDate: new Date(window.endDate),
+              }))
+            );
+          } catch (availabilityError) {
+            console.error(
+              "Error fetching billboard availability (non-critical):",
+              availabilityError
+            );
+            setAvailabilityWindows([]);
+          }
         }
         try {
           const reviewsData = await getBillboardReviews(id);
@@ -419,6 +438,14 @@ const BillboardDetails: React.FC = () => {
       );
       return;
     }
+    if (selectedAvailabilityConflict) {
+      toast.error(
+        `Those dates are already reserved. Choose dates after ${formatDate(
+          selectedAvailabilityConflict.endDate
+        )}.`
+      );
+      return;
+    }
     if (
       creativeRequirementType === "advertiser_upload" &&
       designFiles.length === 0
@@ -575,6 +602,13 @@ const BillboardDetails: React.FC = () => {
     return formatDateInputValue(next, includeTime);
   };
 
+  const rangesOverlap = (
+    startA: Date,
+    endA: Date,
+    startB: Date,
+    endB: Date
+  ) => startA.getTime() < endB.getTime() && endA.getTime() > startB.getTime();
+
   const nextPhoto = () => {
     if (billboard?.photos.length)
       setCurrentPhotoIndex((prev) => (prev + 1) % billboard.photos.length);
@@ -699,6 +733,23 @@ const BillboardDetails: React.FC = () => {
   const minimumSelectableEndDate = startDate
     ? addDurationToInputValue(startDate, minimumDuration, isScreen)
     : minimumSelectableStartDate;
+  const selectedAvailabilityConflict =
+    startDate && endDate
+      ? availabilityWindows.find((window) =>
+          rangesOverlap(
+            new Date(startDate),
+            new Date(endDate),
+            new Date(window.startDate),
+            new Date(window.endDate)
+          )
+        )
+      : null;
+  const nextOpenDate = availabilityWindows
+    .filter((window) => new Date(window.endDate).getTime() > Date.now())
+    .sort(
+      (left, right) =>
+        new Date(left.endDate).getTime() - new Date(right.endDate).getTime()
+    )[0]?.endDate;
   const bookingBelowMinimum =
     bookingDuration > 0 && bookingDuration < minimumDuration;
   const bookingAboveMaximum = bookingDuration > maximumDuration;
@@ -1623,6 +1674,19 @@ const BillboardDetails: React.FC = () => {
                         : `Selected booking is longer than the ${maximumDuration}-${isScreen ? "hour" : "day"} maximum.`}
                     </p>
                   )}
+                  {selectedAvailabilityConflict && (
+                    <p className="text-xs text-red-600">
+                      Those dates overlap an approved campaign. The earliest open
+                      slot in this queue starts after{" "}
+                      {formatDate(selectedAvailabilityConflict.endDate)}.
+                    </p>
+                  )}
+                  {!selectedAvailabilityConflict && nextOpenDate && (
+                    <p className="text-xs text-neutral-500">
+                      The current reserved run ends on {formatDate(nextOpenDate)}.
+                      You can still book dates after that.
+                    </p>
+                  )}
                 </div>
 
                 {/* Price breakdown */}
@@ -1676,10 +1740,14 @@ const BillboardDetails: React.FC = () => {
                     fullWidth
                     size="lg"
                     onClick={handleBooking}
-                    disabled={isBooking}
+                    disabled={isBooking || !!selectedAvailabilityConflict}
                     className="!bg-[#d4f34a] !text-green-900 hover:!bg-[#c8ee3d] !rounded-xl !font-bold !shadow-none"
                   >
-                    {isBooking ? "Processing..." : "Request to Book"}
+                    {isBooking
+                      ? "Processing..."
+                      : selectedAvailabilityConflict
+                      ? "Dates Unavailable"
+                      : "Request to Book"}
                   </Button>
                 )}
 

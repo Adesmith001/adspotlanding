@@ -28,7 +28,7 @@ import {
     subscribeToAdvertiserBookings,
     getBillboard,
     createReview,
-    checkAndCompleteExpiredCampaigns,
+    syncAdvertiserCampaignTimeline,
 } from '@/services/billboard.service';
 import { subscribeToAdvertiserPaidBookings } from '@/services/payment.service';
 import { submitReport, type ReportCategory } from '@/services/admin.service';
@@ -97,6 +97,7 @@ const MyCampaigns: React.FC = () => {
     const [bookings, setBookings] = useState<Booking[]>([]);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<TabType>('active');
+    const [now, setNow] = useState(() => Date.now());
     const [billboardViews, setBillboardViews] = useState<Record<string, number>>({});
     const [paidBookingsById, setPaidBookingsById] = useState<Record<string, { reference: string }>>({});
 
@@ -121,8 +122,13 @@ const MyCampaigns: React.FC = () => {
     // Auto-complete expired campaigns when the page loads
     useEffect(() => {
         if (!user) return;
-        checkAndCompleteExpiredCampaigns(user.uid).catch(console.error);
+        syncAdvertiserCampaignTimeline(user.uid).catch(console.error);
     }, [user]);
+
+    useEffect(() => {
+        const timer = window.setInterval(() => setNow(Date.now()), 1000);
+        return () => window.clearInterval(timer);
+    }, []);
 
     // Real-time subscription — fires immediately when Firestore updates after payment
     useEffect(() => {
@@ -187,7 +193,19 @@ const MyCampaigns: React.FC = () => {
     const getPaymentReference = (booking: Booking) =>
         booking.paymentId || paidBookingsById[booking.id]?.reference || '';
 
-    const isActive = (booking: Booking) => booking.status === 'active';
+    const isCompleted = (booking: Booking) =>
+        booking.status === 'completed' || new Date(booking.endDate).getTime() < now;
+
+    const isManagedCampaign = (booking: Booking) =>
+        isPaidBooking(booking) &&
+        !isCompleted(booking) &&
+        !['cancelled', 'rejected'].includes(booking.status);
+
+    const isLiveCampaign = (booking: Booking) =>
+        isManagedCampaign(booking) &&
+        new Date(booking.startDate).getTime() <= now &&
+        new Date(booking.endDate).getTime() >= now &&
+        booking.creativeApprovalStatus === 'approved';
 
     const getPaymentDueDate = (booking: Booking) =>
         booking.paymentDueAt ? new Date(booking.paymentDueAt) : null;
@@ -203,19 +221,17 @@ const MyCampaigns: React.FC = () => {
         !!booking.paymentRequestedAt &&
         !isPaymentOverdue(booking);
 
-    const isCompleted = (booking: Booking) =>
-        booking.status === 'completed' || new Date(booking.endDate) < new Date();
-
     const getFilteredBookings = () => {
-        const now = new Date();
         switch (activeTab) {
             case 'active':
-                return bookings.filter(isActive);
+                return bookings.filter(isManagedCampaign);
             case 'upcoming':
                 return bookings.filter(
                     (b) =>
                         b.status === 'pending' ||
-                        (b.status === 'confirmed' && new Date(b.endDate) >= now),
+                        (!isPaidBooking(b) &&
+                            b.status === 'confirmed' &&
+                            new Date(b.endDate).getTime() >= now),
                 );
             case 'completed':
                 return bookings.filter(isCompleted);
@@ -232,8 +248,43 @@ const MyCampaigns: React.FC = () => {
     const formatDate = (date: Date) =>
         new Date(date).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' });
 
+    const formatCountdown = (targetTime: number) => {
+        const diff = Math.max(0, targetTime - now);
+        const totalSeconds = Math.floor(diff / 1000);
+        const days = Math.floor(totalSeconds / 86400);
+        const hours = Math.floor((totalSeconds % 86400) / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const seconds = totalSeconds % 60;
+
+        if (days > 0) return `${days}d ${hours}h ${minutes}m`;
+        if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+        if (minutes > 0) return `${minutes}m ${seconds}s`;
+        return `${seconds}s`;
+    };
+
+    const getCampaignCountdown = (booking: Booking) => {
+        const startTime = new Date(booking.startDate).getTime();
+        const endTime = new Date(booking.endDate).getTime();
+
+        if (startTime > now) {
+            return {
+                label: 'Campaign starts in',
+                value: formatCountdown(startTime),
+                tone: 'text-primary-700',
+                panelClass: 'border-primary-200 bg-primary-50/80',
+            };
+        }
+
+        return {
+            label: 'Campaign ends in',
+            value: formatCountdown(endTime),
+            tone: 'text-green-700',
+            panelClass: 'border-green-200 bg-green-50/80',
+        };
+    };
+
     const getDaysRemaining = (endDate: Date) => {
-        const diff = Math.ceil((new Date(endDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+        const diff = Math.ceil((new Date(endDate).getTime() - now) / (1000 * 60 * 60 * 24));
         return diff > 0 ? diff : 0;
     };
 
@@ -359,12 +410,16 @@ const MyCampaigns: React.FC = () => {
     };
 
     const tabs: { key: TabType; label: string; count: number }[] = [
-        { key: 'active', label: 'Active', count: bookings.filter(isActive).length },
+        { key: 'active', label: 'Active', count: bookings.filter(isManagedCampaign).length },
         {
             key: 'upcoming',
             label: 'Requests',
             count: bookings.filter(
-                (b) => b.status === 'pending' || (b.status === 'confirmed' && new Date(b.endDate) >= new Date()),
+                (b) =>
+                    b.status === 'pending' ||
+                    (!isPaidBooking(b) &&
+                        b.status === 'confirmed' &&
+                        new Date(b.endDate).getTime() >= now),
             ).length,
         },
         { key: 'completed', label: 'Completed', count: bookings.filter(isCompleted).length },
@@ -490,6 +545,10 @@ const MyCampaigns: React.FC = () => {
                             const paymentReference = getPaymentReference(booking);
                             const paymentDeadlineLabel = getPaymentDeadlineLabel(booking);
                             const canReview = isCompleted(booking) && !booking.reviewedAt;
+                            const isLive = isLiveCampaign(booking);
+                            const countdown = isManagedCampaign(booking)
+                                ? getCampaignCountdown(booking)
+                                : null;
 
                             return (
                                 <motion.div key={booking.id} variants={itemVariants}>
@@ -509,9 +568,16 @@ const MyCampaigns: React.FC = () => {
                                                     </div>
                                                 )}
                                                 {activeTab === 'active' && (
-                                                    <span className="absolute top-2 left-2 px-2 py-1 bg-green-500 text-white text-xs font-bold rounded-full flex items-center gap-1 shadow">
-                                                        <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
-                                                        LIVE
+                                                    <span className={`absolute top-2 left-2 px-2 py-1 text-white text-xs font-bold rounded-full shadow ${isLive
+                                                        ? 'bg-green-500'
+                                                        : 'bg-primary-500'
+                                                        }`}>
+                                                        {isLive ? (
+                                                            <span className="flex items-center gap-1">
+                                                                <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
+                                                                LIVE
+                                                            </span>
+                                                        ) : 'SCHEDULED'}
                                                     </span>
                                                 )}
                                                 {activeTab === 'completed' && (
@@ -587,7 +653,7 @@ const MyCampaigns: React.FC = () => {
                                                             <span className="font-medium text-neutral-800">
                                                                 {daysTotal} day{daysTotal !== 1 ? 's' : ''}
                                                             </span>
-                                                            {activeTab === 'active' && daysRemaining > 0 && (
+                                                            {activeTab === 'active' && isLive && daysRemaining > 0 && (
                                                                 <span className="ml-1 text-green-600 font-medium">
                                                                     ({daysRemaining} left)
                                                                 </span>
@@ -635,6 +701,27 @@ const MyCampaigns: React.FC = () => {
                                                     </div>
                                                 )}
 
+                                                {countdown && (
+                                                    <div className={`rounded-2xl border px-4 py-3 ${countdown.panelClass}`}>
+                                                        <div className="flex items-start gap-2">
+                                                            <MdTimer size={18} className={`${countdown.tone} mt-0.5 flex-shrink-0`} />
+                                                            <div>
+                                                                <p className="text-sm font-semibold text-neutral-900">
+                                                                    {countdown.label}
+                                                                </p>
+                                                                <p className={`mt-1 text-sm font-semibold ${countdown.tone}`}>
+                                                                    {countdown.value}
+                                                                </p>
+                                                                {!isLive && booking.creativeApprovalStatus !== 'approved' && (
+                                                                    <p className="mt-1 text-xs text-neutral-600">
+                                                                        Final launch still depends on owner creative approval.
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
+
                                                 {booking.ownerDecisionNote && (
                                                     <div className={`rounded-2xl border px-4 py-3 ${booking.status === 'rejected'
                                                         ? 'border-red-200 bg-red-50'
@@ -648,7 +735,7 @@ const MyCampaigns: React.FC = () => {
                                                 )}
 
                                                 {/* Progress bar (active only) */}
-                                                {activeTab === 'active' && (
+                                                {activeTab === 'active' && isLive && (
                                                     <div>
                                                         <div className="flex items-center justify-between mb-1">
                                                             <div className="flex items-center gap-1 text-xs text-neutral-500">

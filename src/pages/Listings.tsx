@@ -62,8 +62,12 @@ const Listings: React.FC = () => {
         if (instantBookOnly) f.instantBookOnly = true;
         if (minRating > 0) f.minRating = minRating;
         if (searchQuery) f.query = searchQuery;
+        const startDate = searchParams.get('startDate');
+        const endDate = searchParams.get('endDate');
+        if (startDate) f.availableFrom = new Date(startDate);
+        if (endDate) f.availableTo = new Date(endDate);
         return f;
-    }, [selectedCity, selectedTypes, priceRange, minTrafficScore, hasLighting, instantBookOnly, minRating, searchQuery]);
+    }, [selectedCity, selectedTypes, priceRange, minTrafficScore, hasLighting, instantBookOnly, minRating, searchQuery, searchParams]);
 
     const { billboards, loading, error, hasMore, loadMore, updateFilters, updateSort } = useBillboards(filters, sortBy);
 

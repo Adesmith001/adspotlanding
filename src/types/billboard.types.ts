@@ -176,6 +176,20 @@ export interface Booking {
   updatedAt: Date;
 }
 
+export interface BillboardAvailabilityWindow {
+  id: string;
+  bookingId: string;
+  billboardId: string;
+  advertiserId: string;
+  ownerId: string;
+  startDate: Date;
+  endDate: Date;
+  status: "confirmed" | "active";
+  paymentStatus: "pending" | "paid";
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 // Message Types
 export interface Conversation {
   id: string;

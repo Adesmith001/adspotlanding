@@ -16,6 +16,7 @@ import {
   DocumentSnapshot,
   serverTimestamp,
   onSnapshot,
+  writeBatch,
 } from "firebase/firestore";
 import { uploadFiles, uploadImages } from "./cloudinary.service";
 import { db } from "./firebase";
@@ -31,6 +32,7 @@ import type {
   SortOption,
   CreateBillboardForm,
   BookingRequest,
+  BillboardAvailabilityWindow,
 } from "@/types/billboard.types";
 import { stripUndefinedDeep } from "@/utils/firestore.utils";
 
@@ -39,6 +41,7 @@ const BILLBOARDS_COLLECTION = "billboards";
 const BOOKINGS_COLLECTION = "bookings";
 const REVIEWS_COLLECTION = "reviews";
 const FAVORITES_COLLECTION = "favorites";
+const BILLBOARD_AVAILABILITY_COLLECTION = "billboardAvailability";
 
 // Helper: Convert Firestore timestamp to Date
 const timestampToDate = (timestamp: any): Date => {
@@ -55,6 +58,21 @@ const optionalTimestampToDate = (timestamp: any): Date | undefined => {
 
   return timestampToDate(timestamp);
 };
+
+const mapBillboardData = (id: string, data: any): Billboard =>
+  ({
+    id,
+    ...data,
+    unavailableDates: Array.isArray(data.unavailableDates)
+      ? data.unavailableDates.map((period: any) => ({
+          ...period,
+          startDate: timestampToDate(period.startDate),
+          endDate: timestampToDate(period.endDate),
+        }))
+      : [],
+    createdAt: timestampToDate(data.createdAt),
+    updatedAt: timestampToDate(data.updatedAt),
+  }) as Billboard;
 
 const mapBookingData = (id: string, data: any): Booking =>
   ({
@@ -73,6 +91,20 @@ const mapBookingData = (id: string, data: any): Booking =>
     createdAt: timestampToDate(data.createdAt),
     updatedAt: timestampToDate(data.updatedAt),
   }) as Booking;
+
+const mapAvailabilityWindowData = (
+  id: string,
+  data: any
+): BillboardAvailabilityWindow =>
+  ({
+    id,
+    ...data,
+    bookingId: data.bookingId || id,
+    startDate: timestampToDate(data.startDate),
+    endDate: timestampToDate(data.endDate),
+    createdAt: timestampToDate(data.createdAt),
+    updatedAt: timestampToDate(data.updatedAt),
+  }) as BillboardAvailabilityWindow;
 
 const addDays = (date: Date, days: number): Date => {
   const next = new Date(date);
@@ -95,6 +127,72 @@ const calculateBookingDuration = (
   return Math.ceil((endDate.getTime() - startDate.getTime()) / unitMs);
 };
 
+const rangesOverlap = (
+  startA: Date,
+  endA: Date,
+  startB: Date,
+  endB: Date
+) => startA.getTime() < endB.getTime() && endA.getTime() > startB.getTime();
+
+const isBookingTerminalStatus = (status: Booking["status"]) =>
+  ["cancelled", "completed", "rejected"].includes(status);
+
+const isBlockingAvailabilityStatus = (status: Booking["status"]) =>
+  ["confirmed", "active"].includes(status);
+
+const buildAvailabilityWindowFromBooking = (
+  booking: Booking,
+  statusOverride?: "confirmed" | "active"
+) => ({
+  bookingId: booking.id,
+  billboardId: booking.billboardId,
+  advertiserId: booking.advertiserId,
+  ownerId: booking.ownerId,
+  startDate: booking.startDate,
+  endDate: booking.endDate,
+  status: statusOverride || (booking.status === "active" ? "active" : "confirmed"),
+  paymentStatus: booking.paymentStatus === "paid" ? "paid" : "pending",
+  createdAt: booking.createdAt || new Date(),
+  updatedAt: new Date(),
+});
+
+const getAvailabilityWindowsForBillboardIds = async (
+  billboardIds: string[]
+): Promise<Record<string, BillboardAvailabilityWindow[]>> => {
+  if (billboardIds.length === 0) {
+    return {};
+  }
+
+  const grouped: Record<string, BillboardAvailabilityWindow[]> = {};
+  const uniqueIds = Array.from(new Set(billboardIds));
+
+  for (let index = 0; index < uniqueIds.length; index += 10) {
+    const chunk = uniqueIds.slice(index, index + 10);
+    const snapshot = await getDocs(
+      query(
+        collection(db, BILLBOARD_AVAILABILITY_COLLECTION),
+        where("billboardId", "in", chunk)
+      )
+    );
+
+    snapshot.docs.forEach((docSnap) => {
+      const window = mapAvailabilityWindowData(docSnap.id, docSnap.data());
+      if (!grouped[window.billboardId]) {
+        grouped[window.billboardId] = [];
+      }
+      grouped[window.billboardId].push(window);
+    });
+  }
+
+  Object.values(grouped).forEach((windows) =>
+    windows.sort(
+      (left, right) => left.startDate.getTime() - right.startDate.getTime()
+    )
+  );
+
+  return grouped;
+};
+
 const resolveLiveBookingStatus = (
   booking: Booking
 ): Pick<Booking, "status" | "campaignStartedAt"> => {
@@ -103,6 +201,13 @@ const resolveLiveBookingStatus = (
   ) {
     return {
       status: booking.status,
+      campaignStartedAt: booking.campaignStartedAt,
+    };
+  }
+
+  if (new Date(booking.endDate).getTime() < Date.now()) {
+    return {
+      status: "completed",
       campaignStartedAt: booking.campaignStartedAt,
     };
   }
@@ -230,12 +335,7 @@ export const getBillboard = async (
     if (docSnap.exists()) {
       const data = docSnap.data();
       console.log("getBillboard: Document data:", data);
-      const billboard = {
-        id: docSnap.id,
-        ...data,
-        createdAt: timestampToDate(data.createdAt),
-        updatedAt: timestampToDate(data.updatedAt),
-      } as Billboard;
+      const billboard = mapBillboardData(docSnap.id, data);
       console.log("getBillboard: Returning billboard:", billboard);
       return billboard;
     }
@@ -244,6 +344,26 @@ export const getBillboard = async (
   } catch (error) {
     console.error("Error getting billboard:", error);
     return null; // Return null instead of throwing to prevent cascading errors
+  }
+};
+
+export const getBillboardAvailabilityWindows = async (
+  billboardId: string
+): Promise<BillboardAvailabilityWindow[]> => {
+  try {
+    const snapshot = await getDocs(
+      query(
+        collection(db, BILLBOARD_AVAILABILITY_COLLECTION),
+        where("billboardId", "==", billboardId)
+      )
+    );
+
+    return snapshot.docs
+      .map((docSnap) => mapAvailabilityWindowData(docSnap.id, docSnap.data()))
+      .sort((left, right) => left.startDate.getTime() - right.startDate.getTime());
+  } catch (error) {
+    console.error("Error getting billboard availability windows:", error);
+    return [];
   }
 };
 
@@ -256,16 +376,39 @@ export const searchBillboards = async (
   pageSize: number = 20,
   lastDoc?: DocumentSnapshot
 ): Promise<{ billboards: Billboard[]; lastDoc: DocumentSnapshot | null }> => {
-  const mapDocsToBillboards = (docs: Array<{ id: string; data: () => any }>) =>
-    docs.map((entry) => {
-      const data = entry.data();
-      return {
-        id: entry.id,
-        ...data,
-        createdAt: timestampToDate(data.createdAt),
-        updatedAt: timestampToDate(data.updatedAt),
-      } as Billboard;
+  const applyAvailabilityFilter = async (items: Billboard[]) => {
+    if (
+      items.length === 0 ||
+      (!filters.availableFrom && !filters.availableTo)
+    ) {
+      return items;
+    }
+
+    const requestedStart = filters.availableFrom
+      ? new Date(filters.availableFrom)
+      : new Date(filters.availableTo as Date);
+    const requestedEnd = filters.availableTo
+      ? new Date(filters.availableTo)
+      : addDays(requestedStart, 1);
+    const availabilityByBillboard = await getAvailabilityWindowsForBillboardIds(
+      items.map((item) => item.id)
+    );
+
+    return items.filter((item) => {
+      const windows = availabilityByBillboard[item.id] || [];
+      return !windows.some((window) =>
+        rangesOverlap(
+          requestedStart,
+          requestedEnd,
+          new Date(window.startDate),
+          new Date(window.endDate)
+        )
+      );
     });
+  };
+
+  const mapDocsToBillboards = (docs: Array<{ id: string; data: () => any }>) =>
+    docs.map((entry) => mapBillboardData(entry.id, entry.data()));
 
   const applyClientFilters = (items: Billboard[]): Billboard[] => {
     const queryText = filters.query?.trim().toLowerCase();
@@ -426,7 +569,9 @@ export const searchBillboards = async (
     const q = query(collection(db, BILLBOARDS_COLLECTION), ...constraints);
     const querySnapshot = await getDocs(q);
 
-    const billboards = mapDocsToBillboards(querySnapshot.docs);
+    const billboards = await applyAvailabilityFilter(
+      mapDocsToBillboards(querySnapshot.docs)
+    );
 
     const lastVisible =
       querySnapshot.docs[querySnapshot.docs.length - 1] || null;
@@ -447,7 +592,9 @@ export const searchBillboards = async (
 
       const fallbackSnapshot = await getDocs(fallbackQuery);
       const fallbackItems = mapDocsToBillboards(fallbackSnapshot.docs);
-      const filteredItems = sortItems(applyClientFilters(fallbackItems));
+      const filteredItems = await applyAvailabilityFilter(
+        sortItems(applyClientFilters(fallbackItems))
+      );
 
       let startIndex = 0;
       if (lastDoc?.id) {
@@ -483,15 +630,7 @@ export const getOwnerBillboards = async (
     );
 
     const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map((doc) => {
-      const data = doc.data();
-      return {
-        id: doc.id,
-        ...data,
-        createdAt: timestampToDate(data.createdAt),
-        updatedAt: timestampToDate(data.updatedAt),
-      } as Billboard;
-    });
+    return querySnapshot.docs.map((doc) => mapBillboardData(doc.id, doc.data()));
   } catch (error) {
     console.error("Error getting owner billboards:", error);
     throw new Error("Failed to fetch owner billboards");
@@ -514,15 +653,7 @@ export const subscribeToOwnerBillboards = (
     q,
     (snapshot) => {
       const billboards = snapshot.docs
-        .map((doc) => {
-          const data = doc.data();
-          return {
-            id: doc.id,
-            ...data,
-            createdAt: timestampToDate(data.createdAt),
-            updatedAt: timestampToDate(data.updatedAt),
-          } as Billboard;
-        })
+        .map((doc) => mapBillboardData(doc.id, doc.data()))
         .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
       callback(billboards);
@@ -709,6 +840,30 @@ export const createBooking = async (
       );
     }
 
+    const availabilityWindows = await getBillboardAvailabilityWindows(
+      billboard.id
+    );
+    const conflictingWindow = availabilityWindows.find((window) =>
+      rangesOverlap(
+        new Date(request.startDate),
+        new Date(request.endDate),
+        new Date(window.startDate),
+        new Date(window.endDate)
+      )
+    );
+
+    if (conflictingWindow) {
+      throw new Error(
+        `Those dates are already reserved. Choose dates after ${new Date(
+          conflictingWindow.endDate
+        ).toLocaleDateString("en-NG", {
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+        })}.`
+      );
+    }
+
     if (isHourly) {
       pricePerUnit = billboard.pricing.hourly || 0;
       totalAmount = pricePerUnit * duration;
@@ -771,10 +926,23 @@ export const createBooking = async (
       updatedAt: new Date(),
     };
 
-    const docRef = await addDoc(
-      collection(db, BOOKINGS_COLLECTION),
-      stripUndefinedDeep(booking)
-    );
+    const docRef = doc(collection(db, BOOKINGS_COLLECTION));
+    const createdBooking = {
+      id: docRef.id,
+      ...booking,
+    } as Booking;
+    const batch = writeBatch(db);
+
+    batch.set(docRef, stripUndefinedDeep(booking));
+
+    if (createdBooking.status === "confirmed") {
+      batch.set(
+        doc(db, BILLBOARD_AVAILABILITY_COLLECTION, docRef.id),
+        stripUndefinedDeep(buildAvailabilityWindowFromBooking(createdBooking))
+      );
+    }
+
+    await batch.commit();
 
     const creativeSummary =
       request.creativeRequirementType === "advertiser_upload"
@@ -995,7 +1163,31 @@ export const updateBookingStatus = async (
       updates.ownerDecisionNote = sanitizedDecisionNote;
     }
 
-    await updateDoc(docRef, stripUndefinedDeep(updates));
+    const batch = writeBatch(db);
+    batch.update(docRef, stripUndefinedDeep(updates));
+
+    if (isBlockingAvailabilityStatus(status)) {
+      batch.set(
+        doc(db, BILLBOARD_AVAILABILITY_COLLECTION, bookingId),
+        stripUndefinedDeep(
+          buildAvailabilityWindowFromBooking(
+            {
+              ...booking,
+              status,
+              paymentStatus:
+                booking.paymentStatus === "paid" ? "paid" : "pending",
+            },
+            status === "active" ? "active" : "confirmed"
+          )
+        )
+      );
+    }
+
+    if (isBookingTerminalStatus(status)) {
+      batch.delete(doc(db, BILLBOARD_AVAILABILITY_COLLECTION, bookingId));
+    }
+
+    await batch.commit();
 
     if (status === "confirmed") {
       const paymentDueAt = updates.paymentDueAt as Date;
@@ -1027,13 +1219,7 @@ export const updateBookingStatus = async (
       );
     }
 
-    // Restore billboard availability and prompt review when campaign completes
     if (status === "completed") {
-      try {
-        await updateBillboard(booking.billboardId, { status: "active" });
-      } catch (err) {
-        console.error("Error restoring billboard status:", err);
-      }
       await createNotification(
         booking.advertiserId,
         "review_prompt",
@@ -1042,18 +1228,6 @@ export const updateBookingStatus = async (
         { bookingId, billboardId: booking.billboardId },
         `/dashboard/advertiser/campaigns?review=${bookingId}`
       );
-    }
-
-    // Restore billboard availability on cancellation/rejection as well
-    if (status === "cancelled") {
-      try {
-        await updateBillboard(booking.billboardId, { status: "active" });
-      } catch (err) {
-        console.error(
-          "Error restoring billboard status after cancellation:",
-          err
-        );
-      }
     }
 
     return await getBooking(bookingId);
@@ -1106,16 +1280,30 @@ export const syncBookingCampaignStatus = async (
     updates.campaignStartedAt = next.campaignStartedAt || new Date();
   }
 
-  await updateDoc(doc(db, BOOKINGS_COLLECTION, bookingId), updates);
+  const batch = writeBatch(db);
+  batch.update(doc(db, BOOKINGS_COLLECTION, bookingId), updates);
 
-  // Lock the billboard when a campaign goes active to prevent double-booking
-  if (next.status === "active" && booking.status !== "active") {
-    try {
-      await updateBillboard(booking.billboardId, { status: "inactive" });
-    } catch (err) {
-      console.error("Error locking billboard status:", err);
-    }
+  if (isBlockingAvailabilityStatus(next.status)) {
+    batch.set(
+      doc(db, BILLBOARD_AVAILABILITY_COLLECTION, bookingId),
+      stripUndefinedDeep(
+        buildAvailabilityWindowFromBooking(
+          {
+            ...booking,
+            status: next.status,
+            campaignStartedAt: next.campaignStartedAt,
+          },
+          next.status === "active" ? "active" : "confirmed"
+        )
+      )
+    );
   }
+
+  if (next.status === "completed") {
+    batch.delete(doc(db, BILLBOARD_AVAILABILITY_COLLECTION, bookingId));
+  }
+
+  await batch.commit();
 
   return {
     ...booking,
@@ -1290,6 +1478,50 @@ export const checkAndCompleteExpiredCampaigns = async (
     );
   } catch (error) {
     console.error("Error checking expired campaigns:", error);
+  }
+};
+
+export const syncAdvertiserCampaignTimeline = async (
+  advertiserId: string
+): Promise<void> => {
+  try {
+    const snapshot = await getDocs(
+      query(
+        collection(db, BOOKINGS_COLLECTION),
+        where("advertiserId", "==", advertiserId)
+      )
+    );
+
+    await Promise.all(
+      snapshot.docs.map(async (docSnap) => {
+        const booking = mapBookingData(docSnap.id, docSnap.data());
+        if (
+          ["pending", "rejected", "cancelled", "completed"].includes(
+            booking.status
+          )
+        ) {
+          return;
+        }
+
+        const syncedBooking = await syncBookingCampaignStatus(booking.id);
+        if (
+          syncedBooking?.status === "completed" &&
+          booking.status !== "completed" &&
+          !booking.reviewedAt
+        ) {
+          await createNotification(
+            advertiserId,
+            "review_prompt",
+            "How was your campaign? â­",
+            `Your campaign on "${booking.billboardTitle}" has ended. Share your experience to help others!`,
+            { bookingId: booking.id, billboardId: booking.billboardId },
+            `/dashboard/advertiser/campaigns?review=${booking.id}`
+          );
+        }
+      })
+    );
+  } catch (error) {
+    console.error("Error syncing advertiser campaign timeline:", error);
   }
 };
 

@@ -8,8 +8,8 @@ import Button from '@/components/ui/Button';
 import toast from 'react-hot-toast';
 import { useAppSelector } from '@/hooks/useRedux';
 import { selectUser } from '@/store/authSlice';
-import { getAdvertiserBookings } from '@/services/billboard.service';
-import { getPaymentHistory, PaymentTransaction, processPayment, verifyKorapayPayment } from '@/services/payment.service';
+import { getAdvertiserBookings, getBooking } from '@/services/billboard.service';
+import { ensurePaymentRecordForBooking, getPaymentHistory, PaymentTransaction, processPayment, verifyKorapayPayment } from '@/services/payment.service';
 import type { Booking } from '@/types/billboard.types';
 
 const containerVariants = {
@@ -37,10 +37,20 @@ const formatPrice = (amount: number) =>
 const formatDate = (date: Date) =>
     new Date(date).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' });
 
+const formatDateTime = (date: Date) =>
+    new Date(date).toLocaleDateString('en-NG', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+    });
+
 const Payments: React.FC = () => {
     const user = useAppSelector(selectUser);
 
     const [transactions, setTransactions] = useState<PaymentTransaction[]>([]);
+    const [allBookings, setAllBookings] = useState<Booking[]>([]);
     const [payableBookings, setPayableBookings] = useState<Booking[]>([]);
     const [loading, setLoading] = useState(true);
     const [payingBookingId, setPayingBookingId] = useState<string | null>(null);
@@ -52,6 +62,33 @@ const Payments: React.FC = () => {
     const isPaymentOverdue = (booking: Booking) => {
         const dueDate = getPaymentDueDate(booking);
         return !!dueDate && dueDate.getTime() < Date.now() && booking.paymentStatus !== 'paid';
+    };
+
+    const getTransactionBreakdown = (transaction: PaymentTransaction) => {
+        const booking = allBookings.find((item) => item.id === transaction.bookingId);
+        const duration = transaction.duration ?? booking?.duration ?? 0;
+        const durationUnit = transaction.durationUnit ?? booking?.durationUnit ?? 'days';
+        const unitPrice = transaction.unitPrice ?? booking?.pricePerUnit ?? booking?.pricePerDay ?? 0;
+        const baseAmount = transaction.baseAmount ?? unitPrice * duration;
+        const discountAmount = transaction.discountAmount ?? Math.max(0, baseAmount - transaction.amount);
+        const pricingLabel = transaction.pricingLabel ??
+            (durationUnit === 'hours'
+                ? 'Hourly rate'
+                : duration >= 30
+                    ? 'Monthly package'
+                    : duration >= 7
+                        ? 'Weekly package'
+                        : 'Daily rate');
+
+        return {
+            booking,
+            duration,
+            durationUnit,
+            unitPrice,
+            baseAmount,
+            discountAmount,
+            pricingLabel,
+        };
     };
 
     const getPaymentDeadlineText = (booking: Booking) => {
@@ -78,7 +115,26 @@ const Payments: React.FC = () => {
             getAdvertiserBookings(user.uid),
         ]);
 
-        setTransactions(fetchedTxns);
+        setAllBookings(advertiserBookings);
+
+        const missingPaymentRecords = advertiserBookings.filter(
+            (booking) =>
+                booking.paymentStatus === 'paid' &&
+                !fetchedTxns.some((transaction) => transaction.bookingId === booking.id),
+        );
+
+        if (missingPaymentRecords.length > 0) {
+            await Promise.all(
+                missingPaymentRecords.map((booking) => ensurePaymentRecordForBooking(booking.id)),
+            );
+        }
+
+        const normalizedTransactions =
+            missingPaymentRecords.length > 0
+                ? await getPaymentHistory(user.uid, 'advertiser')
+                : fetchedTxns;
+
+        setTransactions(normalizedTransactions);
         setPayableBookings(
             advertiserBookings.filter(
                 (booking) =>
@@ -119,22 +175,24 @@ const Payments: React.FC = () => {
             return;
         }
 
-        const booking = payableBookings.find((item) => item.id === bookingId);
-        if (!booking) {
-            return;
-        }
-
         setVerifyingPayment(true);
         const toastId = toast.loading('Verifying payment...');
 
-        verifyKorapayPayment(
-            booking.id,
-            user.uid,
-            booking.ownerId,
-            booking.billboardTitle,
-            booking.totalAmount,
-            reference,
-        )
+        getBooking(bookingId)
+            .then((booking) => {
+                if (!booking || booking.advertiserId !== user.uid) {
+                    throw new Error('Booking not found for payment verification.');
+                }
+
+                return verifyKorapayPayment(
+                    booking.id,
+                    user.uid,
+                    booking.ownerId,
+                    booking.billboardTitle,
+                    booking.totalAmount,
+                    reference,
+                );
+            })
             .then(async () => {
                 await loadPaymentData();
                 toast.success('Payment completed successfully.', { id: toastId });
@@ -146,7 +204,7 @@ const Payments: React.FC = () => {
             .finally(() => {
                 setVerifyingPayment(false);
             });
-    }, [user, payableBookings, verifyingPayment]);
+    }, [user, verifyingPayment]);
 
     const handlePayNow = async (booking: Booking) => {
         if (!user) {
@@ -334,8 +392,50 @@ const Payments: React.FC = () => {
                                 </motion.div>
                             </motion.div>
                         ) : (
-                            <div className="overflow-x-auto">
-                                <table className="w-full min-w-[600px]">
+                            <>
+                                <div className="mb-6 space-y-3">
+                                    {transactions.map((txn) => {
+                                        const breakdown = getTransactionBreakdown(txn);
+                                        const bookingStart = txn.bookingStartDate || breakdown.booking?.startDate;
+                                        const bookingEnd = txn.bookingEndDate || breakdown.booking?.endDate;
+
+                                        return (
+                                            <div key={`breakdown-${txn.id}`} className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
+                                                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                                    <div>
+                                                        <p className="text-sm font-semibold text-neutral-900">{txn.billboardTitle}</p>
+                                                        <p className="mt-1 text-xs text-neutral-500">
+                                                            Paid on {formatDateTime(new Date(txn.createdAt))}
+                                                        </p>
+                                                        {bookingStart && bookingEnd && (
+                                                            <p className="mt-1 text-xs text-neutral-500">
+                                                                Campaign window: {formatDate(new Date(bookingStart))} to {formatDate(new Date(bookingEnd))}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                    <p className="text-lg font-bold text-neutral-900">{formatPrice(txn.amount)}</p>
+                                                </div>
+                                                <div className="mt-3 grid gap-2 text-sm text-neutral-600 md:grid-cols-2">
+                                                    <p>
+                                                        {formatPrice(breakdown.unitPrice)} x {breakdown.duration} {breakdown.durationUnit === 'hours' ? 'hour' : 'day'}{breakdown.duration === 1 ? '' : 's'}
+                                                    </p>
+                                                    <p>{breakdown.pricingLabel}: {formatPrice(breakdown.baseAmount)}</p>
+                                                    {breakdown.discountAmount > 0 && (
+                                                        <p className="text-green-700">
+                                                            Package savings: {formatPrice(breakdown.discountAmount)}
+                                                        </p>
+                                                    )}
+                                                    <p className="font-medium text-neutral-800">
+                                                        Reference: <span className="font-mono text-xs">{txn.reference || '-'}</span>
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+
+                                <div className="overflow-x-auto">
+                                <table className="w-full min-w-[780px]">
                                     <thead>
                                         <tr className="border-b border-neutral-200">
                                             <th className="text-left py-3 px-4 text-sm font-medium text-neutral-500">Date</th>
@@ -385,7 +485,8 @@ const Payments: React.FC = () => {
                                         ))}
                                     </motion.tbody>
                                 </table>
-                            </div>
+                                </div>
+                            </>
                         )}
                     </div>
                 </Card>

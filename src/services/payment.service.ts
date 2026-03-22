@@ -14,7 +14,7 @@ import {
   updatePaymentStatus,
 } from "./billboard.service";
 import { createNotification } from "./notification.service";
-import { PaymentStatus } from "@/types/billboard.types";
+import { Booking, PaymentStatus } from "@/types/billboard.types";
 
 const PAYMENTS_COLLECTION = "payments";
 
@@ -30,6 +30,14 @@ export interface PaymentTransaction {
   paymentMethod: string;
   reference: string;
   createdAt: any;
+  bookingStartDate?: Date;
+  bookingEndDate?: Date;
+  duration?: number;
+  durationUnit?: "days" | "hours";
+  unitPrice?: number;
+  baseAmount?: number;
+  discountAmount?: number;
+  pricingLabel?: string;
 }
 
 export interface PaidBookingInfo {
@@ -39,12 +47,76 @@ export interface PaidBookingInfo {
   createdAt: Date;
 }
 
+const getPricingLabel = (booking: Booking) => {
+  if (booking.durationUnit === "hours") {
+    return "Hourly rate";
+  }
+
+  if (booking.duration >= 30) {
+    return "Monthly package";
+  }
+
+  if (booking.duration >= 7) {
+    return "Weekly package";
+  }
+
+  return "Daily rate";
+};
+
+const buildPaymentRecordPayload = (
+  booking: Booking,
+  amount: number,
+  paymentReference: string,
+) => {
+  const unitPrice = booking.pricePerUnit || booking.pricePerDay || 0;
+  const baseAmount = unitPrice * booking.duration;
+
+  return {
+    bookingId: booking.id,
+    billboardTitle: booking.billboardTitle,
+    advertiserId: booking.advertiserId,
+    ownerId: booking.ownerId,
+    amount,
+    currency: booking.currency || "NGN",
+    status: "paid" as const,
+    paymentMethod: booking.paymentMethod || "korapay",
+    reference: paymentReference,
+    createdAt: serverTimestamp(),
+    bookingStartDate: booking.startDate,
+    bookingEndDate: booking.endDate,
+    duration: booking.duration,
+    durationUnit: booking.durationUnit || "days",
+    unitPrice,
+    baseAmount,
+    discountAmount: Math.max(0, baseAmount - amount),
+    pricingLabel: getPricingLabel(booking),
+  };
+};
+
+const ensurePaymentRecordForBookingInternal = async (
+  booking: Booking,
+  amount: number,
+  paymentReference: string,
+) => {
+  const existingPayments = await getDocs(
+    query(collection(db, PAYMENTS_COLLECTION), where("bookingId", "==", booking.id)),
+  );
+
+  if (existingPayments.empty) {
+    await addDoc(
+      collection(db, PAYMENTS_COLLECTION),
+      buildPaymentRecordPayload(booking, amount, paymentReference),
+    );
+  }
+};
+
 const generateReference = (): string => {
   return `ADSPOT-${Date.now()}-${Math.random()
     .toString(36)
     .substr(2, 9)
     .toUpperCase()}`;
 };
+
 
 const recordSuccessfulPayment = async (
   bookingId: string,
@@ -59,57 +131,50 @@ const recordSuccessfulPayment = async (
     throw new Error("Booking not found.");
   }
 
-  if (booking.paymentStatus === "paid") {
-    return { success: true, reference: booking.paymentId || paymentReference };
+  const wasAlreadyPaid = booking.paymentStatus === "paid";
+  const resolvedReference = booking.paymentId || paymentReference;
+
+  if (!wasAlreadyPaid) {
+    await updatePaymentStatus(bookingId, "paid", paymentReference);
   }
 
-  await updatePaymentStatus(bookingId, "paid", paymentReference);
+  const refreshedBooking = (await getBooking(bookingId)) || {
+    ...booking,
+    paymentStatus: "paid" as const,
+    paymentId: resolvedReference,
+  };
   const syncedBooking = await syncBookingCampaignStatus(bookingId);
   const isActive = syncedBooking?.status === "active";
 
-  const existingPayments = await getDocs(
-    query(
-      collection(db, PAYMENTS_COLLECTION),
-      where("reference", "==", paymentReference),
-    ),
+  await ensurePaymentRecordForBookingInternal(
+    refreshedBooking,
+    amount,
+    resolvedReference,
   );
 
-  if (existingPayments.empty) {
-    await addDoc(collection(db, PAYMENTS_COLLECTION), {
-      bookingId,
-      billboardTitle,
-      advertiserId,
+  if (!wasAlreadyPaid) {
+    await createNotification(
       ownerId,
-      amount,
-      currency: "NGN",
-      status: "paid",
-      paymentMethod: "korapay",
-      reference: paymentReference,
-      createdAt: serverTimestamp(),
-    });
+      "payment_received",
+      "Payment Received",
+      `You received ?${amount.toLocaleString()} for booking on "${billboardTitle}"`,
+      { bookingId },
+      "/dashboard/owner/analytics",
+    );
+
+    await createNotification(
+      advertiserId,
+      "booking_confirmed",
+      "Payment Successful",
+      isActive
+        ? `Your booking for "${billboardTitle}" is now active.`
+        : `Payment for "${billboardTitle}" was received. Design work can now start while the owner finishes review and launch prep.`,
+      { bookingId },
+      "/dashboard/advertiser/campaigns",
+    );
   }
 
-  await createNotification(
-    ownerId,
-    "payment_received",
-    "Payment Received",
-    `You received ₦${amount.toLocaleString()} for booking on "${billboardTitle}"`,
-    { bookingId },
-    "/dashboard/owner/analytics",
-  );
-
-  await createNotification(
-    advertiserId,
-    "booking_confirmed",
-    "Payment Successful",
-    isActive
-      ? `Your booking for "${billboardTitle}" is now active.`
-      : `Payment for "${billboardTitle}" was received. Design work can now start while the owner finishes review and launch prep.`,
-    { bookingId },
-    "/dashboard/advertiser/campaigns",
-  );
-
-  return { success: true, reference: paymentReference };
+  return { success: true, reference: resolvedReference };
 };
 
 export const verifyKorapayPayment = async (
@@ -209,6 +274,22 @@ export const processPayment = async (
   return { success: true, reference };
 };
 
+export const ensurePaymentRecordForBooking = async (
+  bookingId: string,
+): Promise<boolean> => {
+  const booking = await getBooking(bookingId);
+  if (!booking || booking.paymentStatus !== "paid") {
+    return false;
+  }
+
+  await ensurePaymentRecordForBookingInternal(
+    booking,
+    booking.totalAmount,
+    booking.paymentId || "",
+  );
+  return true;
+};
+
 export const subscribeToAdvertiserPaidBookings = (
   advertiserId: string,
   callback: (paidBookings: Record<string, PaidBookingInfo>) => void,
@@ -266,6 +347,8 @@ export const getPaymentHistory = async (
       id: doc.id,
       ...doc.data(),
       createdAt: doc.data().createdAt?.toDate() || new Date(),
+      bookingStartDate: doc.data().bookingStartDate?.toDate?.(),
+      bookingEndDate: doc.data().bookingEndDate?.toDate?.(),
     })) as PaymentTransaction[];
 
     return results.sort(
@@ -276,3 +359,4 @@ export const getPaymentHistory = async (
     throw error;
   }
 };
+
