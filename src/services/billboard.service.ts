@@ -21,7 +21,7 @@ import {
 import { uploadFiles, uploadImages } from "./cloudinary.service";
 import { db } from "./firebase";
 import { createNotification } from "./notification.service";
-import { startConversation } from "./message.service";
+import { sendMessage, startConversation } from "./message.service";
 import { getUserProfile } from "./user.service";
 import type {
   Billboard,
@@ -102,6 +102,10 @@ const mapBookingData = (id: string, data: any): Booking =>
     paymentDueAt: optionalTimestampToDate(data.paymentDueAt),
     approvalDecisionAt: optionalTimestampToDate(data.approvalDecisionAt),
     creativeReviewedAt: optionalTimestampToDate(data.creativeReviewedAt),
+    ownerDesignSubmittedAt: optionalTimestampToDate(data.ownerDesignSubmittedAt),
+    advertiserDesignApprovedAt: optionalTimestampToDate(
+      data.advertiserDesignApprovedAt
+    ),
     campaignStartedAt: optionalTimestampToDate(data.campaignStartedAt),
     cancelledAt: optionalTimestampToDate(data.cancelledAt),
     reviewedAt: optionalTimestampToDate(data.reviewedAt),
@@ -1380,7 +1384,8 @@ export const syncBookingCampaignStatus = async (
 export const updateCreativeApprovalStatus = async (
   bookingId: string,
   creativeApprovalStatus: CreativeApprovalStatus,
-  creativeReviewNotes?: string
+  creativeReviewNotes?: string,
+  reviewerRole: "owner" | "advertiser" = "owner"
 ): Promise<Booking | null> => {
   try {
     const booking = await getBooking(bookingId);
@@ -1388,16 +1393,85 @@ export const updateCreativeApprovalStatus = async (
       throw new Error("Booking not found");
     }
 
-    await updateDoc(doc(db, BOOKINGS_COLLECTION, bookingId), {
-      creativeApprovalStatus,
-      creativeReviewNotes: creativeReviewNotes?.trim() || null,
-      creativeReviewedAt: new Date(),
-      updatedAt: new Date(),
-    });
+    const now = new Date();
+    const isOwnerDesignService =
+      booking.creativeRequirementType === "owner_design_service";
+    const sanitizedReviewNote = creativeReviewNotes?.trim();
+
+    if (isOwnerDesignService && reviewerRole !== "advertiser") {
+      throw new Error(
+        "Advertisers approve owner-created designs after reviewing them."
+      );
+    }
+
+    if (!isOwnerDesignService && reviewerRole !== "owner") {
+      throw new Error("Only the owner can review uploaded advertiser artwork.");
+    }
+
+    if (isOwnerDesignService) {
+      if (booking.paymentStatus !== "paid") {
+        throw new Error(
+          "The advertiser must complete payment before design approval can happen."
+        );
+      }
+
+      if ((booking.creativeAssets?.length ?? 0) === 0) {
+        throw new Error(
+          "The owner has not sent any design files for approval yet."
+        );
+      }
+
+      if (new Date(booking.startDate).getTime() <= now.getTime()) {
+        throw new Error(
+          "Design approval must happen before the campaign start date."
+        );
+      }
+
+      await updateDoc(doc(db, BOOKINGS_COLLECTION, bookingId), {
+        creativeApprovalStatus,
+        advertiserDesignFeedback:
+          creativeApprovalStatus === "changes_requested"
+            ? sanitizedReviewNote ||
+              "Please revise the design and send an updated version in chat."
+            : null,
+        advertiserDesignApprovedAt:
+          creativeApprovalStatus === "approved" ? now : null,
+        creativeReviewedAt: now,
+        updatedAt: now,
+      });
+    } else {
+      await updateDoc(doc(db, BOOKINGS_COLLECTION, bookingId), {
+        creativeApprovalStatus,
+        creativeReviewNotes: sanitizedReviewNote || null,
+        creativeReviewedAt: now,
+        updatedAt: now,
+      });
+    }
 
     const updatedBooking = await syncBookingCampaignStatus(bookingId);
 
-    if (creativeApprovalStatus === "approved") {
+    if (creativeApprovalStatus === "approved" && isOwnerDesignService) {
+      await createNotification(
+        booking.ownerId,
+        "creative_approved",
+        "Design Approved",
+        `The advertiser approved your design for "${booking.billboardTitle}".${
+          booking.startDate
+            ? ` The campaign can launch on ${new Date(
+                booking.startDate
+              ).toLocaleDateString("en-NG", {
+                day: "numeric",
+                month: "short",
+                year: "numeric",
+              })}.`
+            : ""
+        }`,
+        { bookingId, billboardId: booking.billboardId },
+        "/dashboard/owner/bookings"
+      );
+    }
+
+    if (creativeApprovalStatus === "approved" && !isOwnerDesignService) {
       await createNotification(
         booking.advertiserId,
         "creative_approved",
@@ -1419,12 +1493,30 @@ export const updateCreativeApprovalStatus = async (
       );
     }
 
-    if (creativeApprovalStatus === "changes_requested") {
+    if (
+      creativeApprovalStatus === "changes_requested" &&
+      isOwnerDesignService
+    ) {
+      await createNotification(
+        booking.ownerId,
+        "creative_changes_requested",
+        "Advertiser Requested Changes",
+        sanitizedReviewNote ||
+          `The advertiser requested revisions for the design on "${booking.billboardTitle}".`,
+        { bookingId, billboardId: booking.billboardId },
+        "/dashboard/owner/bookings"
+      );
+    }
+
+    if (
+      creativeApprovalStatus === "changes_requested" &&
+      !isOwnerDesignService
+    ) {
       await createNotification(
         booking.advertiserId,
         "creative_changes_requested",
         "Creative Changes Requested",
-        creativeReviewNotes?.trim() ||
+        sanitizedReviewNote ||
           `The owner requested more detail or revisions for \"${booking.billboardTitle}\".`,
         { bookingId, billboardId: booking.billboardId },
         "/dashboard/advertiser/campaigns"
@@ -1434,7 +1526,80 @@ export const updateCreativeApprovalStatus = async (
     return updatedBooking;
   } catch (error) {
     console.error("Error updating creative approval status:", error);
+    if (error instanceof Error) {
+      throw error;
+    }
     throw new Error("Failed to update creative approval status");
+  }
+};
+
+export const submitOwnerDesignForApproval = async (
+  bookingId: string,
+  ownerId: string,
+  designFiles: File[],
+  ownerNote?: string
+): Promise<Booking | null> => {
+  try {
+    const booking = await getBooking(bookingId);
+    if (!booking) {
+      throw new Error("Booking not found");
+    }
+
+    if (booking.ownerId !== ownerId) {
+      throw new Error("You can only submit designs for your own bookings.");
+    }
+
+    if (booking.creativeRequirementType !== "owner_design_service") {
+      throw new Error(
+        "This booking expects the advertiser to upload artwork directly."
+      );
+    }
+
+    if (booking.paymentStatus !== "paid") {
+      throw new Error(
+        "Wait until payment is received before sending the design for approval."
+      );
+    }
+
+    if (new Date(booking.startDate).getTime() <= Date.now()) {
+      throw new Error(
+        "You need to send the design before the campaign start date."
+      );
+    }
+
+    if (!designFiles.length) {
+      throw new Error("Upload at least one design file to continue.");
+    }
+
+    const uploadedAssets = await uploadFiles(designFiles);
+    const submittedAt = new Date();
+    const sanitizedOwnerNote = ownerNote?.trim();
+
+    await updateDoc(doc(db, BOOKINGS_COLLECTION, bookingId), {
+      creativeAssets: uploadedAssets,
+      creativeApprovalStatus: "pending",
+      ownerDesignSubmissionNote: sanitizedOwnerNote || null,
+      ownerDesignSubmittedAt: submittedAt,
+      advertiserDesignFeedback: null,
+      advertiserDesignApprovedAt: null,
+      creativeReviewedAt: submittedAt,
+      updatedAt: submittedAt,
+    });
+
+    const conversationId = await startConversation(ownerId, booking.advertiserId);
+    const messageText =
+      sanitizedOwnerNote ||
+      `Hi ${booking.advertiserName}, I have sent the design draft for "${booking.billboardTitle}". Please review it and approve it before the campaign start date.`;
+
+    await sendMessage(conversationId, ownerId, messageText, uploadedAssets);
+
+    return await getBooking(bookingId);
+  } catch (error) {
+    console.error("Error submitting owner design for approval:", error);
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error("Failed to submit the design for approval");
   }
 };
 

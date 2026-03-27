@@ -29,6 +29,7 @@ import {
     getBillboard,
     createReview,
     syncAdvertiserCampaignTimeline,
+    updateCreativeApprovalStatus,
 } from '@/services/billboard.service';
 import { subscribeToAdvertiserPaidBookings } from '@/services/payment.service';
 import { submitReport, type ReportCategory } from '@/services/admin.service';
@@ -112,6 +113,7 @@ const MyCampaigns: React.FC = () => {
 
     // Message owner loading state
     const [messagingBookingId, setMessagingBookingId] = useState<string | null>(null);
+    const [reviewingDesignBookingId, setReviewingDesignBookingId] = useState<string | null>(null);
 
     // Review modal state
     const [reviewBooking, setReviewBooking] = useState<Booking | null>(null);
@@ -215,6 +217,17 @@ const MyCampaigns: React.FC = () => {
         new Date(booking.startDate).getTime() <= now &&
         new Date(booking.endDate).getTime() >= now &&
         booking.creativeApprovalStatus === 'approved';
+
+    const isOwnerDesignServiceBooking = (booking: Booking) =>
+        booking.creativeRequirementType === 'owner_design_service';
+
+    const canAdvertiserReviewOwnerDesign = (booking: Booking) =>
+        isOwnerDesignServiceBooking(booking) &&
+        booking.status === 'confirmed' &&
+        isPaidBooking(booking) &&
+        (booking.creativeAssets?.length ?? 0) > 0 &&
+        new Date(booking.startDate).getTime() > Date.now() &&
+        booking.creativeApprovalStatus !== 'approved';
 
     const getPaymentDueDate = (booking: Booking) =>
         booking.paymentDueAt ? new Date(booking.paymentDueAt) : null;
@@ -344,6 +357,38 @@ const MyCampaigns: React.FC = () => {
 
     const handleRebookCampaign = (booking: Booking) => {
         navigate(`/billboards/${booking.billboardId}?rebookBooking=${encodeURIComponent(booking.id)}`);
+    };
+
+    const handleOwnerDesignDecision = async (
+        booking: Booking,
+        nextStatus: 'approved' | 'changes_requested',
+    ) => {
+        setReviewingDesignBookingId(booking.id);
+        try {
+            const updated = await updateCreativeApprovalStatus(
+                booking.id,
+                nextStatus,
+                nextStatus === 'approved'
+                    ? 'Advertiser approved the owner design for launch.'
+                    : 'Please revise the design and send an updated version in chat before the campaign start date.',
+                'advertiser',
+            );
+
+            if (updated) {
+                setBookings((prev) => prev.map((item) => (item.id === booking.id ? updated : item)));
+            }
+
+            toast.success(
+                nextStatus === 'approved'
+                    ? 'Design approved. The campaign is ready once the start date arrives.'
+                    : 'Change request sent to the owner.',
+            );
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Failed to update the design review';
+            toast.error(message);
+        } finally {
+            setReviewingDesignBookingId(null);
+        }
     };
 
     const handleOpenReport = (booking: Booking) => {
@@ -566,6 +611,8 @@ const MyCampaigns: React.FC = () => {
                             const paymentDeadlineLabel = getPaymentDeadlineLabel(booking);
                             const canReview = isCompleted(booking) && !booking.reviewedAt;
                             const isLive = isLiveCampaign(booking);
+                            const isOwnerDesign = isOwnerDesignServiceBooking(booking);
+                            const canReviewOwnerDesign = canAdvertiserReviewOwnerDesign(booking);
                             const countdown = isManagedCampaign(booking)
                                 ? getCampaignCountdown(booking)
                                 : null;
@@ -741,9 +788,38 @@ const MyCampaigns: React.FC = () => {
                                                                 </p>
                                                                 {!isLive && booking.creativeApprovalStatus !== 'approved' && (
                                                                     <p className="mt-1 text-xs text-neutral-600">
-                                                                        Final launch still depends on owner creative approval.
+                                                                        Final launch still depends on {isOwnerDesign ? 'your design approval' : 'owner creative approval'}.
                                                                     </p>
                                                                 )}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {isOwnerDesign && isPaidBooking(booking) && (
+                                                    <div className={`rounded-2xl border px-4 py-3 ${(booking.creativeAssets?.length ?? 0) === 0
+                                                        ? 'border-amber-200 bg-amber-50'
+                                                        : booking.creativeApprovalStatus === 'approved'
+                                                            ? 'border-green-200 bg-green-50'
+                                                            : booking.creativeApprovalStatus === 'changes_requested'
+                                                                ? 'border-orange-200 bg-orange-50'
+                                                                : 'border-primary-200 bg-primary-50/70'
+                                                        }`}>
+                                                        <div className="flex items-start gap-2">
+                                                            <MdDesignServices size={18} className="text-primary-600 mt-0.5 flex-shrink-0" />
+                                                            <div>
+                                                                <p className="text-sm font-semibold text-neutral-900">
+                                                                    Design approval
+                                                                </p>
+                                                                <p className="mt-1 text-xs text-neutral-600 leading-relaxed">
+                                                                    {(booking.creativeAssets?.length ?? 0) === 0
+                                                                        ? 'Payment is in. The owner still needs to send the design draft in chat before you can approve it.'
+                                                                        : booking.creativeApprovalStatus === 'approved'
+                                                                            ? 'You approved the owner design. Launch can proceed once the start date arrives.'
+                                                                            : booking.creativeApprovalStatus === 'changes_requested'
+                                                                                ? 'You requested changes. The owner needs to send a revised design in chat before the campaign start date.'
+                                                                                : `Review the design sent in chat and approve it before ${formatDate(booking.startDate)}.`}
+                                                                </p>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -794,7 +870,7 @@ const MyCampaigns: React.FC = () => {
                                                     </div>
                                                 )}
 
-                                                <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
+                                                    <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
                                                     <div className="flex items-start justify-between gap-3 mb-3">
                                                         <div className="flex items-start gap-2">
                                                             <MdDesignServices size={18} className="text-neutral-500 mt-0.5" />
@@ -803,7 +879,9 @@ const MyCampaigns: React.FC = () => {
                                                                 <p className="text-xs text-neutral-500">
                                                                     {booking.creativeRequirementType === 'advertiser_upload'
                                                                         ? 'You uploaded the design for owner review.'
-                                                                        : 'You requested the owner to create the design.'}
+                                                                        : (booking.creativeAssets?.length ?? 0) > 0
+                                                                            ? 'The owner shared a design draft in chat for your approval.'
+                                                                            : 'You requested the owner to create the design.'}
                                                                 </p>
                                                             </div>
                                                         </div>
@@ -824,6 +902,12 @@ const MyCampaigns: React.FC = () => {
                                                     {booking.designServiceFee > 0 && (
                                                         <p className="text-xs text-neutral-500 mt-2">
                                                             Design service charge: {formatPrice(booking.designServiceFee)}
+                                                        </p>
+                                                    )}
+
+                                                    {booking.ownerDesignSubmissionNote && (
+                                                        <p className="text-xs text-neutral-500 mt-2">
+                                                            Owner design note: {booking.ownerDesignSubmissionNote}
                                                         </p>
                                                     )}
 
@@ -849,6 +933,12 @@ const MyCampaigns: React.FC = () => {
                                                     {booking.creativeReviewNotes && (
                                                         <p className="text-xs text-neutral-500 mt-3">
                                                             Owner note: {booking.creativeReviewNotes}
+                                                        </p>
+                                                    )}
+
+                                                    {booking.advertiserDesignFeedback && (
+                                                        <p className="text-xs text-neutral-500 mt-3">
+                                                            Your feedback: {booking.advertiserDesignFeedback}
                                                         </p>
                                                     )}
                                                 </div>
@@ -891,6 +981,26 @@ const MyCampaigns: React.FC = () => {
                                                             <MdPayment size={14} />
                                                             Complete Payment
                                                         </Link>
+                                                    )}
+                                                    {canReviewOwnerDesign && (
+                                                        <>
+                                                            <button
+                                                                onClick={() => handleOwnerDesignDecision(booking, 'approved')}
+                                                                disabled={reviewingDesignBookingId === booking.id}
+                                                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-600 text-white text-xs font-medium hover:bg-green-700 disabled:opacity-60 transition-colors"
+                                                            >
+                                                                <MdDesignServices size={14} />
+                                                                {reviewingDesignBookingId === booking.id ? 'Saving...' : 'Approve Design'}
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleOwnerDesignDecision(booking, 'changes_requested')}
+                                                                disabled={reviewingDesignBookingId === booking.id}
+                                                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-200 text-amber-700 text-xs font-medium hover:bg-amber-50 disabled:opacity-60 transition-colors"
+                                                            >
+                                                                <MdDesignServices size={14} />
+                                                                Request Changes
+                                                            </button>
+                                                        </>
                                                     )}
                                                     {booking.status === 'rejected' && (
                                                         <button

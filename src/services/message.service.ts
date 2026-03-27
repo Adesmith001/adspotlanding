@@ -12,6 +12,7 @@ import {
   getDocs,
 } from "firebase/firestore";
 import { db } from "./firebase";
+import { uploadFiles } from "./cloudinary.service";
 import type { Conversation, Message } from "@/types/billboard.types";
 import { createNotification } from "./notification.service";
 import { getUserProfile } from "./user.service";
@@ -134,10 +135,18 @@ export const sendMessage = async (
   conversationId: string,
   senderId: string,
   text: string,
+  attachments?: string[],
 ): Promise<void> => {
   try {
     const sender = await getUserProfile(senderId);
     const senderName = sender?.displayName || "User";
+    const trimmedText = text.trim();
+    const attachmentUrls = attachments?.filter(Boolean) || [];
+    const hasAttachments = attachmentUrls.length > 0;
+
+    if (!trimmedText && !hasAttachments) {
+      throw new Error("Message content is required.");
+    }
 
     // 1. Add message
     await addDoc(
@@ -151,7 +160,8 @@ export const sendMessage = async (
         conversationId,
         senderId,
         senderName,
-        text,
+        text: trimmedText,
+        attachments: hasAttachments ? attachmentUrls : undefined,
         read: false,
         createdAt: serverTimestamp(),
       },
@@ -167,12 +177,13 @@ export const sendMessage = async (
     // Calculate new unread counts
     const otherUserId = convData.participants.find((id) => id !== senderId);
     const unreadCount = { ...convData.unreadCount };
+    const lastMessagePreview = trimmedText || `Sent ${attachmentUrls.length} file${attachmentUrls.length === 1 ? "" : "s"}`;
     if (otherUserId) {
       unreadCount[otherUserId] = (unreadCount[otherUserId] || 0) + 1;
     }
 
     await updateDoc(convRef, {
-      lastMessage: text,
+      lastMessage: lastMessagePreview,
       lastMessageSenderId: senderId,
       lastMessageAt: serverTimestamp(),
       unreadCount,
@@ -188,7 +199,7 @@ export const sendMessage = async (
         otherUserId,
         "new_message",
         "New Message",
-        `${senderName}: ${text}`,
+        `${senderName}: ${lastMessagePreview}`,
         { conversationId },
         messagesPath,
       );
@@ -197,6 +208,17 @@ export const sendMessage = async (
     console.error("Error sending message:", error);
     throw error;
   }
+};
+
+export const sendMessageWithUploads = async (
+  conversationId: string,
+  senderId: string,
+  text: string,
+  files: File[],
+): Promise<string[]> => {
+  const uploadedUrls = await uploadFiles(files);
+  await sendMessage(conversationId, senderId, text, uploadedUrls);
+  return uploadedUrls;
 };
 
 /**

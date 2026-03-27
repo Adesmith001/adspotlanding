@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MdBookmarkBorder, MdCheck, MdClose, MdAccessTime, MdMessage, MdPictureAsPdf } from 'react-icons/md';
+import { MdBookmarkBorder, MdCheck, MdClose, MdAccessTime, MdMessage, MdPictureAsPdf, MdCloudUpload } from 'react-icons/md';
 import DashboardLayout from '@/components/DashboardLayout';
 import EmptyState from '@/components/EmptyState';
 import Card from '@/components/ui/Card';
@@ -9,10 +9,10 @@ import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
 import { useAppSelector } from '@/hooks/useRedux';
 import { selectUser } from '@/store/authSlice';
-import { getOwnerBookings, updateBookingStatus, updateCreativeApprovalStatus } from '@/services/billboard.service';
+import { getOwnerBookings, submitOwnerDesignForApproval, updateBookingStatus, updateCreativeApprovalStatus } from '@/services/billboard.service';
 import { startConversation } from '@/services/message.service';
 import type { Booking, BookingStatus } from '@/types/billboard.types';
-import { getAssetLabelFromUrl, isPdfUrl } from '@/utils/media.utils';
+import { getAssetLabelFromUrl, isPdfFile, isPdfUrl } from '@/utils/media.utils';
 import toast from 'react-hot-toast';
 
 type TabType = 'pending' | 'confirmed' | 'active' | 'completed' | 'cancelled' | 'rejected';
@@ -39,6 +39,11 @@ const OwnerBookings: React.FC = () => {
     const [decisionStatus, setDecisionStatus] = useState<'confirmed' | 'rejected'>('confirmed');
     const [decisionNote, setDecisionNote] = useState('');
     const [submittingDecision, setSubmittingDecision] = useState(false);
+    const [designBooking, setDesignBooking] = useState<Booking | null>(null);
+    const [designNote, setDesignNote] = useState('');
+    const [designFiles, setDesignFiles] = useState<File[]>([]);
+    const [designPreviewUrls, setDesignPreviewUrls] = useState<string[]>([]);
+    const [submittingDesign, setSubmittingDesign] = useState(false);
 
     useEffect(() => {
         const fetchBookings = async () => {
@@ -55,6 +60,12 @@ const OwnerBookings: React.FC = () => {
         };
         fetchBookings();
     }, [user]);
+
+    useEffect(() => {
+        return () => {
+            designPreviewUrls.forEach((url) => URL.revokeObjectURL(url));
+        };
+    }, [designPreviewUrls]);
 
     const handleUpdateStatus = async (bookingId: string, status: BookingStatus, ownerDecisionNote?: string) => {
         try {
@@ -153,6 +164,67 @@ const OwnerBookings: React.FC = () => {
         }
     };
 
+    const openDesignModal = (booking: Booking) => {
+        setDesignBooking(booking);
+        setDesignNote(booking.ownerDesignSubmissionNote || '');
+        setDesignFiles([]);
+        setDesignPreviewUrls((prev) => {
+            prev.forEach((url) => URL.revokeObjectURL(url));
+            return [];
+        });
+    };
+
+    const closeDesignModal = () => {
+        setDesignBooking(null);
+        setDesignNote('');
+        setDesignFiles([]);
+        setDesignPreviewUrls((prev) => {
+            prev.forEach((url) => URL.revokeObjectURL(url));
+            return [];
+        });
+    };
+
+    const handleDesignUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const files = event.target.files;
+        if (!files) return;
+        const nextFiles = Array.from(files);
+        setDesignFiles(nextFiles);
+        setDesignPreviewUrls((prev) => {
+            prev.forEach((url) => URL.revokeObjectURL(url));
+            return nextFiles.map((file) => URL.createObjectURL(file));
+        });
+    };
+
+    const handleSubmitDesign = async () => {
+        if (!user || !designBooking) return;
+        if (designFiles.length === 0) {
+            toast.error('Upload at least one design file before sending it to the advertiser.');
+            return;
+        }
+
+        setSubmittingDesign(true);
+        try {
+            const updated = await submitOwnerDesignForApproval(
+                designBooking.id,
+                user.uid,
+                designFiles,
+                designNote,
+            );
+
+            if (updated) {
+                setBookings((prev) => prev.map((item) => (item.id === designBooking.id ? updated : item)));
+            }
+
+            toast.success('Design sent in chat. The advertiser can now review and approve it.');
+            closeDesignModal();
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Failed to send the design';
+            toast.error(message);
+        } finally {
+            setSubmittingDesign(false);
+        }
+    };
+
     const filteredBookings = bookings.filter((b) => b.status === activeTab);
 
     const formatPrice = (price: number) => {
@@ -180,6 +252,20 @@ const OwnerBookings: React.FC = () => {
     };
 
     const getConfirmedStatusLabel = (booking: Booking) => {
+        if (booking.creativeRequirementType === 'owner_design_service' && booking.paymentStatus === 'paid') {
+            if (booking.creativeApprovalStatus === 'approved') {
+                return 'Advertiser Approved. Ready To Launch';
+            }
+
+            if ((booking.creativeAssets?.length ?? 0) > 0) {
+                return booking.creativeApprovalStatus === 'changes_requested'
+                    ? 'Advertiser Requested Changes'
+                    : 'Design Sent. Awaiting Advertiser Approval';
+            }
+
+            return 'Payment Received. Send Design';
+        }
+
         if (booking.paymentStatus === 'paid' && booking.creativeApprovalStatus === 'approved') {
             return 'Ready To Launch';
         }
@@ -417,9 +503,21 @@ const OwnerBookings: React.FC = () => {
                                                 </p>
                                             )}
 
+                                            {booking.ownerDesignSubmissionNote && (
+                                                <p className="text-xs text-neutral-500 mt-2">
+                                                    Design note sent: {booking.ownerDesignSubmissionNote}
+                                                </p>
+                                            )}
+
                                             {booking.creativeReviewNotes && (
                                                 <p className="text-xs text-neutral-500 mt-3">
                                                     Review note: {booking.creativeReviewNotes}
+                                                </p>
+                                            )}
+
+                                            {booking.advertiserDesignFeedback && (
+                                                <p className="text-xs text-neutral-500 mt-2">
+                                                    Advertiser feedback: {booking.advertiserDesignFeedback}
                                                 </p>
                                             )}
 
@@ -477,21 +575,38 @@ const OwnerBookings: React.FC = () => {
                                                             {getConfirmedStatusLabel(booking)}
                                                         </span>
                                                     </div>
-                                                    <Button
-                                                        size="sm"
-                                                        onClick={() => handleCreativeReview(booking, 'approved')}
-                                                        disabled={reviewingBookingId === booking.id || booking.creativeApprovalStatus === 'approved'}
-                                                    >
-                                                        Approve Creative
-                                                    </Button>
-                                                    <Button
-                                                        size="sm"
-                                                        variant="outline"
-                                                        onClick={() => handleCreativeReview(booking, 'changes_requested')}
-                                                        disabled={reviewingBookingId === booking.id}
-                                                    >
-                                                        Request Changes
-                                                    </Button>
+                                                    {booking.creativeRequirementType === 'owner_design_service' ? (
+                                                        <>
+                                                            {booking.paymentStatus === 'paid' &&
+                                                                new Date(booking.startDate).getTime() > Date.now() &&
+                                                                booking.creativeApprovalStatus !== 'approved' && (
+                                                                    <Button
+                                                                        size="sm"
+                                                                        onClick={() => openDesignModal(booking)}
+                                                                    >
+                                                                        {(booking.creativeAssets?.length ?? 0) > 0 ? 'Send Updated Design' : 'Send Design In Chat'}
+                                                                    </Button>
+                                                                )}
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <Button
+                                                                size="sm"
+                                                                onClick={() => handleCreativeReview(booking, 'approved')}
+                                                                disabled={reviewingBookingId === booking.id || booking.creativeApprovalStatus === 'approved'}
+                                                            >
+                                                                Approve Creative
+                                                            </Button>
+                                                            <Button
+                                                                size="sm"
+                                                                variant="outline"
+                                                                onClick={() => handleCreativeReview(booking, 'changes_requested')}
+                                                                disabled={reviewingBookingId === booking.id}
+                                                            >
+                                                                Request Changes
+                                                            </Button>
+                                                        </>
+                                                    )}
                                                     <Button
                                                         size="sm"
                                                         variant="ghost"
@@ -589,6 +704,114 @@ const OwnerBookings: React.FC = () => {
                                 : decisionStatus === 'rejected'
                                     ? 'Decline Booking'
                                     : 'Approve Booking'}
+                        </button>
+                    </div>
+                </div>
+            </Modal>
+
+            <Modal
+                isOpen={!!designBooking}
+                onClose={closeDesignModal}
+                title="Send Design In Chat"
+                size="lg"
+            >
+                <div className="space-y-4">
+                    {designBooking && (
+                        <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
+                            <p className="text-sm font-semibold text-neutral-900">{designBooking.billboardTitle}</p>
+                            <p className="mt-1 text-xs text-neutral-500">
+                                Advertiser: {designBooking.advertiserName}
+                            </p>
+                            <p className="mt-1 text-xs text-neutral-500">
+                                Start date: {formatDate(designBooking.startDate)}
+                            </p>
+                        </div>
+                    )}
+
+                    <div>
+                        <label className="block text-sm font-medium text-neutral-700 mb-1.5">
+                            Upload design files <span className="text-red-500">*</span>
+                        </label>
+                        <label className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-neutral-300 bg-neutral-50 px-4 py-6 text-center hover:border-neutral-400 hover:bg-neutral-100 transition-colors">
+                            <MdCloudUpload size={26} className="text-neutral-400 mb-2" />
+                            <p className="text-sm font-medium text-neutral-800">
+                                Click to upload image or PDF files
+                            </p>
+                            <p className="text-xs text-neutral-500 mt-1">
+                                These files will be saved on the booking and sent into chat for the advertiser to review.
+                            </p>
+                            <input
+                                type="file"
+                                accept="image/*,application/pdf,.pdf"
+                                multiple
+                                onChange={handleDesignUpload}
+                                className="hidden"
+                            />
+                        </label>
+
+                        {designPreviewUrls.length > 0 && (
+                            <div className="mt-3 grid grid-cols-3 gap-2">
+                                {designPreviewUrls.map((url, index) => {
+                                    const file = designFiles[index];
+                                    if (file && isPdfFile(file)) {
+                                        return (
+                                            <a
+                                                key={url}
+                                                href={url}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="flex h-20 w-full flex-col items-center justify-center rounded-lg border border-red-200 bg-red-50 px-2 text-center"
+                                            >
+                                                <MdPictureAsPdf size={24} className="text-red-600" />
+                                                <span className="mt-1 line-clamp-2 text-[11px] font-medium text-red-700">
+                                                    {file.name}
+                                                </span>
+                                            </a>
+                                        );
+                                    }
+
+                                    return (
+                                        <img
+                                            key={url}
+                                            src={url}
+                                            alt={`Design preview ${index + 1}`}
+                                            className="h-20 w-full rounded-lg border border-neutral-200 object-cover"
+                                        />
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-neutral-700 mb-1.5">
+                            Message to advertiser
+                        </label>
+                        <textarea
+                            value={designNote}
+                            onChange={(e) => setDesignNote(e.target.value)}
+                            rows={4}
+                            maxLength={500}
+                            placeholder="Tell the advertiser what you designed, what to review, and remind them to approve it before the campaign start date."
+                            className="w-full rounded-xl border border-neutral-200 px-3 py-2.5 text-sm text-neutral-800 resize-none focus:outline-none focus:ring-2 focus:ring-neutral-900"
+                        />
+                        <p className="mt-1 text-right text-xs text-neutral-400">{designNote.length}/500</p>
+                    </div>
+
+                    <div className="flex gap-3 pt-1">
+                        <button
+                            onClick={closeDesignModal}
+                            disabled={submittingDesign}
+                            className="flex-1 rounded-xl border border-neutral-200 px-4 py-2.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-60"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleSubmitDesign}
+                            disabled={submittingDesign || designFiles.length === 0}
+                            className="flex-1 rounded-xl bg-neutral-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-neutral-800 disabled:opacity-60"
+                        >
+                            {submittingDesign ? 'Sending...' : 'Send Design'}
                         </button>
                     </div>
                 </div>

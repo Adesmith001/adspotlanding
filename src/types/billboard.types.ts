@@ -167,6 +167,10 @@ export interface Booking {
   creativeApprovalStatus: CreativeApprovalStatus;
   creativeReviewNotes?: string;
   creativeReviewedAt?: Date;
+  ownerDesignSubmissionNote?: string;
+  ownerDesignSubmittedAt?: Date;
+  advertiserDesignFeedback?: string;
+  advertiserDesignApprovedAt?: Date;
   campaignStartedAt?: Date;
 
   // Cancellation
