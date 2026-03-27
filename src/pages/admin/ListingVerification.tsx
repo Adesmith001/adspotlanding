@@ -1,17 +1,28 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { MdVerifiedUser, MdCheckCircle, MdCancel, MdSearch, MdFilterList } from 'react-icons/md';
+import { MdCheckCircle, MdFilterList, MdSearch, MdVerifiedUser } from 'react-icons/md';
 import DashboardLayout from '@/components/DashboardLayout';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
+import Modal from '@/components/ui/Modal';
+import Pagination from '@/components/ui/Pagination';
 import { getAllBillboards, updateBillboardAdminStatus, type AdminBillboard } from '@/services/admin.service';
+import { useAppSelector } from '@/hooks/useRedux';
+import { selectUser } from '@/store/authSlice';
 import toast from 'react-hot-toast';
 
+const PAGE_SIZE = 6;
+
 const ListingVerification: React.FC = () => {
+    const user = useAppSelector(selectUser);
     const [billboards, setBillboards] = useState<AdminBillboard[]>([]);
     const [loading, setLoading] = useState(true);
     const [statusFilter, setStatusFilter] = useState<string>('all');
     const [searchQuery, setSearchQuery] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const [rejectingBillboard, setRejectingBillboard] = useState<AdminBillboard | null>(null);
+    const [rejectionReason, setRejectionReason] = useState('');
+    const [submittingReview, setSubmittingReview] = useState(false);
 
     useEffect(() => {
         const fetchBillboards = async () => {
@@ -25,35 +36,99 @@ const ListingVerification: React.FC = () => {
                 setLoading(false);
             }
         };
-        fetchBillboards();
+
+        void fetchBillboards();
     }, []);
 
-    const handleApprove = async (id: string) => {
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [statusFilter, searchQuery]);
+
+    const handleApprove = async (billboard: AdminBillboard) => {
+        if (!user?.uid) {
+            toast.error('You need to be signed in as an admin to review listings.');
+            return;
+        }
+
         try {
-            await updateBillboardAdminStatus(id, 'active');
-            setBillboards(billboards.map((b) => (b.id === id ? { ...b, status: 'active' } : b)));
-            toast.success('Billboard approved!');
+            await updateBillboardAdminStatus(billboard.id, user.uid, 'active');
+            setBillboards(prev => prev.map((entry) => (
+                entry.id === billboard.id
+                    ? {
+                        ...entry,
+                        status: 'active',
+                        adminReviewReason: undefined,
+                        adminReviewedAt: new Date(),
+                        adminReviewedBy: user.uid,
+                    }
+                    : entry
+            )));
+            toast.success('Listing approved and now live');
         } catch (error) {
-            toast.error('Failed to approve billboard');
+            console.error('Error approving listing:', error);
+            toast.error('Failed to approve listing');
         }
     };
 
-    const handleReject = async (id: string) => {
+    const openRejectModal = (billboard: AdminBillboard) => {
+        setRejectingBillboard(billboard);
+        setRejectionReason(billboard.adminReviewReason || '');
+    };
+
+    const closeRejectModal = () => {
+        if (submittingReview) {
+            return;
+        }
+        setRejectingBillboard(null);
+        setRejectionReason('');
+    };
+
+    const handleReject = async () => {
+        if (!rejectingBillboard || !user?.uid) {
+            return;
+        }
+
+        const trimmedReason = rejectionReason.trim();
+        if (!trimmedReason) {
+            toast.error('Enter a reason before rejecting this listing');
+            return;
+        }
+
+        setSubmittingReview(true);
         try {
-            await updateBillboardAdminStatus(id, 'rejected');
-            setBillboards(billboards.map((b) => (b.id === id ? { ...b, status: 'rejected' } : b)));
-            toast.success('Billboard rejected');
+            await updateBillboardAdminStatus(rejectingBillboard.id, user.uid, 'rejected', trimmedReason);
+            setBillboards(prev => prev.map((entry) => (
+                entry.id === rejectingBillboard.id
+                    ? {
+                        ...entry,
+                        status: 'rejected',
+                        adminReviewReason: trimmedReason,
+                        adminReviewedAt: new Date(),
+                        adminReviewedBy: user.uid,
+                    }
+                    : entry
+            )));
+            toast.success('Listing rejected with reason saved');
+            closeRejectModal();
         } catch (error) {
-            toast.error('Failed to reject billboard');
+            console.error('Error rejecting listing:', error);
+            toast.error('Failed to reject listing');
+        } finally {
+            setSubmittingReview(false);
         }
     };
 
-    const filtered = billboards.filter((b) => {
-        const matchesSearch = b.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            b.ownerName?.toLowerCase().includes(searchQuery.toLowerCase());
-        const matchesStatus = statusFilter === 'all' || b.status === statusFilter;
+    const filtered = billboards.filter((billboard) => {
+        const matchesSearch = billboard.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            billboard.ownerName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            billboard.location?.city?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            billboard.location?.state?.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesStatus = statusFilter === 'all' || billboard.status === statusFilter;
         return matchesSearch && matchesStatus;
     });
+
+    const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+    const paginatedBillboards = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
     const statusBadge = (status: string) => {
         const styles: Record<string, string> = {
@@ -78,16 +153,15 @@ const ListingVerification: React.FC = () => {
     }
 
     return (
-        <DashboardLayout userRole="admin" title="Listing Verification" subtitle="Review and approve billboard listings">
+        <DashboardLayout userRole="admin" title="Listing Verification" subtitle="Review and approve billboard and screen listings">
             <div className="space-y-6">
-                {/* Filters */}
                 <Card className="p-4">
                     <div className="flex flex-col md:flex-row gap-4">
                         <div className="flex-1 relative">
                             <MdSearch size={20} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
                             <input
                                 type="text"
-                                placeholder="Search by title or owner..."
+                                placeholder="Search by title, owner, city, or state..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-neutral-200 focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
@@ -109,22 +183,21 @@ const ListingVerification: React.FC = () => {
                     </div>
                 </Card>
 
-                {/* Listings Grid */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {filtered.map((billboard) => (
+                    {paginatedBillboards.map((billboard) => (
                         <motion.div
                             key={billboard.id}
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
                         >
-                            <Card className="p-6 hover:shadow-lg transition-shadow">
+                            <Card className="p-6 hover:shadow-lg transition-shadow h-full">
                                 <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
                                     <div>
                                         <h3 className="font-bold text-neutral-900">{billboard.title}</h3>
                                         <p className="text-sm text-neutral-500">{billboard.location?.city}, {billboard.location?.state}</p>
                                         <p className="text-xs text-neutral-400 mt-1">
                                             by {billboard.ownerName} • {billboard.type} •{' '}
-                                            {billboard.createdAt instanceof Date ? billboard.createdAt.toLocaleDateString() : new Date(billboard.createdAt).toLocaleDateString()}
+                                            {billboard.createdAt.toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })}
                                         </p>
                                     </div>
                                     <span className={`px-2.5 py-1 rounded-full text-xs font-medium capitalize ${statusBadge(billboard.status)}`}>
@@ -132,24 +205,35 @@ const ListingVerification: React.FC = () => {
                                     </span>
                                 </div>
 
+                                <div className="rounded-2xl bg-neutral-50 px-4 py-3 text-sm text-neutral-600">
+                                    <p className="font-medium text-neutral-800">Address</p>
+                                    <p className="mt-1">{billboard.location?.address || 'No address provided'}</p>
+                                </div>
+
+                                {billboard.adminReviewReason && (
+                                    <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
+                                        <p className="text-sm font-medium text-red-700">Last rejection reason</p>
+                                        <p className="mt-1 text-sm text-red-600">{billboard.adminReviewReason}</p>
+                                    </div>
+                                )}
+
                                 {billboard.status === 'pending' && (
-                                    <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-neutral-100">
+                                    <div className="flex flex-col sm:flex-row gap-3 pt-4 mt-4 border-t border-neutral-100">
                                         <Button
                                             size="sm"
                                             icon={<MdCheckCircle />}
-                                            onClick={() => handleApprove(billboard.id)}
+                                            onClick={() => handleApprove(billboard)}
                                             className="flex-1"
                                         >
-                                            Approve
+                                            Approve Listing
                                         </Button>
                                         <Button
                                             variant="outline"
                                             size="sm"
-                                            icon={<MdCancel />}
-                                            onClick={() => handleReject(billboard.id)}
+                                            onClick={() => openRejectModal(billboard)}
                                             className="flex-1"
                                         >
-                                            Reject
+                                            Reject Listing
                                         </Button>
                                     </div>
                                 )}
@@ -165,7 +249,51 @@ const ListingVerification: React.FC = () => {
                         <p className="text-sm text-neutral-400 mt-1">All listings matching your filters will appear here</p>
                     </Card>
                 )}
+
+                {filtered.length > 0 && (
+                    <Card className="p-0 overflow-hidden">
+                        <Pagination
+                            currentPage={currentPage}
+                            totalPages={totalPages}
+                            onPageChange={setCurrentPage}
+                        />
+                    </Card>
+                )}
             </div>
+
+            <Modal
+                isOpen={!!rejectingBillboard}
+                onClose={closeRejectModal}
+                title="Reject Listing"
+                closeOnBackdrop={!submittingReview}
+                size="md"
+            >
+                <div className="space-y-4">
+                    <div>
+                        <p className="text-sm text-neutral-500">
+                            Tell the owner why <span className="font-semibold text-neutral-900">{rejectingBillboard?.title}</span> is being rejected so they can fix it and resubmit.
+                        </p>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-neutral-700 mb-2">Reason *</label>
+                        <textarea
+                            rows={5}
+                            value={rejectionReason}
+                            onChange={(e) => setRejectionReason(e.target.value)}
+                            className="w-full rounded-2xl border border-neutral-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            placeholder="Example: The billboard photos do not clearly show the structure and roadside placement."
+                        />
+                    </div>
+                    <div className="flex items-center justify-end gap-3">
+                        <Button variant="ghost" onClick={closeRejectModal} disabled={submittingReview}>
+                            Cancel
+                        </Button>
+                        <Button variant="outline" onClick={handleReject} loading={submittingReview}>
+                            Save Rejection
+                        </Button>
+                    </div>
+                </div>
+            </Modal>
         </DashboardLayout>
     );
 };

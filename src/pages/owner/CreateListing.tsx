@@ -426,7 +426,7 @@ const CreateListing: React.FC = () => {
         console.error("Unable to sync owner asset preference:", profileError);
       }
 
-      toast.success("Listing created successfully!");
+      toast.success("Listing submitted for admin review.");
       localStorage.removeItem(getDraftKey());
       setHasUnsavedChanges(false);
       navigate("/dashboard/owner/listings");
@@ -1550,7 +1550,8 @@ const CreateListing: React.FC = () => {
             </Card>
             <p className="text-sm text-neutral-500 text-center">
               By submitting, you confirm that all information is accurate and
-              you have the right to list this {formData.category}.
+              you have the right to list this {formData.category}. Admin will
+              review the listing before it becomes visible to advertisers.
             </p>
           </motion.div>
         );

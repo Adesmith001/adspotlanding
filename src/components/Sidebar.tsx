@@ -69,6 +69,7 @@ const Sidebar: React.FC<SidebarProps> = ({ userRole }) => {
         { label: 'Users', href: '/dashboard/admin/users', icon: <MdPeople size={20} /> },
         { label: 'Verify Listings', href: '/dashboard/admin/listings', icon: <MdVerifiedUser size={20} /> },
         { label: 'Transactions', href: '/dashboard/admin/transactions', icon: <MdPayment size={20} /> },
+        { label: 'Messages', href: '/dashboard/admin/messages', icon: <MdMessage size={20} /> },
         { label: 'Settings', href: '/dashboard/admin/settings', icon: <MdSettings size={20} /> },
     ];
 

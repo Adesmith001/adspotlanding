@@ -85,6 +85,9 @@ export interface Billboard {
 
   // Status & Metrics
   status: BillboardStatus;
+  adminReviewReason?: string;
+  adminReviewedAt?: Date;
+  adminReviewedBy?: string;
   rating: number;
   reviewCount: number;
   totalBookings: number;
@@ -209,7 +212,7 @@ export interface Conversation {
     [userId: string]: {
       name: string;
       photo?: string;
-      role: "owner" | "advertiser";
+      role: "owner" | "advertiser" | "admin";
     };
   };
   lastMessage: string;
@@ -333,6 +336,8 @@ export type NotificationType =
   | "booking_request"
   | "booking_confirmed"
   | "booking_cancelled"
+  | "listing_approved"
+  | "listing_rejected"
   | "payment_due"
   | "payment_received"
   | "payout_scheduled"

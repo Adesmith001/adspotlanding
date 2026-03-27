@@ -402,7 +402,11 @@ const Messages: React.FC<MessagesProps> = ({ userRole }) => {
     <DashboardLayout
       userRole={userRole}
       title="Messages"
-      subtitle="Chat with advertisers and billboard owners"
+      subtitle={
+        userRole === "admin"
+          ? "Chat directly with any owner or advertiser"
+          : "Chat with advertisers and billboard owners"
+      }
       hideHeader
       hideMobileNav={!!selectedConversation}
       contentClassName={
@@ -416,6 +420,8 @@ const Messages: React.FC<MessagesProps> = ({ userRole }) => {
           description={
             userRole === "owner"
               ? "When advertisers inquire about your billboards, conversations will appear here."
+              : userRole === "admin"
+              ? "Start a conversation from the user management page to message an owner or advertiser."
               : "Start a conversation by inquiring about a billboard you're interested in."
           }
           actionLabel={

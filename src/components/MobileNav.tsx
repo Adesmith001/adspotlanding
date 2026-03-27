@@ -49,6 +49,7 @@ const MobileNav: React.FC<MobileNavProps> = ({ userRole }) => {
         { label: 'Users', href: '/dashboard/admin/users', icon: <MdPeople size={22} /> },
         { label: 'Verify Listings', href: '/dashboard/admin/listings', icon: <MdVerifiedUser size={22} /> },
         { label: 'Transactions', href: '/dashboard/admin/transactions', icon: <MdPayment size={22} /> },
+        { label: 'Messages', href: '/dashboard/admin/messages', icon: <MdMessage size={22} /> },
         { label: 'Settings', href: '/dashboard/admin/settings', icon: <MdSettings size={22} /> },
     ];
 

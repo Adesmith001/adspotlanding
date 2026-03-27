@@ -156,9 +156,19 @@ const EditListing: React.FC = () => {
                 designServiceAvailable,
                 designServicePrice: designServiceAvailable ? designServicePrice : 0,
                 primaryAssetType: listing.category || 'billboard',
+                ...(listing.status === 'rejected'
+                    ? {
+                        status: 'pending',
+                        adminReviewReason: undefined,
+                        adminReviewedAt: undefined,
+                        adminReviewedBy: undefined,
+                    }
+                    : {}),
             } as Partial<Billboard>);
 
-            toast.success('Listing updated successfully');
+            toast.success(listing.status === 'rejected'
+                ? 'Listing updated and resubmitted for admin review'
+                : 'Listing updated successfully');
             navigate('/dashboard/owner/listings');
         } catch (error) {
             console.error('Error updating listing:', error);

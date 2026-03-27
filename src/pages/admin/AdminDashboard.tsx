@@ -1,19 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
-    MdPeople,
-    MdAdminPanelSettings,
+    MdArrowForward,
     MdAttachMoney,
-    MdVerifiedUser,
-    MdTrendingUp,
     MdDashboard,
     MdFlag,
-    MdArrowForward,
+    MdMessage,
     MdMoreHoriz,
+    MdPeople,
+    MdTrendingUp,
+    MdVerifiedUser,
 } from 'react-icons/md';
 import DashboardLayout from '@/components/DashboardLayout';
-import { getAdminStats, getAllReports, type Report } from '@/services/admin.service';
+import { getAdminStats, getAllReports, type AdminStats, type Report } from '@/services/admin.service';
 import { ensureAdminPayoutReminders, getDuePayouts } from '@/services/payout.service';
 import type { Payout } from '@/types/billboard.types';
 
@@ -27,7 +27,7 @@ const reportStatusStyle: Record<string, string> = {
 };
 
 const AdminDashboard: React.FC = () => {
-    const [stats, setStats] = useState<any>(null);
+    const [stats, setStats] = useState<AdminStats | null>(null);
     const [reports, setReports] = useState<Report[]>([]);
     const [duePayouts, setDuePayouts] = useState<Payout[]>([]);
     const [loading, setLoading] = useState(true);
@@ -50,7 +50,8 @@ const AdminDashboard: React.FC = () => {
                 setLoading(false);
             }
         };
-        fetchStats();
+
+        void fetchStats();
     }, []);
 
     if (loading) {
@@ -78,24 +79,24 @@ const AdminDashboard: React.FC = () => {
             iconBg: 'bg-primary-50 text-primary-600',
         },
         {
-            label: 'Total Billboards',
-            value: stats?.totalBillboards || 0,
-            sub: `${stats?.activeBillboards || 0} active · ${stats?.pendingBillboards || 0} pending`,
-            icon: <MdDashboard size={20} />,
-            iconBg: 'bg-[#d4f34a]/30 text-green-700',
-        },
-        {
-            label: 'Total Revenue',
+            label: 'Paid In',
             value: formatPrice(stats?.totalRevenue || 0),
-            sub: 'All-time platform revenue',
+            sub: `${stats?.totalTransactions || 0} completed payments received`,
             icon: <MdAttachMoney size={20} />,
             iconBg: 'bg-amber-50 text-amber-600',
         },
         {
-            label: 'Transactions',
-            value: stats?.totalTransactions || 0,
-            sub: 'Total processed payments',
+            label: 'Owner Earnings',
+            value: formatPrice(stats?.totalOwnerEarnings || 0),
+            sub: `${stats?.pendingListingReviews || 0} listings awaiting review`,
             icon: <MdTrendingUp size={20} />,
+            iconBg: 'bg-[#d4f34a]/30 text-green-700',
+        },
+        {
+            label: 'Platform Fees',
+            value: formatPrice(stats?.platformFees || 0),
+            sub: `${stats?.activeBillboards || 0} active · ${stats?.rejectedBillboards || 0} rejected`,
+            icon: <MdDashboard size={20} />,
             iconBg: 'bg-purple-50 text-purple-600',
         },
     ];
@@ -106,7 +107,6 @@ const AdminDashboard: React.FC = () => {
     return (
         <DashboardLayout userRole="admin" title="Admin Dashboard" subtitle="Platform overview and management">
             <div className="space-y-5">
-                {/* Stats Row */}
                 <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -114,7 +114,7 @@ const AdminDashboard: React.FC = () => {
                 >
                     {statCards.map((card, i) => (
                         <motion.div
-                            key={i}
+                            key={card.label}
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: i * 0.05 }}
@@ -133,9 +133,7 @@ const AdminDashboard: React.FC = () => {
                     ))}
                 </motion.div>
 
-                {/* Main grid */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                    {/* Reports panel — 2 cols */}
                     <motion.div
                         initial={{ opacity: 0, y: 12 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -197,25 +195,23 @@ const AdminDashboard: React.FC = () => {
                         )}
                     </motion.div>
 
-                    {/* Right panel */}
                     <div className="space-y-4">
-                        {/* Platform health card */}
                         <motion.div
                             initial={{ opacity: 0, y: 12 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: 0.18 }}
                             className="bg-neutral-900 rounded-2xl p-5 text-white"
                         >
-                            <p className="text-xs text-white/50 mb-1">Platform Revenue</p>
+                            <p className="text-xs text-white/50 mb-1">Money Paid In</p>
                             <p className="text-2xl font-bold">{formatPrice(stats?.totalRevenue || 0)}</p>
                             <div className="mt-4 pt-4 border-t border-white/10 grid grid-cols-2 gap-3">
                                 <div>
-                                    <p className="text-[10px] text-white/40">Billboards</p>
+                                    <p className="text-[10px] text-white/40">Listings</p>
                                     <p className="text-base font-semibold text-[#d4f34a]">{stats?.totalBillboards || 0}</p>
                                 </div>
                                 <div>
-                                    <p className="text-[10px] text-white/40">Users</p>
-                                    <p className="text-base font-semibold text-white/70">{stats?.totalUsers || 0}</p>
+                                    <p className="text-[10px] text-white/40">Reviews Pending</p>
+                                    <p className="text-base font-semibold text-white/70">{stats?.pendingListingReviews || 0}</p>
                                 </div>
                             </div>
                         </motion.div>
@@ -239,7 +235,6 @@ const AdminDashboard: React.FC = () => {
                                                 <p className="text-sm font-semibold text-neutral-900">{payout.ownerName}</p>
                                                 <p className="text-xs text-neutral-500">
                                                     {payout.payoutDate.toLocaleDateString('en-NG', { weekday: 'short', day: 'numeric', month: 'short' })}
-                                                    {payout.platformFeeAmount ? ` • fee ${formatPrice(payout.platformFeeAmount)}` : ' • full payout'}
                                                 </p>
                                             </div>
                                             <span className="text-sm font-semibold text-neutral-900">{formatPrice(payout.amount)}</span>
@@ -247,16 +242,12 @@ const AdminDashboard: React.FC = () => {
                                     ))
                                 )}
                             </div>
-                            <Link
-                                to="/dashboard/admin/transactions"
-                                className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-primary-700"
-                            >
+                            <Link to="/dashboard/admin/transactions" className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-primary-700">
                                 Open payout queue
                                 <MdArrowForward size={14} />
                             </Link>
                         </motion.div>
 
-                        {/* Quick Actions */}
                         <motion.div
                             initial={{ opacity: 0, y: 12 }}
                             animate={{ opacity: 1, y: 0 }}
@@ -270,7 +261,7 @@ const AdminDashboard: React.FC = () => {
                                 { label: 'User Management', href: '/dashboard/admin/users', icon: <MdPeople size={16} /> },
                                 { label: 'Verify Listings', href: '/dashboard/admin/listings', icon: <MdVerifiedUser size={16} /> },
                                 { label: 'Transactions', href: '/dashboard/admin/transactions', icon: <MdAttachMoney size={16} /> },
-                                { label: 'Admin Settings', href: '/dashboard/admin/settings', icon: <MdAdminPanelSettings size={16} /> },
+                                { label: 'Messages', href: '/dashboard/admin/messages', icon: <MdMessage size={16} /> },
                             ].map((action) => (
                                 <Link
                                     key={action.href}
@@ -288,33 +279,67 @@ const AdminDashboard: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Platform quick-access cards */}
-                <motion.div
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.28 }}
-                    className="grid grid-cols-1 sm:grid-cols-3 gap-4"
-                >
-                    {[
-                        { label: 'User Management', sub: 'View and manage accounts', icon: <MdPeople size={22} />, href: '/dashboard/admin/users', bg: 'bg-primary-50/70', iconColor: 'text-primary-600' },
-                        { label: 'Verify Listings', sub: 'Approve or reject billboards', icon: <MdVerifiedUser size={22} />, href: '/dashboard/admin/listings', bg: 'bg-[#d4f34a]/20', iconColor: 'text-green-700' },
-                        { label: 'Transactions', sub: 'Monitor platform payments', icon: <MdAttachMoney size={22} />, href: '/dashboard/admin/transactions', bg: 'bg-purple-50/70', iconColor: 'text-purple-600' },
-                    ].map((card, i) => (
-                        <Link
-                            key={i}
-                            to={card.href}
-                            className={`${card.bg} rounded-2xl p-5 flex items-center gap-4 hover:opacity-90 transition-opacity`}
-                        >
-                            <div className={`w-11 h-11 bg-white rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm ${card.iconColor}`}>
-                                {card.icon}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <motion.div
+                        initial={{ opacity: 0, y: 12 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.24 }}
+                        className="bg-white rounded-2xl border border-neutral-100 p-5"
+                    >
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h3 className="font-semibold text-neutral-900 text-sm">Top Owners</h3>
+                                <p className="text-xs text-neutral-400 mt-0.5">By earnings</p>
                             </div>
-                            <div className="min-w-0">
-                                <p className="font-semibold text-neutral-900 text-sm">{card.label}</p>
-                                <p className="text-xs text-neutral-500 mt-0.5">{card.sub}</p>
+                            <Link to="/dashboard/admin/users" className="text-xs font-medium text-neutral-500 hover:text-neutral-900">
+                                View all
+                            </Link>
+                        </div>
+                        <div className="mt-4 space-y-3">
+                            {stats?.topOwners?.length ? stats.topOwners.map((owner) => (
+                                <div key={owner.uid} className="flex items-center justify-between rounded-xl bg-neutral-50 px-4 py-3">
+                                    <div>
+                                        <p className="text-sm font-semibold text-neutral-900">{owner.displayName}</p>
+                                        <p className="text-xs text-neutral-500 truncate">{owner.email}</p>
+                                    </div>
+                                    <span className="text-sm font-semibold text-neutral-900">{formatPrice(owner.amount)}</span>
+                                </div>
+                            )) : (
+                                <p className="text-sm text-neutral-500">Owner earnings will appear here once payments are received.</p>
+                            )}
+                        </div>
+                    </motion.div>
+
+                    <motion.div
+                        initial={{ opacity: 0, y: 12 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.26 }}
+                        className="bg-white rounded-2xl border border-neutral-100 p-5"
+                    >
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h3 className="font-semibold text-neutral-900 text-sm">Top Advertisers</h3>
+                                <p className="text-xs text-neutral-400 mt-0.5">By spend</p>
                             </div>
-                        </Link>
-                    ))}
-                </motion.div>
+                            <Link to="/dashboard/admin/users" className="text-xs font-medium text-neutral-500 hover:text-neutral-900">
+                                View all
+                            </Link>
+                        </div>
+                        <div className="mt-4 space-y-3">
+                            {stats?.topAdvertisers?.length ? stats.topAdvertisers.map((advertiser) => (
+                                <div key={advertiser.uid} className="flex items-center justify-between rounded-xl bg-neutral-50 px-4 py-3">
+                                    <div>
+                                        <p className="text-sm font-semibold text-neutral-900">{advertiser.displayName}</p>
+                                        <p className="text-xs text-neutral-500 truncate">{advertiser.email}</p>
+                                    </div>
+                                    <span className="text-sm font-semibold text-neutral-900">{formatPrice(advertiser.amount)}</span>
+                                </div>
+                            )) : (
+                                <p className="text-sm text-neutral-500">Advertiser spend will appear here once payments are received.</p>
+                            )}
+                        </div>
+                    </motion.div>
+                </div>
             </div>
         </DashboardLayout>
     );

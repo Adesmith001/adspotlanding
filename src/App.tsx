@@ -255,6 +255,14 @@ const router = createBrowserRouter([
         ),
       },
       {
+        path: "/dashboard/admin/messages",
+        element: (
+          <ProtectedRoute requiredRole="admin">
+            <Messages userRole="admin" />
+          </ProtectedRoute>
+        ),
+      },
+      {
         path: "/dashboard/admin/settings",
         element: (
           <ProtectedRoute requiredRole="admin">

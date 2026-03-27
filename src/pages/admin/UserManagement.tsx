@@ -1,42 +1,59 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { MdPeople, MdBlock, MdCheckCircle, MdSearch, MdAdminPanelSettings, MdPerson } from 'react-icons/md';
+import { useNavigate } from 'react-router-dom';
+import { MdAdminPanelSettings, MdBlock, MdCheckCircle, MdMessage, MdPeople, MdSearch } from 'react-icons/md';
 import DashboardLayout from '@/components/DashboardLayout';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
-import { getAllUsers, toggleUserSuspension, updateUserRole, type AdminUser } from '@/services/admin.service';
+import Pagination from '@/components/ui/Pagination';
+import { getAllUsers, startAdminConversation, toggleUserSuspension, updateUserRole, type AdminUser } from '@/services/admin.service';
 import toast from 'react-hot-toast';
 import { useAppSelector } from '@/hooks/useRedux';
 import { selectUser } from '@/store/authSlice';
 
+const PAGE_SIZE = 8;
+
+const formatPrice = (amount: number) =>
+    new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', minimumFractionDigits: 0 }).format(amount);
+
 const UserManagement: React.FC = () => {
+    const navigate = useNavigate();
     const currentUser = useAppSelector(selectUser);
     const [users, setUsers] = useState<AdminUser[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [roleFilter, setRoleFilter] = useState<string>('all');
+    const [currentPage, setCurrentPage] = useState(1);
+    const [messagingUserId, setMessagingUserId] = useState<string | null>(null);
 
     useEffect(() => {
         const fetchUsers = async () => {
             try {
                 const data = await getAllUsers();
                 setUsers(data);
-            } catch {
+            } catch (error) {
+                console.error('Failed to load users:', error);
                 toast.error('Failed to load users');
             } finally {
                 setLoading(false);
             }
         };
-        fetchUsers();
+
+        void fetchUsers();
     }, []);
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchQuery, roleFilter]);
 
     const handleToggleSuspension = async (uid: string, current: boolean) => {
         try {
             const next = !current;
             await toggleUserSuspension(uid, next);
-            setUsers(prev => prev.map(u => u.uid === uid ? { ...u, suspended: next } : u));
+            setUsers(prev => prev.map(user => user.uid === uid ? { ...user, suspended: next } : user));
             toast.success(next ? 'User suspended' : 'User reactivated');
-        } catch {
+        } catch (error) {
+            console.error('Failed to update user status:', error);
             toast.error('Failed to update user status');
         }
     };
@@ -44,30 +61,42 @@ const UserManagement: React.FC = () => {
     const handlePromoteToAdmin = async (uid: string) => {
         try {
             await updateUserRole(uid, 'admin');
-            setUsers(prev => prev.map(u => u.uid === uid ? { ...u, role: 'admin' } : u));
+            setUsers(prev => prev.map(user => user.uid === uid ? { ...user, role: 'admin' } : user));
             toast.success('User promoted to admin');
-        } catch {
+        } catch (error) {
+            console.error('Failed to promote user:', error);
             toast.error('Failed to promote user');
         }
     };
 
-    const handleRevokeAdmin = async (uid: string, originalRole: 'owner' | 'advertiser') => {
+    const handleMessageUser = async (user: AdminUser) => {
+        if (!currentUser?.uid) {
+            toast.error('You need to be signed in as an admin to message users.');
+            return;
+        }
+
+        setMessagingUserId(user.uid);
         try {
-            await updateUserRole(uid, originalRole);
-            setUsers(prev => prev.map(u => u.uid === uid ? { ...u, role: originalRole } : u));
-            toast.success('Admin privileges revoked');
-        } catch {
-            toast.error('Failed to revoke admin');
+            const conversationId = await startAdminConversation(currentUser.uid, user.uid);
+            navigate(`/dashboard/admin/messages?conversation=${conversationId}`);
+        } catch (error) {
+            console.error('Failed to start conversation:', error);
+            toast.error('Failed to open conversation');
+        } finally {
+            setMessagingUserId(null);
         }
     };
 
-    const filtered = users.filter(u => {
-        const matchSearch =
-            (u.displayName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-            (u.email || '').toLowerCase().includes(searchQuery.toLowerCase());
-        const matchRole = roleFilter === 'all' || u.role === roleFilter;
-        return matchSearch && matchRole;
+    const filtered = users.filter(user => {
+        const matchesSearch =
+            (user.displayName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+            (user.email || '').toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesRole = roleFilter === 'all' || user.role === roleFilter;
+        return matchesSearch && matchesRole;
     });
+
+    const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+    const paginatedUsers = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
     if (loading) {
         return (
@@ -87,10 +116,33 @@ const UserManagement: React.FC = () => {
         return 'bg-green-100 text-green-700';
     };
 
+    const getValueLabel = (user: AdminUser) => {
+        if (user.role === 'owner') {
+            return {
+                label: 'Earned',
+                value: formatPrice(user.totalEarned || 0),
+                sub: user.totalGrossSales > (user.totalEarned || 0) ? `Gross sales ${formatPrice(user.totalGrossSales)}` : `${user.paidBookingsCount} paid bookings`,
+            };
+        }
+
+        if (user.role === 'advertiser') {
+            return {
+                label: 'Spent',
+                value: formatPrice(user.totalSpent || 0),
+                sub: `${user.paidBookingsCount} paid bookings`,
+            };
+        }
+
+        return {
+            label: 'Value',
+            value: '—',
+            sub: 'Admin account',
+        };
+    };
+
     return (
         <DashboardLayout userRole="admin" title="User Management" subtitle="View and manage all user accounts">
             <div className="space-y-6">
-                {/* Filters */}
                 <Card className="p-4">
                     <div className="flex flex-col md:flex-row gap-4">
                         <div className="flex-1 relative">
@@ -116,41 +168,43 @@ const UserManagement: React.FC = () => {
                     </div>
                 </Card>
 
-                {/* Stats chips */}
                 <div className="flex gap-3 flex-wrap">
-                    {['all', 'owner', 'advertiser', 'admin'].map(r => {
-                        const count = r === 'all' ? users.length : users.filter(u => u.role === r).length;
+                    {['all', 'owner', 'advertiser', 'admin'].map(role => {
+                        const count = role === 'all' ? users.length : users.filter(user => user.role === role).length;
                         return (
                             <button
-                                key={r}
-                                onClick={() => setRoleFilter(r)}
-                                className={`px-4 py-1.5 rounded-full text-sm font-semibold border transition-all ${roleFilter === r ? 'bg-primary-600 text-white border-primary-600' : 'bg-white text-neutral-600 border-neutral-200 hover:border-primary-300'}`}
+                                key={role}
+                                onClick={() => setRoleFilter(role)}
+                                className={`px-4 py-1.5 rounded-full text-sm font-semibold border transition-all ${roleFilter === role ? 'bg-primary-600 text-white border-primary-600' : 'bg-white text-neutral-600 border-neutral-200 hover:border-primary-300'}`}
                             >
-                                {r === 'all' ? 'All' : r.charAt(0).toUpperCase() + r.slice(1) + 's'} ({count})
+                                {role === 'all' ? 'All' : role.charAt(0).toUpperCase() + role.slice(1) + 's'} ({count})
                             </button>
                         );
                     })}
                 </div>
 
-                {/* Users Table */}
-                <Card>
+                <Card className="p-0 overflow-hidden">
                     <div className="overflow-x-auto">
-                        <table className="w-full min-w-[860px]">
+                        <table className="w-full min-w-[1160px]">
                             <thead>
                                 <tr className="border-b border-neutral-200">
                                     <th className="text-left py-4 px-4 sm:px-6 text-sm font-medium text-neutral-500">User</th>
                                     <th className="text-left py-4 px-4 sm:px-6 text-sm font-medium text-neutral-500">Role</th>
                                     <th className="text-left py-4 px-4 sm:px-6 text-sm font-medium text-neutral-500">Status</th>
                                     <th className="text-left py-4 px-4 sm:px-6 text-sm font-medium text-neutral-500">Joined</th>
+                                    <th className="text-left py-4 px-4 sm:px-6 text-sm font-medium text-neutral-500">Value</th>
+                                    <th className="text-left py-4 px-4 sm:px-6 text-sm font-medium text-neutral-500">Last Paid Activity</th>
                                     <th className="text-right py-4 px-4 sm:px-6 text-sm font-medium text-neutral-500">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {filtered.map((u) => {
-                                    const isSelf = u.uid === currentUser?.uid;
+                                {paginatedUsers.map((user) => {
+                                    const isSelf = user.uid === currentUser?.uid;
+                                    const userValue = getValueLabel(user);
+
                                     return (
                                         <motion.tr
-                                            key={u.uid}
+                                            key={user.uid}
                                             initial={{ opacity: 0 }}
                                             animate={{ opacity: 1 }}
                                             className="border-b border-neutral-100 hover:bg-neutral-50 transition-colors"
@@ -158,63 +212,67 @@ const UserManagement: React.FC = () => {
                                             <td className="py-4 px-4 sm:px-6">
                                                 <div className="flex items-center gap-3">
                                                     <div className="w-10 h-10 rounded-full bg-neutral-900 flex items-center justify-center text-white font-bold text-sm">
-                                                        {(u.displayName || 'U').charAt(0).toUpperCase()}
+                                                        {(user.displayName || 'U').charAt(0).toUpperCase()}
                                                     </div>
                                                     <div>
                                                         <p className="font-medium text-neutral-900 text-sm">
-                                                            {u.displayName || 'Unknown'}
+                                                            {user.displayName || 'Unknown'}
                                                             {isSelf && <span className="ml-2 text-xs text-primary-500">(you)</span>}
                                                         </p>
-                                                        <p className="text-xs text-neutral-500">{u.email}</p>
+                                                        <p className="text-xs text-neutral-500">{user.email}</p>
                                                     </div>
                                                 </div>
                                             </td>
                                             <td className="py-4 px-4 sm:px-6">
-                                                <span className={`px-2.5 py-1 rounded-full text-xs font-medium capitalize ${roleBadge(u.role)}`}>
-                                                    {u.role}
+                                                <span className={`px-2.5 py-1 rounded-full text-xs font-medium capitalize ${roleBadge(user.role)}`}>
+                                                    {user.role}
                                                 </span>
                                             </td>
                                             <td className="py-4 px-4 sm:px-6">
-                                                <span className={`flex items-center gap-1.5 text-xs font-medium ${u.suspended ? 'text-red-600' : 'text-green-600'}`}>
-                                                    {u.suspended ? <MdBlock size={14} /> : <MdCheckCircle size={14} />}
-                                                    {u.suspended ? 'Suspended' : 'Active'}
+                                                <span className={`flex items-center gap-1.5 text-xs font-medium ${user.suspended ? 'text-red-600' : 'text-green-600'}`}>
+                                                    {user.suspended ? <MdBlock size={14} /> : <MdCheckCircle size={14} />}
+                                                    {user.suspended ? 'Suspended' : 'Active'}
                                                 </span>
                                             </td>
                                             <td className="py-4 px-4 sm:px-6 text-sm text-neutral-500 whitespace-nowrap">
-                                                {u.createdAt instanceof Date
-                                                    ? u.createdAt.toLocaleDateString()
-                                                    : new Date(u.createdAt).toLocaleDateString()}
+                                                {user.createdAt.toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                            </td>
+                                            <td className="py-4 px-4 sm:px-6">
+                                                <p className="text-sm font-semibold text-neutral-900">{userValue.value}</p>
+                                                <p className="text-xs text-neutral-500">{userValue.label} · {userValue.sub}</p>
+                                            </td>
+                                            <td className="py-4 px-4 sm:px-6 text-sm text-neutral-500 whitespace-nowrap">
+                                                {user.lastTransactionAt
+                                                    ? user.lastTransactionAt.toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })
+                                                    : 'No paid activity'}
                                             </td>
                                             <td className="py-4 px-4 sm:px-6">
                                                 {!isSelf && (
                                                     <div className="flex items-center justify-end gap-2 flex-wrap">
-                                                        {/* Suspend / Reactivate */}
                                                         <Button
-                                                            variant={u.suspended ? 'primary' : 'outline'}
+                                                            variant="outline"
                                                             size="sm"
-                                                            onClick={() => handleToggleSuspension(u.uid, !!u.suspended)}
+                                                            icon={<MdMessage size={16} />}
+                                                            loading={messagingUserId === user.uid}
+                                                            onClick={() => handleMessageUser(user)}
                                                         >
-                                                            {u.suspended ? 'Reactivate' : 'Suspend'}
+                                                            Message
                                                         </Button>
-
-                                                        {/* Promote / Revoke admin */}
-                                                        {u.role !== 'admin' ? (
+                                                        <Button
+                                                            variant={user.suspended ? 'primary' : 'outline'}
+                                                            size="sm"
+                                                            onClick={() => handleToggleSuspension(user.uid, !!user.suspended)}
+                                                        >
+                                                            {user.suspended ? 'Reactivate' : 'Suspend'}
+                                                        </Button>
+                                                        {user.role !== 'admin' && (
                                                             <Button
                                                                 variant="outline"
                                                                 size="sm"
                                                                 icon={<MdAdminPanelSettings size={16} />}
-                                                                onClick={() => handlePromoteToAdmin(u.uid)}
+                                                                onClick={() => handlePromoteToAdmin(user.uid)}
                                                             >
                                                                 Make Admin
-                                                            </Button>
-                                                        ) : (
-                                                            <Button
-                                                                variant="outline"
-                                                                size="sm"
-                                                                icon={<MdPerson size={16} />}
-                                                                onClick={() => handleRevokeAdmin(u.uid, 'advertiser')}
-                                                            >
-                                                                Revoke Admin
                                                             </Button>
                                                         )}
                                                     </div>
@@ -233,6 +291,11 @@ const UserManagement: React.FC = () => {
                             </div>
                         )}
                     </div>
+                    <Pagination
+                        currentPage={currentPage}
+                        totalPages={totalPages}
+                        onPageChange={setCurrentPage}
+                    />
                 </Card>
             </div>
         </DashboardLayout>

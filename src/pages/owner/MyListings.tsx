@@ -61,6 +61,11 @@ const MyListings: React.FC = () => {
     };
 
     const handleToggleStatus = async (billboard: Billboard) => {
+        if (!['active', 'inactive'].includes(billboard.status)) {
+            toast.error('This listing must be approved before you can change its status.');
+            return;
+        }
+
         const newStatus = billboard.status === 'active' ? 'inactive' : 'active';
         try {
             await updateBillboard(billboard.id, { status: newStatus });
@@ -213,14 +218,16 @@ const MyListings: React.FC = () => {
                                                                 className="flex items-center gap-2 px-4 py-2.5 text-sm text-neutral-700 hover:bg-neutral-50 transition-colors"
                                                             >
                                                                 <MdEdit size={16} />
-                                                                Edit Listing
+                                                                {billboard.status === 'rejected' ? 'Edit & Resubmit' : 'Edit Listing'}
                                                             </Link>
-                                                            <button
-                                                                onClick={() => handleToggleStatus(billboard)}
-                                                                className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-neutral-700 hover:bg-neutral-50 transition-colors"
-                                                            >
-                                                                {billboard.status === 'active' ? 'Deactivate' : 'Activate'}
-                                                            </button>
+                                                            {['active', 'inactive'].includes(billboard.status) && (
+                                                                <button
+                                                                    onClick={() => handleToggleStatus(billboard)}
+                                                                    className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-neutral-700 hover:bg-neutral-50 transition-colors"
+                                                                >
+                                                                    {billboard.status === 'active' ? 'Deactivate' : 'Activate'}
+                                                                </button>
+                                                            )}
                                                             <button
                                                                 onClick={() => handleDelete(billboard.id)}
                                                                 className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
@@ -243,6 +250,25 @@ const MyListings: React.FC = () => {
                                                 <MdLocationOn size={14} className="text-neutral-400" />
                                                 <span className="line-clamp-1">{billboard.location.city}, {billboard.location.state}</span>
                                             </div>
+
+                                            {(billboard.status === 'pending' || billboard.status === 'rejected') && (
+                                                <div className={`mb-4 rounded-2xl border px-4 py-3 text-sm ${
+                                                    billboard.status === 'pending'
+                                                        ? 'border-amber-200 bg-amber-50 text-amber-800'
+                                                        : 'border-red-200 bg-red-50 text-red-700'
+                                                }`}>
+                                                    <p className="font-medium">
+                                                        {billboard.status === 'pending'
+                                                            ? 'This listing is waiting for admin approval before it can go live.'
+                                                            : 'This listing was rejected during admin verification.'}
+                                                    </p>
+                                                    {billboard.adminReviewReason && (
+                                                        <p className="mt-1 text-xs leading-relaxed">
+                                                            Reason: {billboard.adminReviewReason}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            )}
 
                                             {/* Stats */}
                                             <div className="flex items-center justify-between text-sm mb-4">

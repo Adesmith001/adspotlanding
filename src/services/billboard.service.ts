@@ -74,6 +74,7 @@ const mapBillboardData = (id: string, data: any): Billboard =>
     designServiceAvailable: Boolean(data.designServiceAvailable),
     designServicePrice:
       typeof data.designServicePrice === "number" ? data.designServicePrice : 0,
+    adminReviewedAt: optionalTimestampToDate(data.adminReviewedAt),
     unavailableDates: Array.isArray(data.unavailableDates)
       ? data.unavailableDates.map((period: any) => ({
           ...period,
@@ -332,7 +333,10 @@ export const createBillboard = async (
         cancellationPolicy: data.cancellationPolicy,
         advanceNotice: data.advanceNotice,
       },
-      status: "active",
+      status: "pending",
+      adminReviewReason: undefined,
+      adminReviewedAt: undefined,
+      adminReviewedBy: undefined,
       rating: 0,
       reviewCount: 0,
       totalBookings: 0,
@@ -718,10 +722,13 @@ export const updateBillboard = async (
 ): Promise<void> => {
   try {
     const docRef = doc(db, BILLBOARDS_COLLECTION, billboardId);
-    await updateDoc(docRef, {
-      ...updates,
-      updatedAt: new Date(),
-    });
+    await updateDoc(
+      docRef,
+      stripUndefinedDeep({
+        ...updates,
+        updatedAt: new Date(),
+      })
+    );
   } catch (error) {
     console.error("Error updating billboard:", error);
     throw new Error("Failed to update billboard");
