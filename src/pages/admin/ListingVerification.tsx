@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { MdCheckCircle, MdFilterList, MdSearch, MdVerifiedUser } from 'react-icons/md';
+import { MdCheckCircle, MdDelete, MdFilterList, MdSearch, MdVerifiedUser } from 'react-icons/md';
 import DashboardLayout from '@/components/DashboardLayout';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
 import Pagination from '@/components/ui/Pagination';
-import { getAllBillboards, updateBillboardAdminStatus, type AdminBillboard } from '@/services/admin.service';
+import { deleteAdminBillboard, getAllBillboards, updateBillboardAdminStatus, type AdminBillboard } from '@/services/admin.service';
 import { useAppSelector } from '@/hooks/useRedux';
 import { selectUser } from '@/store/authSlice';
 import toast from 'react-hot-toast';
@@ -67,6 +67,51 @@ const ListingVerification: React.FC = () => {
         } catch (error) {
             console.error('Error approving listing:', error);
             toast.error('Failed to approve listing');
+        }
+    };
+
+    const handleDeactivate = async (billboard: AdminBillboard) => {
+        if (!user?.uid) {
+            toast.error('You need to be signed in as an admin to manage listings.');
+            return;
+        }
+
+        try {
+            await updateBillboardAdminStatus(
+                billboard.id,
+                user.uid,
+                billboard.status === 'inactive' ? 'active' : 'inactive',
+            );
+            setBillboards(prev => prev.map((entry) => (
+                entry.id === billboard.id
+                    ? {
+                        ...entry,
+                        status: billboard.status === 'inactive' ? 'active' : 'inactive',
+                        adminReviewedAt: new Date(),
+                        adminReviewedBy: user.uid,
+                    }
+                    : entry
+            )));
+            toast.success(billboard.status === 'inactive' ? 'Listing reactivated' : 'Listing deactivated');
+        } catch (error) {
+            console.error('Error updating listing status:', error);
+            toast.error('Failed to update listing');
+        }
+    };
+
+    const handleDelete = async (billboard: AdminBillboard) => {
+        const shouldDelete = window.confirm(`Delete "${billboard.title}" permanently?`);
+        if (!shouldDelete) {
+            return;
+        }
+
+        try {
+            await deleteAdminBillboard(billboard.id);
+            setBillboards(prev => prev.filter((entry) => entry.id !== billboard.id));
+            toast.success('Listing deleted');
+        } catch (error) {
+            console.error('Error deleting listing:', error);
+            toast.error('Failed to delete listing');
         }
     };
 
@@ -177,6 +222,7 @@ const ListingVerification: React.FC = () => {
                                 <option value="all">All Statuses</option>
                                 <option value="pending">Pending</option>
                                 <option value="active">Active</option>
+                                <option value="inactive">Inactive</option>
                                 <option value="rejected">Rejected</option>
                             </select>
                         </div>
@@ -234,6 +280,36 @@ const ListingVerification: React.FC = () => {
                                             className="flex-1"
                                         >
                                             Reject Listing
+                                        </Button>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            icon={<MdDelete />}
+                                            onClick={() => handleDelete(billboard)}
+                                            className="flex-1"
+                                        >
+                                            Delete Listing
+                                        </Button>
+                                    </div>
+                                )}
+
+                                {billboard.status !== 'pending' && (
+                                    <div className="flex flex-col sm:flex-row gap-3 pt-4 mt-4 border-t border-neutral-100">
+                                        <Button
+                                            size="sm"
+                                            onClick={() => handleDeactivate(billboard)}
+                                            className="flex-1"
+                                        >
+                                            {billboard.status === 'inactive' ? 'Reactivate Listing' : 'Deactivate Listing'}
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            icon={<MdDelete />}
+                                            onClick={() => handleDelete(billboard)}
+                                            className="flex-1"
+                                        >
+                                            Delete Listing
                                         </Button>
                                     </div>
                                 )}

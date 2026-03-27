@@ -33,13 +33,16 @@ import {
     setDefaultCard,
     DEFAULT_OWNER_PRICING_PLAN,
     OWNER_PRICING_BENCHMARKS,
+    addOwnerPayoutAccount,
+    removeOwnerPayoutAccount,
+    setDefaultOwnerPayoutAccount,
 } from '@/services/user.service';
 import type { SavedCard } from '@/services/user.service';
 import { getPaymentHistory } from '@/services/payment.service';
 import type { PaymentTransaction } from '@/services/payment.service';
 import { getOwnerScheduledPayouts } from '@/services/payout.service';
 import type { Payout } from '@/types/billboard.types';
-import type { OwnerPricingPlanMode } from '@/types/user.types';
+import type { OwnerPricingPlanMode, PayoutAccount } from '@/types/user.types';
 import { createOwnerCoupon, getOwnerCoupons, setOwnerCouponActiveState, type OwnerCoupon } from '@/services/coupon.service';
 import { changePassword } from '@/services/auth.service';
 import { auth } from '@/services/firebase';
@@ -87,6 +90,12 @@ const Settings: React.FC<SettingsProps> = ({ userRole }) => {
         fixedYearlyFee: DEFAULT_OWNER_PRICING_PLAN.fixedYearlyFee,
         revenueSharePercent: DEFAULT_OWNER_PRICING_PLAN.revenueSharePercent,
     });
+    const [payoutAccounts, setPayoutAccounts] = useState<PayoutAccount[]>([]);
+    const [showAddPayoutAccountForm, setShowAddPayoutAccountForm] = useState(false);
+    const [payoutBankName, setPayoutBankName] = useState('');
+    const [payoutAccountNumber, setPayoutAccountNumber] = useState('');
+    const [payoutAccountName, setPayoutAccountName] = useState('');
+    const [isSavingPayoutAccount, setIsSavingPayoutAccount] = useState(false);
     const [isSavingOwnerSettings, setIsSavingOwnerSettings] = useState(false);
     const [coupons, setCoupons] = useState<OwnerCoupon[]>([]);
     const [couponCode, setCouponCode] = useState('');
@@ -147,6 +156,7 @@ const Settings: React.FC<SettingsProps> = ({ userRole }) => {
                             fixedYearlyFee: profile.ownerPricingPlan?.fixedYearlyFee || DEFAULT_OWNER_PRICING_PLAN.fixedYearlyFee,
                             revenueSharePercent: profile.ownerPricingPlan?.revenueSharePercent || DEFAULT_OWNER_PRICING_PLAN.revenueSharePercent,
                         });
+                        setPayoutAccounts(profile.payoutAccounts || []);
                     }
                 }
             } catch (error) {
@@ -356,6 +366,70 @@ const Settings: React.FC<SettingsProps> = ({ userRole }) => {
             toast.error('Failed to save owner billing model');
         } finally {
             setIsSavingOwnerSettings(false);
+        }
+    };
+
+    const resetPayoutAccountForm = () => {
+        setPayoutBankName('');
+        setPayoutAccountNumber('');
+        setPayoutAccountName('');
+        setShowAddPayoutAccountForm(false);
+    };
+
+    const handleAddPayoutAccount = async () => {
+        if (!user) return;
+
+        if (!payoutBankName.trim() || !payoutAccountNumber.trim() || !payoutAccountName.trim()) {
+            toast.error('Bank name, account number, and account name are required');
+            return;
+        }
+
+        if (payoutAccountNumber.replace(/\D/g, '').length < 10) {
+            toast.error('Enter a valid account number');
+            return;
+        }
+
+        setIsSavingPayoutAccount(true);
+        try {
+            const nextAccounts = await addOwnerPayoutAccount(user.uid, {
+                bankName: payoutBankName,
+                accountNumber: payoutAccountNumber.replace(/\D/g, ''),
+                accountName: payoutAccountName,
+            });
+            setPayoutAccounts(nextAccounts);
+            toast.success('Payout account added');
+            resetPayoutAccountForm();
+        } catch (error) {
+            console.error('Error adding payout account:', error);
+            toast.error('Failed to add payout account');
+        } finally {
+            setIsSavingPayoutAccount(false);
+        }
+    };
+
+    const handleRemovePayoutAccount = async (accountId: string) => {
+        if (!user) return;
+
+        try {
+            const nextAccounts = await removeOwnerPayoutAccount(user.uid, accountId);
+            setPayoutAccounts(nextAccounts);
+            toast.success('Payout account removed');
+        } catch (error) {
+            console.error('Error removing payout account:', error);
+            toast.error('Failed to remove payout account');
+        }
+    };
+
+    const handleSetDefaultPayoutAccount = async (accountId: string) => {
+        if (!user) return;
+
+        try {
+            const nextAccounts = await setDefaultOwnerPayoutAccount(user.uid, accountId);
+            setPayoutAccounts(nextAccounts);
+            toast.success('Default payout account updated');
+        } catch (error) {
+            console.error('Error updating default payout account:', error);
+            toast.error('Failed to update default payout account');
         }
     };
 
@@ -1016,13 +1090,82 @@ const Settings: React.FC<SettingsProps> = ({ userRole }) => {
                                                 <MdCreditCard size={24} />
                                             </div>
                                             <div>
-                                                <p className="font-medium text-neutral-900">Bank Account</p>
-                                                <p className="text-sm text-neutral-500">GTBank •••• 1234</p>
+                                                <p className="font-medium text-neutral-900">Payout Accounts</p>
+                                                <p className="text-sm text-neutral-500">Manage the bank account used for weekly owner payouts.</p>
                                             </div>
                                         </div>
-                                        <Button variant="outline" size="sm">Change</Button>
+                                        <Button variant="outline" size="sm" onClick={() => setShowAddPayoutAccountForm(prev => !prev)}>
+                                            {showAddPayoutAccountForm ? 'Close Form' : 'Add Account'}
+                                        </Button>
                                     </div>
-                                    <p className="text-sm text-neutral-500">Admin receives advertiser payments first, and owner payouts are processed weekly on Mondays.</p>
+                                    <p className="text-sm text-neutral-500">Admin receives advertiser payments first, and owner payouts are processed weekly on Mondays. Revenue-share owners have their onboarding percentage deducted before the payout is scheduled.</p>
+                                    {showAddPayoutAccountForm && (
+                                        <motion.div
+                                            initial={{ opacity: 0, y: -8 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            className="mt-4 rounded-2xl border border-primary-200 bg-primary-50/30 p-4 space-y-3"
+                                        >
+                                            <div className="grid gap-3 md:grid-cols-3">
+                                                <div>
+                                                    <label className="mb-1.5 block text-sm font-medium text-neutral-700">Bank Name</label>
+                                                    <Input value={payoutBankName} onChange={(e) => setPayoutBankName(e.target.value)} placeholder="GTBank" />
+                                                </div>
+                                                <div>
+                                                    <label className="mb-1.5 block text-sm font-medium text-neutral-700">Account Number</label>
+                                                    <Input value={payoutAccountNumber} onChange={(e) => setPayoutAccountNumber(e.target.value.replace(/\D/g, '').slice(0, 12))} placeholder="0123456789" />
+                                                </div>
+                                                <div>
+                                                    <label className="mb-1.5 block text-sm font-medium text-neutral-700">Account Name</label>
+                                                    <Input value={payoutAccountName} onChange={(e) => setPayoutAccountName(e.target.value)} placeholder="Somade Toluwani" />
+                                                </div>
+                                            </div>
+                                            <div className="flex justify-end gap-2">
+                                                <Button variant="ghost" size="sm" onClick={resetPayoutAccountForm} disabled={isSavingPayoutAccount}>
+                                                    Cancel
+                                                </Button>
+                                                <Button size="sm" onClick={handleAddPayoutAccount} disabled={isSavingPayoutAccount}>
+                                                    {isSavingPayoutAccount ? 'Saving...' : 'Save Account'}
+                                                </Button>
+                                            </div>
+                                        </motion.div>
+                                    )}
+                                    <div className="mt-4 space-y-3">
+                                        {payoutAccounts.length === 0 ? (
+                                            <div className="rounded-2xl border border-dashed border-neutral-200 px-4 py-5 text-sm text-neutral-500">
+                                                No payout account added yet. Add one so scheduled owner payouts have a destination.
+                                            </div>
+                                        ) : (
+                                            payoutAccounts.map((account) => (
+                                                <div key={account.id} className="flex flex-col gap-3 rounded-2xl border border-neutral-200 px-4 py-4 md:flex-row md:items-center md:justify-between">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="w-12 h-12 bg-neutral-100 rounded-full flex items-center justify-center text-neutral-600">
+                                                            <MdCreditCard size={24} />
+                                                        </div>
+                                                        <div>
+                                                            <div className="flex items-center gap-2">
+                                                                <p className="font-medium text-neutral-900">{account.bankName}</p>
+                                                                {account.isDefault && (
+                                                                    <span className="rounded-full bg-primary-100 px-2 py-0.5 text-xs font-semibold text-primary-700">Default</span>
+                                                                )}
+                                                            </div>
+                                                            <p className="text-sm text-neutral-500">{account.accountName}</p>
+                                                            <p className="text-xs text-neutral-500">•••• {account.accountNumber.slice(-4)}</p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex gap-2">
+                                                        {!account.isDefault && (
+                                                            <Button variant="outline" size="sm" onClick={() => handleSetDefaultPayoutAccount(account.id)}>
+                                                                Set Default
+                                                            </Button>
+                                                        )}
+                                                        <Button variant="ghost" size="sm" onClick={() => handleRemovePayoutAccount(account.id)}>
+                                                            Remove
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
                                     <div className="mt-5 space-y-3">
                                         {scheduledPayouts.length === 0 ? (
                                             <p className="text-sm text-neutral-500">No scheduled payouts yet.</p>
@@ -1036,6 +1179,11 @@ const Settings: React.FC<SettingsProps> = ({ userRole }) => {
                                                         <p className="text-sm text-neutral-500">
                                                             {payout.paymentCount} payment{payout.paymentCount === 1 ? '' : 's'} scheduled for {payout.payoutDate.toLocaleDateString('en-NG', { weekday: 'long', day: 'numeric', month: 'short' })}
                                                         </p>
+                                                        {payout.platformFeeAmount ? (
+                                                            <p className="text-xs text-neutral-400">
+                                                                Gross {new Intl.NumberFormat('en-NG', { style: 'currency', currency: payout.currency || 'NGN', minimumFractionDigits: 0 }).format(payout.grossAmount || payout.amount)} less {new Intl.NumberFormat('en-NG', { style: 'currency', currency: payout.currency || 'NGN', minimumFractionDigits: 0 }).format(payout.platformFeeAmount)} platform fee
+                                                            </p>
+                                                        ) : null}
                                                     </div>
                                                     <span className="rounded-full bg-neutral-100 px-3 py-1 text-xs font-semibold capitalize text-neutral-700">
                                                         {payout.status}

@@ -15,7 +15,9 @@ import type { ListingCategory } from "@/types/billboard.types";
 import type {
   AppliedOwnerCoupon,
   OwnerPricingPlanMode,
+  PayoutAccount,
 } from "@/types/user.types";
+import { stripUndefinedDeep } from "@/utils/firestore.utils";
 
 // Collections
 const USERS_COLLECTION = "users";
@@ -64,6 +66,7 @@ export interface UserProfile {
   role: "owner" | "advertiser" | "admin";
   preferences: UserPreferences;
   primaryAssetType?: ListingCategory;
+  payoutAccounts?: PayoutAccount[];
   ownerPricingPlan?: OwnerPricingPlan;
   createdAt?: any;
   updatedAt?: any;
@@ -145,6 +148,9 @@ export const syncUserProfile = async (
         if (!profile.ownerPricingPlan) {
           patch.ownerPricingPlan = DEFAULT_OWNER_PRICING_PLAN;
         }
+        if (!Array.isArray(profile.payoutAccounts)) {
+          patch.payoutAccounts = [];
+        }
       }
 
       await updateDoc(userRef, patch);
@@ -185,7 +191,7 @@ export const updateUserProfile = async (
   try {
     const userRef = doc(db, USERS_COLLECTION, uid);
     await updateDoc(userRef, {
-      ...data,
+      ...stripUndefinedDeep(data),
       updatedAt: serverTimestamp(),
     });
   } catch (error) {
@@ -223,12 +229,13 @@ export const updateOwnerCommercialSettings = async (
   data: {
     primaryAssetType?: ListingCategory;
     ownerPricingPlan?: OwnerPricingPlan;
+    payoutAccounts?: PayoutAccount[];
   },
 ): Promise<void> => {
   try {
     const userRef = doc(db, USERS_COLLECTION, uid);
     await updateDoc(userRef, {
-      ...data,
+      ...stripUndefinedDeep(data),
       updatedAt: serverTimestamp(),
     });
   } catch (error) {
@@ -238,6 +245,76 @@ export const updateOwnerCommercialSettings = async (
 };
 
 // ─── Saved Cards ────────────────────────────────────────────────────────────
+export const addOwnerPayoutAccount = async (
+  uid: string,
+  account: Omit<PayoutAccount, "id" | "isDefault" | "createdAt">,
+): Promise<PayoutAccount[]> => {
+  const userRef = doc(db, USERS_COLLECTION, uid);
+  const userSnap = await getDoc(userRef);
+  const existingAccounts = (userSnap.data()?.payoutAccounts || []) as PayoutAccount[];
+
+  const newAccount: PayoutAccount = {
+    id: `acct_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    bankName: account.bankName.trim(),
+    accountNumber: account.accountNumber.trim(),
+    accountName: account.accountName.trim(),
+    isDefault: existingAccounts.length === 0,
+    createdAt: new Date(),
+  };
+
+  const nextAccounts = [...existingAccounts, newAccount];
+  await updateDoc(userRef, {
+    payoutAccounts: nextAccounts,
+    updatedAt: serverTimestamp(),
+  });
+
+  return nextAccounts;
+};
+
+export const removeOwnerPayoutAccount = async (
+  uid: string,
+  accountId: string,
+): Promise<PayoutAccount[]> => {
+  const userRef = doc(db, USERS_COLLECTION, uid);
+  const userSnap = await getDoc(userRef);
+  const existingAccounts = (userSnap.data()?.payoutAccounts || []) as PayoutAccount[];
+  const nextAccounts = existingAccounts.filter((account) => account.id !== accountId);
+
+  if (
+    existingAccounts.some((account) => account.id === accountId && account.isDefault) &&
+    nextAccounts.length > 0
+  ) {
+    nextAccounts[0] = { ...nextAccounts[0], isDefault: true };
+  }
+
+  await updateDoc(userRef, {
+    payoutAccounts: nextAccounts,
+    updatedAt: serverTimestamp(),
+  });
+
+  return nextAccounts;
+};
+
+export const setDefaultOwnerPayoutAccount = async (
+  uid: string,
+  accountId: string,
+): Promise<PayoutAccount[]> => {
+  const userRef = doc(db, USERS_COLLECTION, uid);
+  const userSnap = await getDoc(userRef);
+  const existingAccounts = (userSnap.data()?.payoutAccounts || []) as PayoutAccount[];
+  const nextAccounts = existingAccounts.map((account) => ({
+    ...account,
+    isDefault: account.id === accountId,
+  }));
+
+  await updateDoc(userRef, {
+    payoutAccounts: nextAccounts,
+    updatedAt: serverTimestamp(),
+  });
+
+  return nextAccounts;
+};
+
 const SAVED_CARDS_COLLECTION = "savedCards";
 
 export interface SavedCard {

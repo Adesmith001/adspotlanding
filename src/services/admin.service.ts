@@ -1,6 +1,7 @@
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -310,7 +311,7 @@ export const getAllBillboards = async (): Promise<AdminBillboard[]> => {
 export const updateBillboardAdminStatus = async (
   billboardId: string,
   reviewerId: string,
-  status: "active" | "rejected",
+  status: "active" | "inactive" | "rejected",
   rejectionReason?: string,
 ): Promise<void> => {
   try {
@@ -339,10 +340,16 @@ export const updateBillboardAdminStatus = async (
     if (billboard.ownerId) {
       await createNotification(
         billboard.ownerId,
-        status === "active" ? "listing_approved" : "listing_rejected",
-        status === "active" ? "Listing approved" : "Listing rejected",
+        status === "rejected" ? "listing_rejected" : "listing_approved",
+        status === "active"
+          ? "Listing approved"
+          : status === "inactive"
+          ? "Listing deactivated"
+          : "Listing rejected",
         status === "active"
           ? `Your listing "${billboard.title}" is now live on AdSpot.`
+          : status === "inactive"
+          ? `Your listing "${billboard.title}" was deactivated by admin.`
           : `Your listing "${billboard.title}" was rejected. Reason: ${cleanReason}.`,
         { billboardId },
         "/dashboard/owner/listings",
@@ -351,6 +358,31 @@ export const updateBillboardAdminStatus = async (
   } catch (error) {
     console.error("Error updating billboard status:", error);
     throw error;
+  }
+};
+
+export const deleteAdminBillboard = async (
+  billboardId: string,
+): Promise<void> => {
+  const billboardRef = doc(db, BILLBOARDS_COLLECTION, billboardId);
+  const billboardSnap = await getDoc(billboardRef);
+
+  if (!billboardSnap.exists()) {
+    throw new Error("Listing not found.");
+  }
+
+  const billboard = billboardSnap.data();
+  await deleteDoc(billboardRef);
+
+  if (billboard.ownerId) {
+    await createNotification(
+      billboard.ownerId,
+      "listing_rejected",
+      "Listing deleted",
+      `Your listing "${billboard.title}" was removed by admin.`,
+      { billboardId },
+      "/dashboard/owner/listings",
+    );
   }
 };
 

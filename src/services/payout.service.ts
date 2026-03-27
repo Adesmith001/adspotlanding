@@ -14,6 +14,7 @@ import {
 import { db } from "./firebase";
 import { createNotification } from "./notification.service";
 import type { Payout } from "@/types/billboard.types";
+import type { PayoutAccount } from "@/types/user.types";
 
 const PAYOUTS_COLLECTION = "payouts";
 const USERS_COLLECTION = "users";
@@ -52,6 +53,14 @@ const buildPayoutId = (ownerId: string, weekKey: string) =>
   `${ownerId}_${weekKey}`;
 
 const roundCurrency = (value: number) => Number(value.toFixed(2));
+
+const getDefaultOwnerPayoutAccount = (ownerData: any): PayoutAccount | undefined => {
+  const accounts = Array.isArray(ownerData?.payoutAccounts)
+    ? (ownerData.payoutAccounts as PayoutAccount[])
+    : [];
+
+  return accounts.find((account) => account.isDefault) || accounts[0];
+};
 
 const getOwnerPayoutBreakdown = async (ownerId: string, grossAmount: number) => {
   const ownerSnap = await getDoc(doc(db, USERS_COLLECTION, ownerId));
@@ -109,6 +118,8 @@ export const scheduleOwnerPayoutFromPayment = async (params: {
   const payoutId = buildPayoutId(params.ownerId, weekKey);
   const payoutRef = doc(db, PAYOUTS_COLLECTION, payoutId);
   const payoutSnap = await getDoc(payoutRef);
+  const ownerSnap = await getDoc(doc(db, USERS_COLLECTION, params.ownerId));
+  const defaultBankAccount = getDefaultOwnerPayoutAccount(ownerSnap.data());
   const payoutBreakdown = await getOwnerPayoutBreakdown(params.ownerId, params.amount);
 
   if (!payoutSnap.exists()) {
@@ -132,6 +143,7 @@ export const scheduleOwnerPayoutFromPayment = async (params: {
       paymentCount: 1,
       payoutDate,
       weekKey,
+      ...(defaultBankAccount ? { bankAccount: defaultBankAccount } : {}),
       lastPaymentReceivedAt: paidAt,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
@@ -152,6 +164,7 @@ export const scheduleOwnerPayoutFromPayment = async (params: {
       ...(payoutBreakdown.ownerPlanMode
         ? { ownerPlanMode: payoutBreakdown.ownerPlanMode }
         : {}),
+      ...(defaultBankAccount ? { bankAccount: defaultBankAccount } : {}),
       bookingIds: arrayUnion(params.bookingId),
       paymentIds: arrayUnion(params.paymentId),
       paymentCount: (currentData.paymentCount || 0) + 1,

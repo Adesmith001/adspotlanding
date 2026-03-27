@@ -13,6 +13,15 @@ export interface AppliedOwnerCoupon {
   percentOff: number;
 }
 
+export interface PayoutAccount {
+  id: string;
+  bankName: string;
+  accountNumber: string;
+  accountName: string;
+  isDefault: boolean;
+  createdAt?: Date;
+}
+
 export interface User {
   uid: string;
   email: string | null;
@@ -37,6 +46,7 @@ export interface UserProfile extends User {
   country?: string;
   emailVerified: boolean;
   primaryAssetType?: ListingCategory;
+  payoutAccounts?: PayoutAccount[];
   ownerPricingPlan?: {
     mode: OwnerPricingPlanMode;
     fixedMonthlyFee: number;

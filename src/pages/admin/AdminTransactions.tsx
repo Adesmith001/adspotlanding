@@ -4,7 +4,7 @@ import { MdPayment, MdSearch } from 'react-icons/md';
 import DashboardLayout from '@/components/DashboardLayout';
 import Card from '@/components/ui/Card';
 import Pagination from '@/components/ui/Pagination';
-import { getAdminStats, getAdminTransactions, type AdminStats, type AdminTransaction } from '@/services/admin.service';
+import { getAdminStats, getAdminTransactions, getAllUsers, type AdminStats, type AdminTransaction, type AdminUser } from '@/services/admin.service';
 import { ensureAdminPayoutReminders, getDuePayouts, markPayoutCompleted } from '@/services/payout.service';
 import type { Payout } from '@/types/billboard.types';
 import Button from '@/components/ui/Button';
@@ -17,6 +17,7 @@ const formatPrice = (price: number) =>
 
 const AdminTransactions: React.FC = () => {
     const [transactions, setTransactions] = useState<AdminTransaction[]>([]);
+    const [owners, setOwners] = useState<AdminUser[]>([]);
     const [duePayouts, setDuePayouts] = useState<Payout[]>([]);
     const [stats, setStats] = useState<AdminStats | null>(null);
     const [loading, setLoading] = useState(true);
@@ -27,14 +28,16 @@ const AdminTransactions: React.FC = () => {
         const fetchTransactions = async () => {
             try {
                 await ensureAdminPayoutReminders();
-                const [data, payouts, adminStats] = await Promise.all([
+                const [data, payouts, adminStats, allUsers] = await Promise.all([
                     getAdminTransactions(250),
                     getDuePayouts(25),
                     getAdminStats(),
+                    getAllUsers(),
                 ]);
                 setTransactions(data);
                 setDuePayouts(payouts);
                 setStats(adminStats);
+                setOwners(allUsers.filter((user) => user.role === 'owner'));
             } catch (error) {
                 console.error('Error fetching transactions:', error);
                 toast.error('Failed to load transactions');
@@ -66,6 +69,9 @@ const AdminTransactions: React.FC = () => {
 
     const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
     const paginatedTransactions = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+    const ownerSummaries = owners
+        .filter((owner) => owner.totalEarned > 0 || owner.totalGrossSales > 0)
+        .sort((left, right) => right.totalEarned - left.totalEarned);
 
     useEffect(() => {
         setCurrentPage(1);
@@ -148,6 +154,11 @@ const AdminTransactions: React.FC = () => {
                                         <p className="text-xs text-neutral-400">
                                             {payout.paymentCount} payment{payout.paymentCount === 1 ? '' : 's'} bundled into this payout
                                         </p>
+                                        <p className="text-xs text-neutral-400">
+                                            {payout.bankAccount
+                                                ? `Send to ${payout.bankAccount.bankName} •••• ${payout.bankAccount.accountNumber.slice(-4)} (${payout.bankAccount.accountName})`
+                                                : 'Owner has not added a payout account yet.'}
+                                        </p>
                                     </div>
                                     <div className="flex items-center gap-3">
                                         <span className="rounded-full bg-neutral-100 px-3 py-1 text-xs font-semibold capitalize text-neutral-700">
@@ -159,6 +170,48 @@ const AdminTransactions: React.FC = () => {
                                     </div>
                                 </div>
                             ))}
+                        </div>
+                    )}
+                </Card>
+
+                <Card className="p-5">
+                    <div className="flex items-center justify-between gap-4 mb-4">
+                        <div>
+                            <h3 className="text-lg font-bold text-neutral-900">Owner Earnings Summary</h3>
+                            <p className="text-sm text-neutral-500">Net earnings already reflect the weekly 15% revenue-share deduction for owners on that plan.</p>
+                        </div>
+                    </div>
+
+                    {ownerSummaries.length === 0 ? (
+                        <p className="text-sm text-neutral-500">No owner earnings have been recorded yet.</p>
+                    ) : (
+                        <div className="space-y-3">
+                            {ownerSummaries.map((owner) => {
+                                const matchingPayout = duePayouts.find((payout) => payout.ownerId === owner.uid);
+                                return (
+                                    <div key={owner.uid} className="flex flex-col gap-3 rounded-2xl border border-neutral-200 p-4 md:flex-row md:items-center md:justify-between">
+                                        <div>
+                                            <p className="font-semibold text-neutral-900">{owner.displayName}</p>
+                                            <p className="text-sm text-neutral-500">{owner.email}</p>
+                                            <p className="text-xs text-neutral-400">
+                                                Net earned {formatPrice(owner.totalEarned)} · Gross sales {formatPrice(owner.totalGrossSales)}
+                                            </p>
+                                            <p className="text-xs text-neutral-400">
+                                                {owner.paidBookingsCount} paid booking{owner.paidBookingsCount === 1 ? '' : 's'}
+                                                {matchingPayout?.bankAccount
+                                                    ? ` · ${matchingPayout.bankAccount.bankName} •••• ${matchingPayout.bankAccount.accountNumber.slice(-4)}`
+                                                    : ' · No payout account saved yet'}
+                                            </p>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-sm font-semibold text-neutral-900">{formatPrice(owner.totalEarned)}</p>
+                                            <p className="text-xs text-neutral-500">
+                                                {matchingPayout?.status ? `Next payout: ${matchingPayout.status}` : 'No payout queued'}
+                                            </p>
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </div>
                     )}
                 </Card>
