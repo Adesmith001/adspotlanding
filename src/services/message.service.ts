@@ -156,7 +156,7 @@ export const sendMessage = async (
         conversationId,
         MESSAGES_COLLECTION,
       ),
-      {
+      stripUndefinedDeep({
         conversationId,
         senderId,
         senderName,
@@ -164,7 +164,7 @@ export const sendMessage = async (
         attachments: hasAttachments ? attachmentUrls : undefined,
         read: false,
         createdAt: serverTimestamp(),
-      },
+      }),
     );
 
     // 2. Update conversation metadata
