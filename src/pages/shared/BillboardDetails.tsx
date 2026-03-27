@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate, Link, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   MdArrowBack,
@@ -36,6 +36,7 @@ import { useAppSelector } from "@/hooks/useRedux";
 import { selectUser, selectIsAuthenticated } from "@/store/authSlice";
 import {
   getBillboard,
+  getBooking,
   createBooking,
   incrementBillboardViews,
   getBillboardReviews,
@@ -62,6 +63,7 @@ import toast from "react-hot-toast";
 const BillboardDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const user = useAppSelector(selectUser);
   const isAuthenticated = useAppSelector(selectIsAuthenticated);
   const { isLoaded: isGoogleMapsLoaded, hasApiKey: hasGoogleMapsApiKey } =
@@ -101,6 +103,9 @@ const BillboardDetails: React.FC = () => {
   const [creativeBrief, setCreativeBrief] = useState("");
   const [designFiles, setDesignFiles] = useState<File[]>([]);
   const [designPreviewUrls, setDesignPreviewUrls] = useState<string[]>([]);
+  const [prefilledRebookBookingId, setPrefilledRebookBookingId] = useState<
+    string | null
+  >(null);
   const isOwnerListing = Boolean(
     user && billboard && user.uid === billboard.ownerId
   );
@@ -651,6 +656,97 @@ const BillboardDetails: React.FC = () => {
       return nextFiles.map((file) => URL.createObjectURL(file));
     });
   };
+
+  useEffect(() => {
+    const rebookBookingId = searchParams.get("rebookBooking");
+    if (
+      !billboard ||
+      !user?.uid ||
+      !rebookBookingId ||
+      prefilledRebookBookingId === rebookBookingId
+    ) {
+      return;
+    }
+
+    let ignore = false;
+
+    const prefillRejectedBooking = async () => {
+      try {
+        const booking = await getBooking(rebookBookingId);
+        if (
+          !booking ||
+          booking.advertiserId !== user.uid ||
+          booking.billboardId !== billboard.id
+        ) {
+          return;
+        }
+
+        const isScreenListing = billboard.category === "screen";
+        const unitMs = isScreenListing
+          ? 1000 * 60 * 60
+          : 1000 * 60 * 60 * 24;
+        const earliestStart = new Date();
+
+        if (!isScreenListing) {
+          earliestStart.setHours(0, 0, 0, 0);
+        }
+
+        earliestStart.setDate(
+          earliestStart.getDate() +
+            Math.max(0, billboard.bookingRules.advanceNotice || 0)
+        );
+
+        const requestedStart = new Date(booking.startDate);
+        const nextStart =
+          requestedStart.getTime() > earliestStart.getTime()
+            ? requestedStart
+            : earliestStart;
+        const nextEnd = new Date(
+          nextStart.getTime() + Math.max(1, booking.duration) * unitMs
+        );
+
+        if (ignore) {
+          return;
+        }
+
+        setStartDate(formatDateInputValue(nextStart, isScreenListing));
+        setEndDate(formatDateInputValue(nextEnd, isScreenListing));
+        setCreativeRequirementType(booking.creativeRequirementType);
+        setCreativeBrief(booking.creativeBrief || "");
+        setDesignFiles([]);
+        setDesignPreviewUrls((prev) => {
+          prev.forEach((url) => URL.revokeObjectURL(url));
+          return [];
+        });
+        setPrefilledRebookBookingId(rebookBookingId);
+
+        const nextParams = new URLSearchParams(searchParams);
+        nextParams.delete("rebookBooking");
+        setSearchParams(nextParams, { replace: true });
+
+        toast.success(
+          booking.creativeRequirementType === "advertiser_upload"
+            ? "Rejected campaign loaded. Review the dates and re-upload your artwork before sending it again."
+            : "Rejected campaign loaded. Review the dates and submit a fresh booking request when ready.",
+          { duration: 5000 }
+        );
+      } catch (error) {
+        console.error("Failed to prefill rejected booking:", error);
+      }
+    };
+
+    void prefillRejectedBooking();
+
+    return () => {
+      ignore = true;
+    };
+  }, [
+    billboard,
+    prefilledRebookBookingId,
+    searchParams,
+    setSearchParams,
+    user?.uid,
+  ]);
 
   const handleStartDateChange = (value: string) => {
     setStartDate(value);

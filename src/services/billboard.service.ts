@@ -1279,7 +1279,7 @@ export const updateBookingStatus = async (
           sanitizedDecisionNote ? ` Reason: ${sanitizedDecisionNote}` : ""
         }`,
         { bookingId, billboardId: booking.billboardId },
-        "/dashboard/advertiser/campaigns"
+        `/dashboard/advertiser/campaigns?tab=rejected`
       );
     }
 

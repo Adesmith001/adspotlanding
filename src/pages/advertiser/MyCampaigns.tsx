@@ -37,7 +37,7 @@ import type { Booking } from '@/types/billboard.types';
 import { getAssetLabelFromUrl, isPdfUrl } from '@/utils/media.utils';
 import toast from 'react-hot-toast';
 
-type TabType = 'active' | 'upcoming' | 'completed';
+type TabType = 'active' | 'upcoming' | 'rejected' | 'completed';
 
 interface ReportForm {
     category: ReportCategory;
@@ -187,6 +187,13 @@ const MyCampaigns: React.FC = () => {
         }
     }, [searchParams, bookings, setSearchParams]);
 
+    useEffect(() => {
+        const requestedTab = searchParams.get('tab');
+        if (requestedTab === 'active' || requestedTab === 'upcoming' || requestedTab === 'rejected' || requestedTab === 'completed') {
+            setActiveTab(requestedTab);
+        }
+    }, [searchParams]);
+
     const isPaidBooking = (booking: Booking) =>
         booking.paymentStatus === 'paid' || !!paidBookingsById[booking.id];
 
@@ -194,7 +201,9 @@ const MyCampaigns: React.FC = () => {
         booking.paymentId || paidBookingsById[booking.id]?.reference || '';
 
     const isCompleted = (booking: Booking) =>
-        booking.status === 'completed' || new Date(booking.endDate).getTime() < now;
+        booking.status === 'completed' ||
+        (!['cancelled', 'rejected'].includes(booking.status) &&
+            new Date(booking.endDate).getTime() < now);
 
     const isManagedCampaign = (booking: Booking) =>
         isPaidBooking(booking) &&
@@ -233,6 +242,8 @@ const MyCampaigns: React.FC = () => {
                             b.status === 'confirmed' &&
                             new Date(b.endDate).getTime() >= now),
                 );
+            case 'rejected':
+                return bookings.filter((b) => b.status === 'rejected');
             case 'completed':
                 return bookings.filter(isCompleted);
             default:
@@ -331,6 +342,10 @@ const MyCampaigns: React.FC = () => {
         }
     };
 
+    const handleRebookCampaign = (booking: Booking) => {
+        navigate(`/billboards/${booking.billboardId}?rebookBooking=${encodeURIComponent(booking.id)}`);
+    };
+
     const handleOpenReport = (booking: Booking) => {
         setReportBooking(booking);
         setReportForm({ category: 'billing', subject: '', description: '' });
@@ -422,6 +437,7 @@ const MyCampaigns: React.FC = () => {
                         new Date(b.endDate).getTime() >= now),
             ).length,
         },
+        { key: 'rejected', label: 'Rejected', count: bookings.filter((b) => b.status === 'rejected').length },
         { key: 'completed', label: 'Completed', count: bookings.filter(isCompleted).length },
     ];
 
@@ -433,6 +449,10 @@ const MyCampaigns: React.FC = () => {
         upcoming: {
             title: 'No Requests Yet',
             description: 'Pending requests, approved bookings, and payment-ready campaigns will appear here.',
+        },
+        rejected: {
+            title: 'No Rejected Campaigns',
+            description: 'If an owner declines a request, you will see the reason here and can submit a fresh booking.',
         },
         completed: {
             title: 'No Completed Campaigns',
@@ -729,13 +749,23 @@ const MyCampaigns: React.FC = () => {
                                                     </div>
                                                 )}
 
-                                                {booking.ownerDecisionNote && (
-                                                    <div className={`rounded-2xl border px-4 py-3 ${booking.status === 'rejected'
-                                                        ? 'border-red-200 bg-red-50'
-                                                        : 'border-neutral-200 bg-white'
-                                                        }`}>
+                                                {booking.status === 'rejected' && (
+                                                    <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
+                                                        <p className="text-sm font-semibold text-neutral-900">
+                                                            Campaign rejected
+                                                        </p>
+                                                        <p className="mt-1 text-sm text-red-700 leading-relaxed">
+                                                            {booking.ownerDecisionNote
+                                                                ? `Reason: ${booking.ownerDecisionNote}`
+                                                                : 'The owner declined this booking request. Update the campaign details and submit a new request.'}
+                                                        </p>
+                                                    </div>
+                                                )}
+
+                                                {booking.ownerDecisionNote && booking.status !== 'rejected' && (
+                                                    <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-3">
                                                         <p className="text-sm font-semibold text-neutral-900">Owner note</p>
-                                                        <p className={`mt-1 text-sm leading-relaxed ${booking.status === 'rejected' ? 'text-red-700' : 'text-neutral-600'}`}>
+                                                        <p className="mt-1 text-sm leading-relaxed text-neutral-600">
                                                             {booking.ownerDecisionNote}
                                                         </p>
                                                     </div>
@@ -861,6 +891,15 @@ const MyCampaigns: React.FC = () => {
                                                             <MdPayment size={14} />
                                                             Complete Payment
                                                         </Link>
+                                                    )}
+                                                    {booking.status === 'rejected' && (
+                                                        <button
+                                                            onClick={() => handleRebookCampaign(booking)}
+                                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary-600 text-white text-xs font-medium hover:bg-primary-700 transition-colors"
+                                                        >
+                                                            <MdCampaign size={14} />
+                                                            Rebook Campaign
+                                                        </button>
                                                     )}
                                                     <button
                                                         onClick={() => handleMessageOwner(booking)}
