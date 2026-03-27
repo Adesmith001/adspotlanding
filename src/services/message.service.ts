@@ -149,6 +149,16 @@ export const sendMessage = async (
     }
 
     // 1. Add message
+    const messagePayload = {
+      conversationId,
+      senderId,
+      senderName,
+      text: trimmedText,
+      ...(hasAttachments ? { attachments: attachmentUrls } : {}),
+      read: false,
+      createdAt: serverTimestamp(),
+    };
+
     await addDoc(
       collection(
         db,
@@ -156,15 +166,7 @@ export const sendMessage = async (
         conversationId,
         MESSAGES_COLLECTION,
       ),
-      stripUndefinedDeep({
-        conversationId,
-        senderId,
-        senderName,
-        text: trimmedText,
-        attachments: hasAttachments ? attachmentUrls : undefined,
-        read: false,
-        createdAt: serverTimestamp(),
-      }),
+      messagePayload,
     );
 
     // 2. Update conversation metadata

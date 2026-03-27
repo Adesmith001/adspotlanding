@@ -16,10 +16,12 @@ export interface AppliedOwnerCoupon {
 export interface PayoutAccount {
   id: string;
   bankName: string;
+  bankCode?: string;
   accountNumber: string;
   accountName: string;
   isDefault: boolean;
   createdAt?: Date;
+  verifiedAt?: Date;
 }
 
 export interface User {

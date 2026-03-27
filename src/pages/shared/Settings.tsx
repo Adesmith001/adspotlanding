@@ -43,6 +43,12 @@ import type { PaymentTransaction } from '@/services/payment.service';
 import { getOwnerScheduledPayouts } from '@/services/payout.service';
 import type { Payout } from '@/types/billboard.types';
 import type { OwnerPricingPlanMode, PayoutAccount } from '@/types/user.types';
+import {
+    getNigeriaBanks,
+    verifyNigeriaBankAccount,
+    type NigeriaBank,
+    type VerifiedNigeriaBankAccount,
+} from '@/services/bank-verification.service';
 import { createOwnerCoupon, getOwnerCoupons, setOwnerCouponActiveState, type OwnerCoupon } from '@/services/coupon.service';
 import { changePassword } from '@/services/auth.service';
 import { auth } from '@/services/firebase';
@@ -91,10 +97,14 @@ const Settings: React.FC<SettingsProps> = ({ userRole }) => {
         revenueSharePercent: DEFAULT_OWNER_PRICING_PLAN.revenueSharePercent,
     });
     const [payoutAccounts, setPayoutAccounts] = useState<PayoutAccount[]>([]);
+    const [payoutBanks, setPayoutBanks] = useState<NigeriaBank[]>([]);
     const [showAddPayoutAccountForm, setShowAddPayoutAccountForm] = useState(false);
-    const [payoutBankName, setPayoutBankName] = useState('');
+    const [payoutBankCode, setPayoutBankCode] = useState('');
     const [payoutAccountNumber, setPayoutAccountNumber] = useState('');
     const [payoutAccountName, setPayoutAccountName] = useState('');
+    const [verifiedPayoutAccount, setVerifiedPayoutAccount] = useState<VerifiedNigeriaBankAccount | null>(null);
+    const [isLoadingPayoutBanks, setIsLoadingPayoutBanks] = useState(false);
+    const [isVerifyingPayoutAccount, setIsVerifyingPayoutAccount] = useState(false);
     const [isSavingPayoutAccount, setIsSavingPayoutAccount] = useState(false);
     const [isSavingOwnerSettings, setIsSavingOwnerSettings] = useState(false);
     const [coupons, setCoupons] = useState<OwnerCoupon[]>([]);
@@ -195,6 +205,25 @@ const Settings: React.FC<SettingsProps> = ({ userRole }) => {
 
         fetchOwnerPayouts();
     }, [activeTab, user, userRole]);
+
+    useEffect(() => {
+        if (activeTab !== 'billing' || userRole !== 'owner' || payoutBanks.length > 0) return;
+
+        const fetchBanks = async () => {
+            setIsLoadingPayoutBanks(true);
+            try {
+                const banks = await getNigeriaBanks();
+                setPayoutBanks(banks);
+            } catch (error) {
+                console.error('Error loading Nigerian banks:', error);
+                toast.error('Failed to load Nigerian banks');
+            } finally {
+                setIsLoadingPayoutBanks(false);
+            }
+        };
+
+        void fetchBanks();
+    }, [activeTab, userRole, payoutBanks.length]);
 
     useEffect(() => {
         if (activeTab !== 'billing' || !user || userRole !== 'admin') return;
@@ -370,31 +399,75 @@ const Settings: React.FC<SettingsProps> = ({ userRole }) => {
     };
 
     const resetPayoutAccountForm = () => {
-        setPayoutBankName('');
+        setPayoutBankCode('');
         setPayoutAccountNumber('');
         setPayoutAccountName('');
+        setVerifiedPayoutAccount(null);
         setShowAddPayoutAccountForm(false);
+    };
+
+    const handleVerifyPayoutAccount = async () => {
+        const selectedBank = payoutBanks.find((bank) => bank.code === payoutBankCode);
+
+        if (!selectedBank) {
+            toast.error('Select a bank first');
+            return;
+        }
+
+        if (payoutAccountNumber.replace(/\D/g, '').length !== 10) {
+            toast.error('Enter a valid 10-digit account number');
+            return;
+        }
+
+        setIsVerifyingPayoutAccount(true);
+        try {
+            const verifiedAccount = await verifyNigeriaBankAccount({
+                bankCode: selectedBank.code,
+                accountNumber: payoutAccountNumber.replace(/\D/g, ''),
+            });
+            setVerifiedPayoutAccount(verifiedAccount);
+            setPayoutAccountName(verifiedAccount.accountName);
+            toast.success('Bank account verified');
+        } catch (error: any) {
+            console.error('Error verifying payout account:', error);
+            setVerifiedPayoutAccount(null);
+            setPayoutAccountName('');
+            toast.error(error?.message || 'Failed to verify account details');
+        } finally {
+            setIsVerifyingPayoutAccount(false);
+        }
     };
 
     const handleAddPayoutAccount = async () => {
         if (!user) return;
+        const selectedBank = payoutBanks.find((bank) => bank.code === payoutBankCode);
 
-        if (!payoutBankName.trim() || !payoutAccountNumber.trim() || !payoutAccountName.trim()) {
-            toast.error('Bank name, account number, and account name are required');
+        if (!selectedBank) {
+            toast.error('Select a bank first');
             return;
         }
 
-        if (payoutAccountNumber.replace(/\D/g, '').length < 10) {
-            toast.error('Enter a valid account number');
+        if (payoutAccountNumber.replace(/\D/g, '').length !== 10) {
+            toast.error('Enter a valid 10-digit account number');
+            return;
+        }
+
+        if (
+            !verifiedPayoutAccount ||
+            verifiedPayoutAccount.bankCode !== selectedBank.code ||
+            verifiedPayoutAccount.accountNumber !== payoutAccountNumber.replace(/\D/g, '')
+        ) {
+            toast.error('Verify this account before saving it');
             return;
         }
 
         setIsSavingPayoutAccount(true);
         try {
             const nextAccounts = await addOwnerPayoutAccount(user.uid, {
-                bankName: payoutBankName,
-                accountNumber: payoutAccountNumber.replace(/\D/g, ''),
-                accountName: payoutAccountName,
+                bankName: verifiedPayoutAccount.bankName,
+                bankCode: verifiedPayoutAccount.bankCode,
+                accountNumber: verifiedPayoutAccount.accountNumber,
+                accountName: verifiedPayoutAccount.accountName,
             });
             setPayoutAccounts(nextAccounts);
             toast.success('Payout account added');
@@ -1094,7 +1167,18 @@ const Settings: React.FC<SettingsProps> = ({ userRole }) => {
                                                 <p className="text-sm text-neutral-500">Manage the bank account used for weekly owner payouts.</p>
                                             </div>
                                         </div>
-                                        <Button variant="outline" size="sm" onClick={() => setShowAddPayoutAccountForm(prev => !prev)}>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => {
+                                                if (showAddPayoutAccountForm) {
+                                                    resetPayoutAccountForm();
+                                                    return;
+                                                }
+
+                                                setShowAddPayoutAccountForm(true);
+                                            }}
+                                        >
                                             {showAddPayoutAccountForm ? 'Close Form' : 'Add Account'}
                                         </Button>
                                     </div>
@@ -1107,23 +1191,65 @@ const Settings: React.FC<SettingsProps> = ({ userRole }) => {
                                         >
                                             <div className="grid gap-3 md:grid-cols-3">
                                                 <div>
-                                                    <label className="mb-1.5 block text-sm font-medium text-neutral-700">Bank Name</label>
-                                                    <Input value={payoutBankName} onChange={(e) => setPayoutBankName(e.target.value)} placeholder="GTBank" />
+                                                    <label className="mb-1.5 block text-sm font-medium text-neutral-700">Bank</label>
+                                                    <select
+                                                        value={payoutBankCode}
+                                                        onChange={(e) => {
+                                                            setPayoutBankCode(e.target.value);
+                                                            setVerifiedPayoutAccount(null);
+                                                            setPayoutAccountName('');
+                                                        }}
+                                                        disabled={isLoadingPayoutBanks || isVerifyingPayoutAccount || isSavingPayoutAccount}
+                                                        className="w-full rounded-lg border border-neutral-300 px-4 py-3 text-sm text-neutral-900 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-neutral-100 disabled:cursor-not-allowed"
+                                                    >
+                                                        <option value="">
+                                                            {isLoadingPayoutBanks ? 'Loading banks...' : 'Select bank'}
+                                                        </option>
+                                                        {payoutBanks.map((bank) => (
+                                                            <option key={bank.code} value={bank.code}>
+                                                                {bank.name}
+                                                            </option>
+                                                        ))}
+                                                    </select>
                                                 </div>
                                                 <div>
                                                     <label className="mb-1.5 block text-sm font-medium text-neutral-700">Account Number</label>
-                                                    <Input value={payoutAccountNumber} onChange={(e) => setPayoutAccountNumber(e.target.value.replace(/\D/g, '').slice(0, 12))} placeholder="0123456789" />
+                                                    <Input
+                                                        value={payoutAccountNumber}
+                                                        onChange={(e) => {
+                                                            setPayoutAccountNumber(e.target.value.replace(/\D/g, '').slice(0, 10));
+                                                            setVerifiedPayoutAccount(null);
+                                                            setPayoutAccountName('');
+                                                        }}
+                                                        placeholder="0123456789"
+                                                        maxLength={10}
+                                                    />
                                                 </div>
                                                 <div>
-                                                    <label className="mb-1.5 block text-sm font-medium text-neutral-700">Account Name</label>
-                                                    <Input value={payoutAccountName} onChange={(e) => setPayoutAccountName(e.target.value)} placeholder="Somade Toluwani" />
+                                                    <label className="mb-1.5 block text-sm font-medium text-neutral-700">Verified Account Name</label>
+                                                    <Input value={payoutAccountName} placeholder="Verify account to load name" readOnly />
                                                 </div>
+                                            </div>
+                                            <div className="flex flex-col gap-2 rounded-xl bg-white/80 px-4 py-3 text-sm text-neutral-600 md:flex-row md:items-center md:justify-between">
+                                                <p>
+                                                    {verifiedPayoutAccount
+                                                        ? `Verified: ${verifiedPayoutAccount.bankName} - ${verifiedPayoutAccount.accountName}`
+                                                        : 'Verify the selected bank and account number before saving.'}
+                                                </p>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={handleVerifyPayoutAccount}
+                                                    disabled={isLoadingPayoutBanks || isVerifyingPayoutAccount || isSavingPayoutAccount}
+                                                >
+                                                    {isVerifyingPayoutAccount ? 'Verifying...' : 'Verify Account'}
+                                                </Button>
                                             </div>
                                             <div className="flex justify-end gap-2">
                                                 <Button variant="ghost" size="sm" onClick={resetPayoutAccountForm} disabled={isSavingPayoutAccount}>
                                                     Cancel
                                                 </Button>
-                                                <Button size="sm" onClick={handleAddPayoutAccount} disabled={isSavingPayoutAccount}>
+                                                <Button size="sm" onClick={handleAddPayoutAccount} disabled={isSavingPayoutAccount || !verifiedPayoutAccount}>
                                                     {isSavingPayoutAccount ? 'Saving...' : 'Save Account'}
                                                 </Button>
                                             </div>
