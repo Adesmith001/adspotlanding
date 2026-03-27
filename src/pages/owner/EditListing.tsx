@@ -36,6 +36,8 @@ const EditListing: React.FC = () => {
     const [dailyPrice, setDailyPrice] = useState(0);
     const [weeklyPrice, setWeeklyPrice] = useState(0);
     const [monthlyPrice, setMonthlyPrice] = useState(0);
+    const [designServiceAvailable, setDesignServiceAvailable] = useState(false);
+    const [designServicePrice, setDesignServicePrice] = useState(0);
 
     useEffect(() => {
         const fetchListing = async () => {
@@ -76,6 +78,8 @@ const EditListing: React.FC = () => {
                 setDailyPrice(data.pricing.daily || 0);
                 setWeeklyPrice(data.pricing.weekly || 0);
                 setMonthlyPrice(data.pricing.monthly || 0);
+                setDesignServiceAvailable(Boolean(data.designServiceAvailable));
+                setDesignServicePrice(data.designServicePrice || 0);
             } catch (error) {
                 console.error('Error loading listing:', error);
                 toast.error('Failed to load listing');
@@ -112,6 +116,11 @@ const EditListing: React.FC = () => {
             return;
         }
 
+        if (designServiceAvailable && designServicePrice <= 0) {
+            toast.error('Set a design service fee before enabling the service');
+            return;
+        }
+
         setSaving(true);
         try {
             const resolvedWeeklyPrice =
@@ -144,6 +153,8 @@ const EditListing: React.FC = () => {
                     weekly: resolvedWeeklyPrice,
                     monthly: resolvedMonthlyPrice,
                 },
+                designServiceAvailable,
+                designServicePrice: designServiceAvailable ? designServicePrice : 0,
                 primaryAssetType: listing.category || 'billboard',
             } as Partial<Billboard>);
 
@@ -286,6 +297,46 @@ const EditListing: React.FC = () => {
                                 </div>
                             </>
                         )}
+
+                        <div className="md:col-span-2 rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
+                            <div className="flex items-start gap-3">
+                                <input
+                                    id="edit-design-service"
+                                    type="checkbox"
+                                    checked={designServiceAvailable}
+                                    onChange={(e) => {
+                                        setDesignServiceAvailable(e.target.checked);
+                                        if (!e.target.checked) {
+                                            setDesignServicePrice(0);
+                                        }
+                                    }}
+                                    className="mt-1 h-4 w-4"
+                                />
+                                <div className="flex-1">
+                                    <label htmlFor="edit-design-service" className="text-sm font-medium text-neutral-900">
+                                        Offer design service
+                                    </label>
+                                    <p className="mt-1 text-sm text-neutral-500">
+                                        Let advertisers request artwork from you when they do not have a design ready.
+                                    </p>
+                                </div>
+                            </div>
+
+                            {designServiceAvailable && (
+                                <div className="mt-4 max-w-sm">
+                                    <label className="block text-sm font-medium text-neutral-700 mb-2">Design Service Fee *</label>
+                                    <Input
+                                        type="number"
+                                        min="0"
+                                        value={designServicePrice || ''}
+                                        onChange={(e) => setDesignServicePrice(Number(e.target.value))}
+                                    />
+                                    <p className="mt-2 text-xs text-neutral-500">
+                                        This is added once per booking when the advertiser selects owner design service.
+                                    </p>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </Card>
 

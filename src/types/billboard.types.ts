@@ -49,6 +49,8 @@ export interface Billboard {
   ownerPhoto?: string;
   ownerVerified: boolean;
   primaryAssetType?: ListingCategory;
+  designServiceAvailable: boolean;
+  designServicePrice: number;
 
   // Basic Info
   title: string;
@@ -134,6 +136,8 @@ export interface Booking {
   // Pricing
   pricePerDay?: number; // Deprecated
   pricePerUnit?: number; // Replace pricePerDay
+  bookingAmount: number;
+  designServiceFee: number;
   totalAmount: number;
   currency: string;
 
@@ -412,6 +416,8 @@ export interface CreateBillboardForm {
   dailyPrice: number;
   weeklyPrice: number;
   monthlyPrice: number;
+  designServiceAvailable: boolean;
+  designServicePrice: number;
   instantBook: boolean;
   minDuration: number;
   maxDuration: number;

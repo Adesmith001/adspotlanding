@@ -353,6 +353,11 @@ const OwnerBookings: React.FC = () => {
                                                 <p className="font-bold text-neutral-900 text-lg">
                                                     {formatPrice(booking.totalAmount)}
                                                 </p>
+                                                {booking.designServiceFee > 0 && (
+                                                    <p className="text-xs text-neutral-500 mt-1">
+                                                        Includes design fee: {formatPrice(booking.designServiceFee)}
+                                                    </p>
+                                                )}
                                                 {booking.status === 'confirmed' && booking.paymentDueAt && booking.paymentStatus !== 'paid' && (
                                                     <p className={`text-xs mt-1 ${isPaymentOverdue(booking) ? 'text-red-600' : 'text-amber-600'}`}>
                                                         {isPaymentOverdue(booking)
@@ -405,6 +410,12 @@ const OwnerBookings: React.FC = () => {
                                             <p className="text-sm text-neutral-600 leading-relaxed">
                                                 {booking.creativeBrief}
                                             </p>
+
+                                            {booking.designServiceFee > 0 && (
+                                                <p className="text-xs text-neutral-500 mt-2">
+                                                    Design service charge: {formatPrice(booking.designServiceFee)}
+                                                </p>
+                                            )}
 
                                             {booking.creativeReviewNotes && (
                                                 <p className="text-xs text-neutral-500 mt-3">

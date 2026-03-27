@@ -76,6 +76,8 @@ const INITIAL_FORM_DATA: CreateBillboardForm = {
   dailyPrice: 0,
   weeklyPrice: 0,
   monthlyPrice: 0,
+  designServiceAvailable: false,
+  designServicePrice: 0,
   instantBook: false,
   minDuration: 1,
   maxDuration: 365,
@@ -446,9 +448,12 @@ const CreateListing: React.FC = () => {
       case 4:
         return formData.width > 0 && formData.height > 0;
       case 5:
-        return formData.category === "screen"
-          ? (formData.hourlyPrice || 0) > 0
-          : formData.dailyPrice > 0;
+        return (
+          (formData.category === "screen"
+            ? (formData.hourlyPrice || 0) > 0
+            : formData.dailyPrice > 0) &&
+          (!formData.designServiceAvailable || formData.designServicePrice > 0)
+        );
       case 6:
         return true;
       case 7:
@@ -1251,6 +1256,58 @@ const CreateListing: React.FC = () => {
                 </Card>
               </motion.div>
             )}
+            <Card className="p-5 border-neutral-200">
+              <div className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  id="designServiceAvailable"
+                  checked={formData.designServiceAvailable}
+                  onChange={(e) => {
+                    updateFormData("designServiceAvailable", e.target.checked);
+                    if (!e.target.checked) {
+                      updateFormData("designServicePrice", 0);
+                    }
+                  }}
+                  className="mt-1 h-5 w-5 rounded text-primary-600 focus:ring-primary-500"
+                />
+                <div className="flex-1">
+                  <label
+                    htmlFor="designServiceAvailable"
+                    className="font-medium text-neutral-900"
+                  >
+                    Offer design service to advertisers
+                  </label>
+                  <p className="mt-1 text-sm text-neutral-500">
+                    If an advertiser does not have artwork ready, they can ask
+                    you to create it for an extra charge.
+                  </p>
+                </div>
+              </div>
+
+              {formData.designServiceAvailable && (
+                <div className="mt-4">
+                  <label className="block text-sm font-medium text-neutral-700 mb-2">
+                    Design Service Fee (₦) *
+                  </label>
+                  <Input
+                    type="number"
+                    min="0"
+                    placeholder="e.g., 25000"
+                    value={formData.designServicePrice || ""}
+                    onChange={(e) =>
+                      updateFormData(
+                        "designServicePrice",
+                        Number(e.target.value)
+                      )
+                    }
+                  />
+                  <p className="text-xs text-neutral-500 mt-2">
+                    This fee is added once per booking when the advertiser asks
+                    you to create the design.
+                  </p>
+                </div>
+              )}
+            </Card>
           </div>
         );
       case 6:
@@ -1432,6 +1489,12 @@ const CreateListing: React.FC = () => {
                       formData.category === "screen"
                         ? `₦${(formData.hourlyPrice || 0).toLocaleString()}/hr`
                         : `₦${formData.dailyPrice.toLocaleString()}/day`,
+                  },
+                  {
+                    label: "Design Service",
+                    value: formData.designServiceAvailable
+                      ? `Available for ₦${formData.designServicePrice.toLocaleString()}`
+                      : "Not offered",
                   },
                   {
                     label: "Photos",

@@ -95,7 +95,7 @@ const BillboardDetails: React.FC = () => {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [bookingDuration, setBookingDuration] = useState(0);
-  const [totalPrice, setTotalPrice] = useState(0);
+  const [bookingSubtotal, setBookingSubtotal] = useState(0);
   const [creativeRequirementType, setCreativeRequirementType] =
     useState<CreativeRequirementType>("advertiser_upload");
   const [creativeBrief, setCreativeBrief] = useState("");
@@ -180,13 +180,23 @@ const BillboardDetails: React.FC = () => {
             price = billboard.pricing.daily * duration;
           }
         }
-        setTotalPrice(price);
+        setBookingSubtotal(price);
       } else {
         setBookingDuration(0);
-        setTotalPrice(0);
+        setBookingSubtotal(0);
       }
     }
   }, [startDate, endDate, billboard]);
+
+  useEffect(() => {
+    if (
+      billboard &&
+      !billboard.designServiceAvailable &&
+      creativeRequirementType === "owner_design_service"
+    ) {
+      setCreativeRequirementType("advertiser_upload");
+    }
+  }, [billboard, creativeRequirementType]);
 
   useEffect(() => {
     const loadFavoriteStatus = async () => {
@@ -457,6 +467,13 @@ const BillboardDetails: React.FC = () => {
       toast.error(
         "Upload the design file the owner should review before the campaign starts"
       );
+      return;
+    }
+    if (
+      creativeRequirementType === "owner_design_service" &&
+      !ownerDesignServiceAvailable
+    ) {
+      toast.error("This listing does not offer owner design service");
       return;
     }
     if (
@@ -761,9 +778,17 @@ const BillboardDetails: React.FC = () => {
     bookingDuration > 0 && bookingDuration < minimumDuration;
   const bookingAboveMaximum = bookingDuration > maximumDuration;
   const baseBookingPrice = unitPrice * bookingDuration;
+  const ownerDesignServiceAvailable =
+    billboard.designServiceAvailable && billboard.designServicePrice > 0;
+  const designServiceFee =
+    creativeRequirementType === "owner_design_service" &&
+    ownerDesignServiceAvailable
+      ? billboard.designServicePrice
+      : 0;
+  const totalPrice = bookingSubtotal + designServiceFee;
   const packageSavings =
     !isScreen && bookingDuration > 0
-      ? Math.max(0, baseBookingPrice - totalPrice)
+      ? Math.max(0, baseBookingPrice - bookingSubtotal)
       : 0;
   const appliedPricingLabel =
     !isScreen && bookingDuration >= 30
@@ -1722,6 +1747,12 @@ const BillboardDetails: React.FC = () => {
                             <span>-{formatPrice(packageSavings)}</span>
                           </div>
                         )}
+                        {designServiceFee > 0 && (
+                          <div className="flex justify-between text-neutral-700">
+                            <span>Owner design service</span>
+                            <span>{formatPrice(designServiceFee)}</span>
+                          </div>
+                        )}
                         <div className="h-px bg-neutral-200" />
                         <div className="flex justify-between font-bold text-neutral-900">
                           <span>Total</span>
@@ -1816,13 +1847,19 @@ const BillboardDetails: React.FC = () => {
 
                   <button
                     type="button"
-                    onClick={() =>
-                      setCreativeRequirementType("owner_design_service")
-                    }
+                    onClick={() => {
+                      if (!ownerDesignServiceAvailable) {
+                        return;
+                      }
+                      setCreativeRequirementType("owner_design_service");
+                    }}
+                    disabled={!ownerDesignServiceAvailable}
                     className={`w-full rounded-xl border-2 p-3.5 text-left transition-all ${
                       creativeRequirementType === "owner_design_service"
                         ? "border-neutral-900 bg-white"
-                        : "border-transparent bg-neutral-50 hover:bg-neutral-100"
+                        : ownerDesignServiceAvailable
+                        ? "border-transparent bg-neutral-50 hover:bg-neutral-100"
+                        : "border-transparent bg-neutral-100 opacity-60 cursor-not-allowed"
                     }`}
                   >
                     <div className="flex items-start gap-3">
@@ -1847,7 +1884,11 @@ const BillboardDetails: React.FC = () => {
                           Need design service
                         </p>
                         <p className="text-[11px] text-neutral-500 mt-0.5">
-                          Provide a brief for the owner.
+                          {ownerDesignServiceAvailable
+                            ? `Provide a brief for the owner. Adds ${formatPrice(
+                                billboard.designServicePrice
+                              )}.`
+                            : "This owner has not enabled design service for this listing."}
                         </p>
                       </div>
                     </div>

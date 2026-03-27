@@ -39,6 +39,7 @@ export interface PaymentTransaction {
   unitPrice?: number;
   baseAmount?: number;
   discountAmount?: number;
+  designServiceFee?: number;
   pricingLabel?: string;
 }
 
@@ -71,7 +72,7 @@ const buildPaymentRecordPayload = (
   paymentReference: string,
 ) => {
   const unitPrice = booking.pricePerUnit || booking.pricePerDay || 0;
-  const baseAmount = unitPrice * booking.duration;
+  const baseAmount = booking.bookingAmount || unitPrice * booking.duration;
 
   return {
     bookingId: booking.id,
@@ -91,6 +92,7 @@ const buildPaymentRecordPayload = (
     unitPrice,
     baseAmount,
     discountAmount: Math.max(0, baseAmount - amount),
+    designServiceFee: booking.designServiceFee || 0,
     pricingLabel: getPricingLabel(booking),
   };
 };
@@ -99,7 +101,7 @@ const mapBookingToPaymentTransaction = (
   booking: Booking,
 ): PaymentTransaction => {
   const unitPrice = booking.pricePerUnit || booking.pricePerDay || 0;
-  const baseAmount = unitPrice * booking.duration;
+  const baseAmount = booking.bookingAmount || unitPrice * booking.duration;
 
   return {
     id: booking.id,
@@ -120,6 +122,7 @@ const mapBookingToPaymentTransaction = (
     unitPrice,
     baseAmount,
     discountAmount: Math.max(0, baseAmount - booking.totalAmount),
+    designServiceFee: booking.designServiceFee || 0,
     pricingLabel: getPricingLabel(booking),
   };
 };

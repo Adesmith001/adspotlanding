@@ -59,11 +59,21 @@ const optionalTimestampToDate = (timestamp: any): Date | undefined => {
   return timestampToDate(timestamp);
 };
 
+const formatCurrency = (amount: number) =>
+  new Intl.NumberFormat("en-NG", {
+    style: "currency",
+    currency: "NGN",
+    minimumFractionDigits: 0,
+  }).format(amount);
+
 const mapBillboardData = (id: string, data: any): Billboard =>
   ({
     id,
     ...data,
     primaryAssetType: data.primaryAssetType || data.category || "billboard",
+    designServiceAvailable: Boolean(data.designServiceAvailable),
+    designServicePrice:
+      typeof data.designServicePrice === "number" ? data.designServicePrice : 0,
     unavailableDates: Array.isArray(data.unavailableDates)
       ? data.unavailableDates.map((period: any) => ({
           ...period,
@@ -79,6 +89,12 @@ const mapBookingData = (id: string, data: any): Booking =>
   ({
     id,
     ...data,
+    bookingAmount:
+      typeof data.bookingAmount === "number"
+        ? data.bookingAmount
+        : data.totalAmount || 0,
+    designServiceFee:
+      typeof data.designServiceFee === "number" ? data.designServiceFee : 0,
     startDate: timestampToDate(data.startDate),
     endDate: timestampToDate(data.endDate),
     paidAt: optionalTimestampToDate(data.paidAt),
@@ -254,6 +270,14 @@ export const createBillboard = async (
       resolvedCategory === "screen"
         ? 0
         : data.monthlyPrice || data.dailyPrice * 30;
+    const resolvedDesignServiceAvailable = Boolean(data.designServiceAvailable);
+    const resolvedDesignServicePrice = resolvedDesignServiceAvailable
+      ? Math.max(0, data.designServicePrice || 0)
+      : 0;
+
+    if (resolvedDesignServiceAvailable && resolvedDesignServicePrice <= 0) {
+      throw new Error("Set a design service fee before enabling the service.");
+    }
 
     // Create billboard document
     const billboard: Omit<Billboard, "id"> = {
@@ -261,6 +285,8 @@ export const createBillboard = async (
       ownerName,
       ownerVerified: false,
       primaryAssetType: resolvedCategory,
+      designServiceAvailable: resolvedDesignServiceAvailable,
+      designServicePrice: resolvedDesignServicePrice,
       title: data.title,
       description: data.description,
       location: {
@@ -800,10 +826,12 @@ export const createBooking = async (
     const isHourly =
       request.durationUnit === "hours" || billboard.category === "screen";
     const durationUnit = isHourly ? "hours" : "days";
+    const wantsOwnerDesign =
+      request.creativeRequirementType === "owner_design_service";
 
     let duration = 0;
     let pricePerUnit = 0;
-    let totalAmount = 0;
+    let bookingAmount = 0;
 
     duration = calculateBookingDuration(
       request.startDate,
@@ -881,23 +909,35 @@ export const createBooking = async (
 
     if (isHourly) {
       pricePerUnit = billboard.pricing.hourly || 0;
-      totalAmount = pricePerUnit * duration;
+      bookingAmount = pricePerUnit * duration;
     } else {
       pricePerUnit = billboard.pricing.daily;
-      totalAmount = pricePerUnit * duration;
+      bookingAmount = pricePerUnit * duration;
       const weeklyRate = billboard.pricing.weekly || billboard.pricing.daily * 7;
       const monthlyRate =
         billboard.pricing.monthly || billboard.pricing.daily * 30;
 
       // Apply weekly/monthly pricing if applicable
       if (duration >= 30) {
-        totalAmount = monthlyRate * Math.ceil(duration / 30);
-        pricePerUnit = totalAmount / duration;
+        bookingAmount = monthlyRate * Math.ceil(duration / 30);
+        pricePerUnit = bookingAmount / duration;
       } else if (duration >= 7) {
-        totalAmount = weeklyRate * Math.ceil(duration / 7);
-        pricePerUnit = totalAmount / duration;
+        bookingAmount = weeklyRate * Math.ceil(duration / 7);
+        pricePerUnit = bookingAmount / duration;
       }
     }
+
+    if (wantsOwnerDesign && !billboard.designServiceAvailable) {
+      throw new Error(
+        "This listing does not currently offer owner design service."
+      );
+    }
+
+    const designServiceFee =
+      wantsOwnerDesign && billboard.designServiceAvailable
+        ? Math.max(0, billboard.designServicePrice || 0)
+        : 0;
+    const totalAmount = bookingAmount + designServiceFee;
 
     const creativeAssets = request.designFiles?.length
       ? await uploadFiles(request.designFiles)
@@ -927,6 +967,8 @@ export const createBooking = async (
       durationUnit,
       pricePerDay: pricePerUnit, // Keep for backward compatibility
       pricePerUnit,
+      bookingAmount,
+      designServiceFee,
       totalAmount,
       currency: "NGN",
       status: billboard.bookingRules.instantBook ? "confirmed" : "pending",
@@ -967,7 +1009,9 @@ export const createBooking = async (
         ? `I have uploaded ${creativeAssets.length} design file${
             creativeAssets.length === 1 ? "" : "s"
           } for review.`
-        : `I would like your company to create the design. Brief: ${request.creativeBrief.trim()}`;
+        : `I would like your company to create the design for ${formatCurrency(
+            designServiceFee
+          )}. Brief: ${request.creativeBrief.trim()}`;
 
     const initialMessage = [
       `Hi, I just booked \"${
@@ -1009,7 +1053,9 @@ export const createBooking = async (
     return docRef.id;
   } catch (error) {
     console.error("Error creating booking:", error);
-    throw new Error("Failed to create booking");
+    throw new Error(
+      error instanceof Error ? error.message : "Failed to create booking"
+    );
   }
 };
 

@@ -72,8 +72,9 @@ const Payments: React.FC = () => {
         const duration = transaction.duration ?? booking?.duration ?? 0;
         const durationUnit = transaction.durationUnit ?? booking?.durationUnit ?? 'days';
         const unitPrice = transaction.unitPrice ?? booking?.pricePerUnit ?? booking?.pricePerDay ?? 0;
-        const baseAmount = transaction.baseAmount ?? unitPrice * duration;
+        const baseAmount = transaction.baseAmount ?? booking?.bookingAmount ?? unitPrice * duration;
         const discountAmount = transaction.discountAmount ?? Math.max(0, baseAmount - transaction.amount);
+        const designServiceFee = transaction.designServiceFee ?? booking?.designServiceFee ?? 0;
         const pricingLabel = transaction.pricingLabel ??
             (durationUnit === 'hours'
                 ? 'Hourly rate'
@@ -90,6 +91,7 @@ const Payments: React.FC = () => {
             unitPrice,
             baseAmount,
             discountAmount,
+            designServiceFee,
             pricingLabel,
         };
     };
@@ -349,6 +351,11 @@ const Payments: React.FC = () => {
                                                 <p className="text-2xl font-bold text-neutral-900">
                                                     {formatPrice(booking.totalAmount)}
                                                 </p>
+                                                {booking.designServiceFee > 0 && (
+                                                    <p className="text-sm text-neutral-500">
+                                                        Includes design service: {formatPrice(booking.designServiceFee)}
+                                                    </p>
+                                                )}
                                                 <Button
                                                     onClick={() => handlePayNow(booking)}
                                                     disabled={payingBookingId === booking.id || isPaymentOverdue(booking)}
@@ -443,6 +450,11 @@ const Payments: React.FC = () => {
                                                     {breakdown.discountAmount > 0 && (
                                                         <p className="text-green-700">
                                                             Package savings: {formatPrice(breakdown.discountAmount)}
+                                                        </p>
+                                                    )}
+                                                    {breakdown.designServiceFee > 0 && (
+                                                        <p>
+                                                            Design service: {formatPrice(breakdown.designServiceFee)}
                                                         </p>
                                                     )}
                                                     <p className="font-medium text-neutral-800">

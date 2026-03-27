@@ -599,9 +599,16 @@ const MyCampaigns: React.FC = () => {
                                                     <h3 className="font-bold text-neutral-900 text-base leading-tight">
                                                         {booking.billboardTitle}
                                                     </h3>
-                                                    <span className="text-lg font-bold text-neutral-900 flex-shrink-0">
-                                                        {formatPrice(booking.totalAmount)}
-                                                    </span>
+                                                    <div className="text-right flex-shrink-0">
+                                                        <span className="text-lg font-bold text-neutral-900">
+                                                            {formatPrice(booking.totalAmount)}
+                                                        </span>
+                                                        {booking.designServiceFee > 0 && (
+                                                            <p className="text-[11px] text-neutral-500 mt-1">
+                                                                Includes design fee
+                                                            </p>
+                                                        )}
+                                                    </div>
                                                 </div>
 
                                                 {/* Meta grid */}
@@ -783,6 +790,12 @@ const MyCampaigns: React.FC = () => {
                                                     <p className="text-sm text-neutral-600 leading-relaxed">
                                                         {booking.creativeBrief}
                                                     </p>
+
+                                                    {booking.designServiceFee > 0 && (
+                                                        <p className="text-xs text-neutral-500 mt-2">
+                                                            Design service charge: {formatPrice(booking.designServiceFee)}
+                                                        </p>
+                                                    )}
 
                                                     {(booking.creativeAssets?.length ?? 0) > 0 && (
                                                         <div className="grid grid-cols-3 gap-2 mt-3">
