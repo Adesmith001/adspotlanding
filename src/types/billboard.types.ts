@@ -396,7 +396,6 @@ export interface Payout {
   bankAccount?: {
     accountNumber: string;
     bankName: string;
-    bankCode?: string;
     accountName: string;
   };
   adminReminderSentAt?: Date;

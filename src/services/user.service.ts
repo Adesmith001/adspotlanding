@@ -247,7 +247,7 @@ export const updateOwnerCommercialSettings = async (
 // ─── Saved Cards ────────────────────────────────────────────────────────────
 export const addOwnerPayoutAccount = async (
   uid: string,
-  account: Omit<PayoutAccount, "id" | "isDefault" | "createdAt" | "verifiedAt">,
+  account: Omit<PayoutAccount, "id" | "isDefault" | "createdAt">,
 ): Promise<PayoutAccount[]> => {
   const userRef = doc(db, USERS_COLLECTION, uid);
   const userSnap = await getDoc(userRef);
@@ -256,12 +256,10 @@ export const addOwnerPayoutAccount = async (
   const newAccount: PayoutAccount = {
     id: `acct_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     bankName: account.bankName.trim(),
-    ...(account.bankCode ? { bankCode: account.bankCode.trim() } : {}),
     accountNumber: account.accountNumber.trim(),
     accountName: account.accountName.trim(),
     isDefault: existingAccounts.length === 0,
     createdAt: new Date(),
-    verifiedAt: new Date(),
   };
 
   const nextAccounts = [...existingAccounts, newAccount];
