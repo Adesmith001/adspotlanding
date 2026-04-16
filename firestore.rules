@@ -26,6 +26,18 @@ service cloud.firestore {
              request.resource.data.views == resource.data.views + 1;
     }
 
+    // Supports rules checks for booking docs created in the same batch/transaction.
+    function bookingExistsNowOrAfter(bookingId) {
+      return existsAfter(/databases/$(database)/documents/bookings/$(bookingId)) ||
+             exists(/databases/$(database)/documents/bookings/$(bookingId));
+    }
+
+    function bookingSnapshot(bookingId) {
+      return existsAfter(/databases/$(database)/documents/bookings/$(bookingId))
+        ? getAfter(/databases/$(database)/documents/bookings/$(bookingId))
+        : get(/databases/$(database)/documents/bookings/$(bookingId));
+    }
+
     // Users collection
     match /users/{userId} {
       // Anyone can read user profiles (for displaying owner info, etc.)
@@ -196,21 +208,21 @@ service cloud.firestore {
     match /billboardAvailability/{bookingId} {
       allow read: if true;
       allow create, update: if isAuthenticated() &&
-        exists(/databases/$(database)/documents/bookings/$(bookingId)) &&
-        (request.auth.uid == get(/databases/$(database)/documents/bookings/$(bookingId)).data.advertiserId ||
-         request.auth.uid == get(/databases/$(database)/documents/bookings/$(bookingId)).data.ownerId) &&
+        bookingExistsNowOrAfter(bookingId) &&
+        (request.auth.uid == bookingSnapshot(bookingId).data.advertiserId ||
+         request.auth.uid == bookingSnapshot(bookingId).data.ownerId) &&
         request.resource.data.bookingId == bookingId &&
-        request.resource.data.billboardId == get(/databases/$(database)/documents/bookings/$(bookingId)).data.billboardId &&
-        request.resource.data.advertiserId == get(/databases/$(database)/documents/bookings/$(bookingId)).data.advertiserId &&
-        request.resource.data.ownerId == get(/databases/$(database)/documents/bookings/$(bookingId)).data.ownerId &&
-        request.resource.data.startDate == get(/databases/$(database)/documents/bookings/$(bookingId)).data.startDate &&
-        request.resource.data.endDate == get(/databases/$(database)/documents/bookings/$(bookingId)).data.endDate &&
+        request.resource.data.billboardId == bookingSnapshot(bookingId).data.billboardId &&
+        request.resource.data.advertiserId == bookingSnapshot(bookingId).data.advertiserId &&
+        request.resource.data.ownerId == bookingSnapshot(bookingId).data.ownerId &&
+        request.resource.data.startDate == bookingSnapshot(bookingId).data.startDate &&
+        request.resource.data.endDate == bookingSnapshot(bookingId).data.endDate &&
         request.resource.data.status in ['confirmed', 'active'] &&
         request.resource.data.paymentStatus in ['pending', 'paid'];
       allow delete: if isAuthenticated() &&
-        exists(/databases/$(database)/documents/bookings/$(bookingId)) &&
-        (request.auth.uid == get(/databases/$(database)/documents/bookings/$(bookingId)).data.advertiserId ||
-         request.auth.uid == get(/databases/$(database)/documents/bookings/$(bookingId)).data.ownerId);
+        bookingExistsNowOrAfter(bookingId) &&
+        (request.auth.uid == bookingSnapshot(bookingId).data.advertiserId ||
+         request.auth.uid == bookingSnapshot(bookingId).data.ownerId);
     }
   }
 }
